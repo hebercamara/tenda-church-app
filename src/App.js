@@ -110,10 +110,14 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect }) => {
       return;
     }
     const leader = members.find(m => m.id === formData.leaderId);
+     if (!leader?.email) {
+      setError('O membro selecionado como líder precisa ter um e-mail cadastrado.');
+      return;
+    }
     onSave({ 
         ...formData, 
         leaderName: leader?.name || 'Não encontrado',
-        leaderEmail: leader?.email || 'email.nao.encontrado@error.com'
+        leaderEmail: leader?.email
     });
     onClose();
   };
@@ -158,7 +162,7 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect }) => {
         <label htmlFor="leaderId" className="block text-sm font-medium text-gray-700 mb-1">Líder do Connect</label>
         <select name="leaderId" id="leaderId" value={formData.leaderId} onChange={handleChange} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:border-[#DC2626] focus:outline-none">
           <option value="">Selecione um líder</option>
-          {members.map(member => (<option key={member.id} value={member.id}>{member.name} ({member.email})</option>))}
+          {members.map(member => (<option key={member.id} value={member.id}>{member.name} ({member.email || 'sem e-mail'})</option>))}
         </select>
       </div>
       <div className="flex justify-end space-x-3 pt-4">
@@ -251,7 +255,8 @@ export default function App() {
 
     useEffect(() => {
         if (user && !isAdmin) {
-            const connectsLedByUser = allConnects.filter(c => c.leaderEmail === user.email);
+            const userEmail = user.email?.toLowerCase();
+            const connectsLedByUser = allConnects.filter(c => c.leaderEmail?.toLowerCase() === userEmail);
             setLeaderConnects(connectsLedByUser);
         } else {
             setLeaderConnects([]);
