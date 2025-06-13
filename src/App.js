@@ -21,7 +21,7 @@ import {
     writeBatch,
     where
 } from 'firebase/firestore';
-import { User, X, Users, Home, Calendar, Edit, Trash2, Plus, LogOut, MapPin, Clock, Mail, BookOpen, ClipboardList, GraduationCap, Check, HelpCircle } from 'lucide-react';
+import { User, X, Users, Home, Calendar, Edit, Trash2, Plus, LogOut, MapPin, Clock, Mail, BookOpen, ClipboardList, GraduationCap, Check, HelpCircle, FileText } from 'lucide-react';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -45,10 +45,38 @@ const ADMIN_EMAIL = "tendachurchgbi@batistavida.com.br";
 const weekDaysMap = { "Domingo": 0, "Segunda-feira": 1, "Terça-feira": 2, "Quarta-feira": 3, "Quinta-feira": 4, "Sexta-feira": 5, "Sábado": 6 };
 
 // --- Componentes ---
-const LoadingSpinner = () => (<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-24 w-24 border-t-2 border-b-2 border-[#DC2626]"></div></div>);
-const Header = ({ onLogout }) => ( <header className="bg-[#991B1B] p-4 shadow-lg flex items-center justify-between"><img src="https://firebasestorage.googleapis.com/v0/b/cad-prestadores---heberlog.firebasestorage.app/o/Logos%2FPrancheta%208.png?alt=media&token=b1ccc570-7210-48b6-b4a3-e01074bca3be" onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/200x50/991B1B/FFFFFF?text=Logo+Tenda+Church'; }} alt="Logo Tenda Church" className="h-10"/><button onClick={onLogout} className="bg-white/20 hover:bg-white/30 text-white font-semibold py-2 px-4 rounded-lg flex items-center space-x-2 transition-all"><LogOut size={18} /><span>Sair</span></button></header> );
-const Modal = ({ children, isOpen, onClose, size = 'lg' }) => { if (!isOpen) return null; const sizeClasses = { 'lg': 'max-w-lg', '2xl': 'max-w-2xl', '4xl': 'max-w-4xl', '6xl': 'max-w-6xl' }; return ( <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4" onClick={onClose}><div className={`bg-white rounded-xl shadow-2xl w-full ${sizeClasses[size]} p-6 relative`} onClick={(e) => e.stopPropagation()}><button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-black transition-colors"><X size={24} /></button>{children}</div></div> ); };
-const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message }) => { if (!isOpen) return null; return ( <Modal isOpen={isOpen} onClose={onClose}> <h2 className="text-2xl font-bold text-gray-800 mb-4">{title}</h2> <p className="text-gray-600 mb-6">{message}</p> <div className="flex justify-end space-x-3"><button onClick={onClose} className="px-4 py-2 rounded-md bg-gray-200 text-gray-800 hover:bg-gray-300 transition-all">Cancelar</button><button onClick={onConfirm} className="px-4 py-2 rounded-md bg-[#DC2626] text-white font-semibold hover:bg-[#991B1B] transition-all">Confirmar Exclusão</button></div> </Modal> ); };
+
+const LoadingSpinner = () => (
+    <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-24 w-24 border-t-2 border-b-2 border-[#DC2626]"></div>
+    </div>
+);
+
+const Header = ({ onLogout }) => (
+  <header className="bg-[#991B1B] p-4 shadow-lg flex items-center justify-between">
+      <img src="https://firebasestorage.googleapis.com/v0/b/cad-prestadores---heberlog.firebasestorage.app/o/Logos%2FPrancheta%208.png?alt=media&token=b1ccc570-7210-48b6-b4a3-e01074bca3be" onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/200x50/991B1B/FFFFFF?text=Logo+Tenda+Church'; }} alt="Logo Tenda Church" className="h-10"/>
+      <button onClick={onLogout} className="bg-white/20 hover:bg-white/30 text-white font-semibold py-2 px-4 rounded-lg flex items-center space-x-2 transition-all"><LogOut size={18} /><span>Sair</span></button>
+  </header>
+);
+
+const Modal = ({ children, isOpen, onClose, size = 'lg' }) => {
+  if (!isOpen) return null;
+  const sizeClasses = { 'lg': 'max-w-lg', '2xl': 'max-w-2xl', '4xl': 'max-w-4xl', '6xl': 'max-w-6xl' }
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4" onClick={onClose}>
+      <div className={`bg-white rounded-xl shadow-2xl w-full ${sizeClasses[size]} p-6 relative`} onClick={(e) => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-black transition-colors"><X size={24} /></button>
+        {children}
+      </div>
+    </div>
+  );
+};
+
+const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message }) => {
+  if (!isOpen) return null;
+  return ( <Modal isOpen={isOpen} onClose={onClose}> <h2 className="text-2xl font-bold text-gray-800 mb-4">{title}</h2> <p className="text-gray-600 mb-6">{message}</p> <div className="flex justify-end space-x-3"><button onClick={onClose} className="px-4 py-2 rounded-md bg-gray-200 text-gray-800 hover:bg-gray-300 transition-all">Cancelar</button><button onClick={onConfirm} className="px-4 py-2 rounded-md bg-[#DC2626] text-white font-semibold hover:bg-[#991B1B] transition-all">Confirmar Exclusão</button></div> </Modal> );
+};
+
 const ConnectForm = ({ onClose, onSave, members, editingConnect }) => {
   const [formData, setFormData] = useState({ number: editingConnect?.number || '', name: editingConnect?.name || '', weekday: editingConnect?.weekday || '', time: editingConnect?.time || '', address: editingConnect?.address || '', leaderId: editingConnect?.leaderId || '' });
   const [error, setError] = useState('');
@@ -173,7 +201,7 @@ export default function App() {
             <main className="p-4 md:p-8">
                 <Modal isOpen={isMemberModalOpen} onClose={closeMemberModal}><MemberForm onClose={closeMemberModal} onSave={handleSaveMember} connects={allConnects} editingMember={editingMember} isAdmin={isAdmin} leaderConnects={leaderConnects} /></Modal>
                 <Modal isOpen={isConnectModalOpen} onClose={closeConnectModal}><ConnectForm onClose={closeConnectModal} onSave={handleSaveConnect} members={allMembers} editingConnect={editingConnect} /></Modal>
-                <Modal isOpen={isCourseModalOpen} onClose={closeCourseModal}><CourseForm onClose={closeCourseModal} onSave={handleSaveCourse} members={allMembers} editingCourse={editingCourse} /></Modal>
+                <Modal isOpen={isCourseModalOpen} onClose={closeCourseModal} size="2xl"><CourseForm onClose={closeCourseModal} onSave={handleSaveCourse} members={allMembers} editingCourse={editingCourse} /></Modal>
                 {managingCourse && <ManageCourseModal course={managingCourse} members={allMembers} isOpen={isManageCourseModalOpen} onClose={closeManageCourseModal} onSaveStudents={(students) => handleSaveCourseStudents(managingCourse.id, students)} onSaveAttendance={(dateId, statuses) => handleSaveAttendance(managingCourse.id, dateId, statuses)} />}
                 <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={handleConfirmDelete} title="Confirmar Exclusão" message={deleteAction?.message || ''} />
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
