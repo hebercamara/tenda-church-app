@@ -84,43 +84,10 @@ const CourseForm = ({ onClose, onSave, members, editingCourse }) => {
 };
 
 const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, onSaveAttendance }) => {
-    const [activeTab, setActiveTab] = useState('attendance');
-    const [enrolledStudents, setEnrolledStudents] = useState([]);
-    const [studentScores, setStudentScores] = useState({});
-    const [attendanceRecords, setAttendanceRecords] = useState([]);
-    const [selectedDate, setSelectedDate] = useState(null);
-
-    const calculateAttendancePercentage = useCallback((studentId) => {
-        if (!attendanceRecords.length) return 0;
-        let presentCount = 0;
-        attendanceRecords.forEach(record => {
-            if (record.statuses[studentId] === 'presente' || record.statuses[studentId] === 'justificado') {
-                presentCount++;
-            }
-        });
-        return Math.round((presentCount / attendanceRecords.length) * 100);
-    }, [attendanceRecords]);
-
-    const calculateFinalGrade = useCallback((studentId) => {
-        const scores = studentScores[studentId];
-        const { assessment } = course;
-        if (!scores || !assessment) return 0;
-        let total = 0;
-        total += (scores.tests || []).reduce((sum, score) => sum + (Number(score) || 0), 0);
-        total += (scores.assignments || []).reduce((sum, score) => sum + (Number(score) || 0), 0);
-        total += ((scores.activities || []).filter(done => done).length) * (assessment.activities.value || 0);
-        return parseFloat(total.toFixed(2));
-    }, [studentScores, course]);
-
-    const getStudentStatus = useCallback((studentId) => {
-        const finalGrade = calculateFinalGrade(studentId);
-        const attendance = calculateAttendancePercentage(studentId);
-        const { passingCriteria } = course;
-        if (!passingCriteria) return { text: 'Cursando', color: 'bg-blue-500' };
-        if (attendance < passingCriteria.minAttendance) { return { text: 'Reprovado por Falta', color: 'bg-orange-500' }; }
-        if (finalGrade < passingCriteria.minGrade) { return { text: 'Reprovado por Nota', color: 'bg-red-500' }; }
-        return { text: 'Aprovado', color: 'bg-green-500' };
-    }, [calculateFinalGrade, calculateAttendancePercentage, course]);
+    const [activeTab, setActiveTab] = useState('attendance'); const [enrolledStudents, setEnrolledStudents] = useState([]); const [studentScores, setStudentScores] = useState({}); const [attendanceRecords, setAttendanceRecords] = useState([]); const [selectedDate, setSelectedDate] = useState(null);
+    const calculateAttendancePercentage = useCallback((studentId) => { if (!attendanceRecords.length) return 0; let presentCount = 0; attendanceRecords.forEach(record => { if (record.statuses[studentId] === 'presente' || record.statuses[studentId] === 'justificado') { presentCount++; } }); return Math.round((presentCount / attendanceRecords.length) * 100); }, [attendanceRecords]);
+    const calculateFinalGrade = useCallback((studentId) => { const scores = studentScores[studentId]; const { assessment } = course; if (!scores || !assessment) return 0; let total = 0; total += (scores.tests || []).reduce((sum, score) => sum + (Number(score) || 0), 0); total += (scores.assignments || []).reduce((sum, score) => sum + (Number(score) || 0), 0); total += ((scores.activities || []).filter(done => done).length) * (assessment.activities.value || 0); return parseFloat(total.toFixed(2)); }, [studentScores, course]);
+    const getStudentStatus = useCallback((studentId) => { const finalGrade = calculateFinalGrade(studentId); const attendance = calculateAttendancePercentage(studentId); const { passingCriteria } = course; if (!passingCriteria) return { text: 'Cursando', color: 'bg-blue-500' }; if (attendance < passingCriteria.minAttendance) { return { text: 'Reprovado por Falta', color: 'bg-orange-500' }; } if (finalGrade < passingCriteria.minGrade) { return { text: 'Reprovado por Nota', color: 'bg-red-500' }; } return { text: 'Aprovado', color: 'bg-green-500' }; }, [calculateFinalGrade, calculateAttendancePercentage, course]);
 
     useEffect(() => {
         if (course && isOpen) {
@@ -144,16 +111,7 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
 
     const handleEnroll = (studentId) => { const student = members.find(m => m.id === studentId); if (student && !enrolledStudents.some(s => s.id === studentId)) { const newStudents = [...enrolledStudents, { id: student.id, name: student.name, scores: { tests: [], activities: [], assignments: [] } }]; setEnrolledStudents(newStudents); onSaveStudents(newStudents); } };
     const handleUnenroll = (studentId) => { const newStudents = enrolledStudents.filter(s => s.id !== studentId); setEnrolledStudents(newStudents); onSaveStudents(newStudents); };
-    
-    const handleScoreChange = (studentId, type, index, value) => {
-        const newScores = { ...studentScores };
-        if (!newScores[studentId]) newScores[studentId] = { tests: [], activities: [], assignments: [] };
-        if (!newScores[studentId][type]) newScores[studentId][type] = [];
-        if (type === 'activities') { newScores[studentId][type][index] = value; } else { const maxScore = course.assessment[type].value; newScores[studentId][type][index] = Math.max(0, Math.min(maxScore, Number(value) || 0)); }
-        setStudentScores(newScores);
-        const studentIndex = enrolledStudents.findIndex(s => s.id === studentId);
-        if (studentIndex !== -1) { const newStudents = [...enrolledStudents]; newStudents[studentIndex] = { ...newStudents[studentIndex], scores: newScores[studentId] }; onSaveStudents(newStudents); }
-    };
+    const handleScoreChange = (studentId, type, index, value) => { const newScores = { ...studentScores }; if (!newScores[studentId]) newScores[studentId] = { tests: [], activities: [], assignments: [] }; if (!newScores[studentId][type]) newScores[studentId][type] = []; if (type === 'activities') { newScores[studentId][type][index] = value; } else { const maxScore = course.assessment[type].value; newScores[studentId][type][index] = Math.max(0, Math.min(maxScore, Number(value) || 0)); } setStudentScores(newScores); const studentIndex = enrolledStudents.findIndex(s => s.id === studentId); if (studentIndex !== -1) { const newStudents = [...enrolledStudents]; newStudents[studentIndex] = { ...newStudents[studentIndex], scores: newScores[studentId] }; onSaveStudents(newStudents); } };
     const handleAttendanceChange = (studentId, status) => { if (!selectedDate) return; const record = attendanceRecords.find(r => r.id === selectedDate); if (!record) return; const newStatuses = { ...record.statuses, [studentId]: status }; onSaveAttendance(selectedDate, newStatuses); };
     if (!isOpen) return null;
     const notEnrolledMembers = members.filter(m => !enrolledStudents.some(s => s.id === m.id)); const currentAttendance = attendanceRecords.find(r => r.id === selectedDate)?.statuses || {}; const assessment = course.assessment;
