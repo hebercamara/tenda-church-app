@@ -21,7 +21,7 @@ import {
     writeBatch,
     where
 } from 'firebase/firestore';
-import { User, X, Users, Home, Calendar, Edit, Trash2, Plus, LogOut, MapPin, Clock, Mail, BookOpen, ClipboardList, GraduationCap, Check, HelpCircle, FileText } from 'lucide-react';
+import { User, X, Users, Home, Calendar, Edit, Trash2, Plus, LogOut, MapPin, Clock, Mail, BookOpen, ClipboardList, GraduationCap, Check, HelpCircle } from 'lucide-react';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -45,12 +45,6 @@ const ADMIN_EMAIL = "tendachurchgbi@batistavida.com.br";
 const weekDaysMap = { "Domingo": 0, "Segunda-feira": 1, "Terça-feira": 2, "Quarta-feira": 3, "Quinta-feira": 4, "Sexta-feira": 5, "Sábado": 6 };
 
 // --- Componentes ---
-
-const LoadingSpinner = () => (
-    <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-24 w-24 border-t-2 border-b-2 border-[#DC2626]"></div>
-    </div>
-);
 
 const Header = ({ onLogout }) => (
   <header className="bg-[#991B1B] p-4 shadow-lg flex items-center justify-between">
@@ -201,7 +195,7 @@ export default function App() {
             <main className="p-4 md:p-8">
                 <Modal isOpen={isMemberModalOpen} onClose={closeMemberModal}><MemberForm onClose={closeMemberModal} onSave={handleSaveMember} connects={allConnects} editingMember={editingMember} isAdmin={isAdmin} leaderConnects={leaderConnects} /></Modal>
                 <Modal isOpen={isConnectModalOpen} onClose={closeConnectModal}><ConnectForm onClose={closeConnectModal} onSave={handleSaveConnect} members={allMembers} editingConnect={editingConnect} /></Modal>
-                <Modal isOpen={isCourseModalOpen} onClose={closeCourseModal} size="2xl"><CourseForm onClose={closeCourseModal} onSave={handleSaveCourse} members={allMembers} editingCourse={editingCourse} /></Modal>
+                <Modal isOpen={isCourseModalOpen} onClose={closeCourseModal}><CourseForm onClose={closeCourseModal} onSave={handleSaveCourse} members={allMembers} editingCourse={editingCourse} /></Modal>
                 {managingCourse && <ManageCourseModal course={managingCourse} members={allMembers} isOpen={isManageCourseModalOpen} onClose={closeManageCourseModal} onSaveStudents={(students) => handleSaveCourseStudents(managingCourse.id, students)} onSaveAttendance={(dateId, statuses) => handleSaveAttendance(managingCourse.id, dateId, statuses)} />}
                 <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={handleConfirmDelete} title="Confirmar Exclusão" message={deleteAction?.message || ''} />
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
