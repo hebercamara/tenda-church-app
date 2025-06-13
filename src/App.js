@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
     getAuth, 
@@ -14,6 +14,7 @@ import {
     addDoc, 
     doc, 
     setDoc, 
+    getDoc,
     deleteDoc,
     updateDoc,
     query,
@@ -90,13 +91,10 @@ const CourseForm = ({ onClose, onSave, members, editingCourse }) => {
     const weekDays = Object.keys(weekDaysMap);
     return (
         <form onSubmit={handleSubmit} className="flex flex-col max-h-[85vh]">
-            {/* --- Cabeçalho do Modal (Fixo) --- */}
             <div className="flex-shrink-0">
                 <h2 className="text-2xl font-bold text-gray-900 mb-4">{editingCourse ? 'Editar Curso' : 'Novo Curso'}</h2>
                 {error && <p className="text-red-600 bg-red-100 p-2 rounded-md mb-4">{error}</p>}
             </div>
-
-            {/* --- Corpo do Modal (Rolável) --- */}
             <div className="flex-grow overflow-y-auto space-y-4 pr-2">
                 <fieldset className="border p-4 rounded-md">
                     <legend className="px-2 font-semibold">Informações Básicas</legend>
@@ -123,8 +121,6 @@ const CourseForm = ({ onClose, onSave, members, editingCourse }) => {
                     </div>
                 </fieldset>
             </div>
-
-            {/* --- Rodapé do Modal (Fixo) --- */}
             <div className="flex-shrink-0 flex justify-end space-x-3 pt-4 border-t mt-4">
                 <button type="button" onClick={onClose} className="px-4 py-2 rounded-md bg-gray-200 text-gray-800 hover:bg-gray-300 transition-all">Cancelar</button>
                 <button type="submit" className="px-4 py-2 rounded-md bg-[#DC2626] text-white font-semibold hover:bg-[#991B1B] transition-all">{editingCourse ? 'Salvar Alterações' : 'Adicionar Curso'}</button>
@@ -178,7 +174,199 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
         </Modal>
     );
 };
-const LoginPage = () => { const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState(''); const [isSubmitting, setIsSubmitting] = useState(false); const handleLogin = async (e) => { e.preventDefault(); setError(''); setIsSubmitting(true); try { await signInWithEmailAndPassword(auth, email, password); } catch (err) { setError(getFriendlyErrorMessage(err.code)); } finally { setIsSubmitting(false); } }; const handleCreateAccount = async (e) => { e.preventDefault(); setError(''); setIsSubmitting(true); try { await createUserWithEmailAndPassword(auth, email, password); } catch (err) { setError(getFriendlyErrorMessage(err.code)); } finally { setIsSubmitting(false); } }; const getFriendlyErrorMessage = (code) => { switch (code) { case 'auth/invalid-email': return 'O formato do e-mail é inválido.'; case 'auth/user-not-found': case 'auth/wrong-password': case 'auth/invalid-credential': return 'E-mail ou senha incorretos.'; case 'auth/email-already-in-use': return 'Este e-mail já está a ser utilizado.'; case 'auth/weak-password': return 'A senha deve ter pelo menos 6 caracteres.'; default: return 'Ocorreu um erro. Por favor, tente novamente.'; } }; return (<div className="flex items-center justify-center min-h-screen bg-gray-200"><div className="w-full max-w-md p-8 space-y-8 bg-[#991B1B] rounded-2xl shadow-lg"><div className="flex flex-col items-center"><img src="https://firebasestorage.googleapis.com/v0/b/cad-prestadores---heberlog.appspot.com/o/Logos%2FPrancheta%208.png?alt=media&token=b1ccc570-7210-48b6-b4a3-e01074bca3be" alt="Logo Tenda Church" className="h-16 mb-6" /></div><form className="mt-8 space-y-6"><div className="space-y-4 rounded-md"><div><label htmlFor="email-address" className="sr-only">Email</label><input id="email-address" name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="relative block w-full px-3 py-3 text-white placeholder-gray-300 bg-white/20 border border-transparent rounded-md appearance-none focus:outline-none focus:ring-2 focus:ring-white sm:text-sm" placeholder="E-mail" /></div><div><label htmlFor="password" className="sr-only">Senha</label><input id="password" name="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="relative block w-full px-3 py-3 text-white placeholder-gray-300 bg-white/20 border border-transparent rounded-md appearance-none focus:outline-none focus:ring-2 focus:ring-white sm:text-sm" placeholder="Senha" /></div></div>{error && <p className="text-sm text-center text-white bg-red-500/50 p-2 rounded-md">{error}</p>}<div className="space-y-3"><button onClick={handleLogin} disabled={isSubmitting} className="relative flex justify-center w-full px-4 py-3 text-sm font-medium text-[#991B1B] bg-white border border-transparent rounded-md group hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#991B1B] focus:ring-white disabled:bg-gray-300 disabled:text-gray-500">{isSubmitting ? 'A entrar...' : 'Entrar'}</button><button onClick={handleCreateAccount} disabled={isSubmitting} className="relative flex justify-center w-full px-4 py-3 text-sm font-medium text-white bg-white/20 border border-transparent rounded-md group hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#991B1B] focus:ring-white disabled:bg-opacity-50">{isSubmitting ? 'A criar...' : 'Criar Conta'}</button></div></form></div></div>); };
+
+const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave }) => {
+    const [reportDates, setReportDates] = useState([]);
+    const [selectedDate, setSelectedDate] = useState('');
+    const [attendance, setAttendance] = useState({});
+    const [guests, setGuests] = useState('');
+    const [offering, setOffering] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+
+    const connectMembers = useMemo(() => members.filter(m => m.connectId === connect?.id), [members, connect]);
+
+    useEffect(() => {
+        if (!connect) return;
+
+        const getReportDates = () => {
+            const connectWeekday = weekDaysMap[connect.weekday];
+            if (connectWeekday === undefined) return;
+
+            const today = new Date();
+            const todayWeekday = today.getDay();
+            
+            let daysToSubtract = todayWeekday - connectWeekday;
+            if (daysToSubtract < 0) {
+                daysToSubtract += 7;
+            }
+
+            const currentWeekMeeting = new Date(today);
+            currentWeekMeeting.setDate(today.getDate() - daysToSubtract);
+            const currentWeekDateString = currentWeekMeeting.toISOString().split('T')[0];
+            
+            const previousWeekMeeting = new Date(currentWeekMeeting);
+            previousWeekMeeting.setDate(currentWeekMeeting.getDate() - 7);
+            const previousWeekDateString = previousWeekMeeting.toISOString().split('T')[0];
+            
+            setReportDates([
+                { label: `Semana Atual (${currentWeekMeeting.toLocaleDateString('pt-BR')})`, value: currentWeekDateString },
+                { label: `Semana Anterior (${previousWeekMeeting.toLocaleDateString('pt-BR')})`, value: previousWeekDateString }
+            ]);
+            setSelectedDate(currentWeekDateString);
+        };
+        
+        getReportDates();
+    }, [connect]);
+
+    useEffect(() => {
+        if (!selectedDate || !connect) return;
+
+        const fetchReport = async () => {
+            setIsLoading(true);
+            const reportId = `${connect.id}_${selectedDate}`;
+            const reportRef = doc(db, `artifacts/${appId}/public/data/connect_reports`, reportId);
+            const reportSnap = await getDoc(reportRef);
+
+            if (reportSnap.exists()) {
+                const data = reportSnap.data();
+                setAttendance(data.attendance || {});
+                setGuests(data.guests?.toString() || '');
+                setOffering(data.offering?.toString() || '');
+            } else {
+                // Reset form if no report exists for the selected date
+                const initialAttendance = {};
+                connectMembers.forEach(m => { initialAttendance[m.id] = 'ausente'; });
+                setAttendance(initialAttendance);
+                setGuests('');
+                setOffering('');
+            }
+            setIsLoading(false);
+        };
+
+        fetchReport();
+    }, [selectedDate, connect, connectMembers]);
+    
+    const handleAttendanceChange = (memberId, status) => {
+        setAttendance(prev => ({ ...prev, [memberId]: status }));
+    };
+
+    const handleSave = () => {
+        const reportData = {
+            connectId: connect.id,
+            connectName: connect.name,
+            leaderId: connect.leaderId,
+            leaderName: connect.leaderName,
+            reportDate: new Date(selectedDate),
+            guests: Number(guests) || 0,
+            offering: Number(offering) || 0,
+            attendance: attendance
+        };
+        onSave(reportData);
+        onClose();
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} size="2xl">
+            <div className="flex flex-col max-h-[85vh]">
+                <div className="flex-shrink-0">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Relatório do Connect {connect.number}</h2>
+                    <p className="text-gray-600 mb-4">{connect.name}</p>
+                    <label htmlFor="reportDate" className="block text-sm font-medium text-gray-700 mb-1">Selecione a data da reunião</label>
+                    <select id="reportDate" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626]">
+                        {reportDates.map(date => <option key={date.value} value={date.value}>{date.label}</option>)}
+                    </select>
+                </div>
+                {isLoading ? <div className="text-center p-8">Carregando relatório...</div> : (
+                    <>
+                        <div className="flex-grow overflow-y-auto space-y-4 pr-2 mt-4">
+                            <fieldset className="border p-4 rounded-md">
+                                <legend className="px-2 font-semibold">Presença dos Membros</legend>
+                                <div className="space-y-2">
+                                    {connectMembers.map(member => (
+                                        <div key={member.id} className="flex justify-between items-center bg-gray-50 p-2 rounded-md">
+                                            <span>{member.name}</span>
+                                            <div className="flex space-x-2">
+                                                <button onClick={() => handleAttendanceChange(member.id, 'presente')} className={`px-3 py-1 text-sm rounded-md ${attendance[member.id] === 'presente' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-green-200'}`}>Presente</button>
+                                                <button onClick={() => handleAttendanceChange(member.id, 'ausente')} className={`px-3 py-1 text-sm rounded-md ${attendance[member.id] === 'ausente' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-red-200'}`}>Ausente</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {connectMembers.length === 0 && <p className="text-gray-500">Nenhum membro neste Connect.</p>}
+                                </div>
+                            </fieldset>
+                            <fieldset className="border p-4 rounded-md">
+                                <legend className="px-2 font-semibold">Informações Adicionais</legend>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label htmlFor="guests" className="block text-sm font-medium text-gray-700 mb-1">Nº de Convidados</label>
+                                        <input type="number" id="guests" value={guests} onChange={e => setGuests(e.target.value)} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626]" placeholder="0" />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="offering" className="block text-sm font-medium text-gray-700 mb-1">Valor da Oferta (R$)</label>
+                                        <input type="number" id="offering" value={offering} onChange={e => setOffering(e.target.value)} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626]" placeholder="0.00" step="0.01"/>
+                                    </div>
+                                </div>
+                            </fieldset>
+                        </div>
+                         <div className="flex-shrink-0 flex justify-end space-x-3 pt-4 border-t mt-4">
+                            <button type="button" onClick={onClose} className="px-4 py-2 rounded-md bg-gray-200 text-gray-800 hover:bg-gray-300 transition-all">Cancelar</button>
+                            <button type="button" onClick={handleSave} className="px-4 py-2 rounded-md bg-[#DC2626] text-white font-semibold hover:bg-[#991B1B] transition-all">Salvar Relatório</button>
+                        </div>
+                    </>
+                )}
+            </div>
+        </Modal>
+    )
+};
+
+
+const LoginPage = () => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleLogin = async (e) => {
+        e.preventDefault();
+        setError('');
+        setIsSubmitting(true);
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+        } catch (err) {
+            setError(getFriendlyErrorMessage(err.code));
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleCreateAccount = async (e) => {
+        e.preventDefault();
+        setError('');
+        setIsSubmitting(true);
+        try {
+            await createUserWithEmailAndPassword(auth, email, password);
+        } catch (err) {
+            setError(getFriendlyErrorMessage(err.code));
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const getFriendlyErrorMessage = (code) => {
+        switch (code) {
+            case 'auth/invalid-email': return 'O formato do e-mail é inválido.';
+            case 'auth/user-not-found':
+            case 'auth/wrong-password':
+            case 'auth/invalid-credential': return 'E-mail ou senha incorretos.';
+            case 'auth/email-already-in-use': return 'Este e-mail já está a ser utilizado.';
+            case 'auth/weak-password': return 'A senha deve ter pelo menos 6 caracteres.';
+            default: return 'Ocorreu um erro. Por favor, tente novamente.';
+        }
+    };
+    return (<div className="flex items-center justify-center min-h-screen bg-gray-200"><div className="w-full max-w-md p-8 space-y-8 bg-[#991B1B] rounded-2xl shadow-lg"><div className="flex flex-col items-center"><img src="https://firebasestorage.googleapis.com/v0/b/cad-prestadores---heberlog.appspot.com/o/Logos%2FPrancheta%208.png?alt=media&token=b1ccc570-7210-48b6-b4a3-e01074bca3be" alt="Logo Tenda Church" className="h-16 mb-6" /></div><form className="mt-8 space-y-6"><div className="space-y-4 rounded-md"><div><label htmlFor="email-address" className="sr-only">Email</label><input id="email-address" name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="relative block w-full px-3 py-3 text-white placeholder-gray-300 bg-white/20 border border-transparent rounded-md appearance-none focus:outline-none focus:ring-2 focus:ring-white sm:text-sm" placeholder="E-mail" /></div><div><label htmlFor="password" className="sr-only">Senha</label><input id="password" name="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="relative block w-full px-3 py-3 text-white placeholder-gray-300 bg-white/20 border border-transparent rounded-md appearance-none focus:outline-none focus:ring-2 focus:ring-white sm:text-sm" placeholder="Senha" /></div></div>{error && <p className="text-sm text-center text-white bg-red-500/50 p-2 rounded-md">{error}</p>}<div className="space-y-3"><button onClick={handleLogin} disabled={isSubmitting} className="relative flex justify-center w-full px-4 py-3 text-sm font-medium text-[#991B1B] bg-white border border-transparent rounded-md group hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#991B1B] focus:ring-white disabled:bg-gray-300 disabled:text-gray-500">{isSubmitting ? 'A entrar...' : 'Entrar'}</button><button onClick={handleCreateAccount} disabled={isSubmitting} className="relative flex justify-center w-full px-4 py-3 text-sm font-medium text-white bg-white/20 border border-transparent rounded-md group hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#991B1B] focus:ring-white disabled:bg-opacity-50">{isSubmitting ? 'A criar...' : 'Criar Conta'}</button></div></form></div></div>);
+};
 
 export default function App() {
     const [user, setUser] = useState(null); const [isAdmin, setIsAdmin] = useState(false); const [isLoadingAuth, setIsLoadingAuth] = useState(true);
@@ -186,7 +374,9 @@ export default function App() {
     const [leaderConnects, setLeaderConnects] = useState([]); const [taughtCourses, setTaughtCourses] = useState([]);
     const [loadingData, setLoadingData] = useState(true);
     const [isMemberModalOpen, setMemberModalOpen] = useState(false); const [isConnectModalOpen, setConnectModalOpen] = useState(false); const [isCourseModalOpen, setCourseModalOpen] = useState(false); const [isManageCourseModalOpen, setManageCourseModalOpen] = useState(false);
+    const [isReportModalOpen, setReportModalOpen] = useState(false);
     const [editingMember, setEditingMember] = useState(null); const [editingConnect, setEditingConnect] = useState(null); const [editingCourse, setEditingCourse] = useState(null); const [managingCourse, setManagingCourse] = useState(null);
+    const [reportingConnect, setReportingConnect] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [isConfirmModalOpen, setConfirmModalOpen] = useState(false); const [deleteAction, setDeleteAction] = useState(null);
 
@@ -209,11 +399,26 @@ export default function App() {
     const handleSaveCourse = async (courseData) => { const collectionPath = `artifacts/${appId}/public/data/courses`; try { if (editingCourse) { await setDoc(doc(db, collectionPath, editingCourse.id), courseData); } else { const newCourseRef = await addDoc(collection(db, collectionPath), courseData); await generateAttendanceRecords(newCourseRef.id, courseData); } closeCourseModal(); } catch (error) { console.error("Erro ao salvar curso:", error); } };
     const handleSaveCourseStudents = async (courseId, students) => { const courseRef = doc(db, `artifacts/${appId}/public/data/courses`, courseId); try { await updateDoc(courseRef, { students: students }); } catch (error) { console.error("Erro ao salvar alunos do curso:", error); } };
     const handleSaveAttendance = async (courseId, dateId, statuses) => { const attendanceRef = doc(db, `artifacts/${appId}/public/data/courses/${courseId}/attendance`, dateId); try { await updateDoc(attendanceRef, { statuses: statuses }); } catch (error) { console.error("Erro ao salvar presença:", error); } };
+    
+    const handleSaveConnectReport = async (reportData) => {
+        const dateString = reportData.reportDate.toISOString().split('T')[0];
+        const reportId = `${reportData.connectId}_${dateString}`;
+        const reportRef = doc(db, `artifacts/${appId}/public/data/connect_reports`, reportId);
+        try {
+            await setDoc(reportRef, reportData);
+        } catch (error) {
+            console.error("Erro ao salvar relatório do Connect:", error);
+        }
+    };
+
     const triggerDelete = (type, id) => { let message = `Tem certeza que deseja excluir este ${type}?`; setDeleteAction({ type, id, message }); setConfirmModalOpen(true); };
     const handleConfirmDelete = async () => { if (!deleteAction) return; const { type, id } = deleteAction; try { await deleteDoc(doc(db, `artifacts/${appId}/public/data/${type}s`, id)); } catch (error) { console.error(`Erro ao deletar ${type}:`, error); } finally { setConfirmModalOpen(false); setDeleteAction(null); } };
     const openMemberModal = (member = null) => { setEditingMember(member); setMemberModalOpen(true); }; const closeMemberModal = () => { setEditingMember(null); setMemberModalOpen(false); }; const openConnectModal = (connect = null) => { setEditingConnect(connect); setConnectModalOpen(true); }; const closeConnectModal = () => { setEditingConnect(null); setConnectModalOpen(false); }; const openCourseModal = (course = null) => { setEditingCourse(course); setCourseModalOpen(true); }; const closeCourseModal = () => { setEditingCourse(null); setCourseModalOpen(false); };
     const openManageCourseModal = (course) => { setManagingCourse(course); setManageCourseModalOpen(true); };
     const closeManageCourseModal = () => { setManagingCourse(null); setManageCourseModalOpen(false); };
+    const openReportModal = (connect) => { setReportingConnect(connect); setReportModalOpen(true); };
+    const closeReportModal = () => { setReportingConnect(null); setReportModalOpen(false); };
+
     const displayedConnects = isAdmin ? allConnects : leaderConnects; const leaderConnectIds = leaderConnects.map(c => c.id); const displayedMembers = isAdmin ? allMembers : allMembers.filter(m => leaderConnectIds.includes(m.connectId)); const displayedCourses = isAdmin ? allCourses : taughtCourses;
     const filteredMembers = displayedMembers.filter(member => member.name.toLowerCase().includes(searchTerm.toLowerCase())); const getConnectName = useCallback((connectId) => { if (!connectId) return 'Sem Connect'; const connect = allConnects.find(c => c.id === connectId); return connect ? `${connect.number} - ${connect.name}` : '...'; }, [allConnects]);
 
@@ -225,6 +430,7 @@ export default function App() {
                 <Modal isOpen={isMemberModalOpen} onClose={closeMemberModal}><MemberForm onClose={closeMemberModal} onSave={handleSaveMember} connects={allConnects} editingMember={editingMember} isAdmin={isAdmin} leaderConnects={leaderConnects} /></Modal>
                 <Modal isOpen={isConnectModalOpen} onClose={closeConnectModal}><ConnectForm onClose={closeConnectModal} onSave={handleSaveConnect} members={allMembers} editingConnect={editingConnect} /></Modal>
                 <Modal isOpen={isCourseModalOpen} onClose={closeCourseModal} size="2xl"><CourseForm onClose={closeCourseModal} onSave={handleSaveCourse} members={allMembers} editingCourse={editingCourse} /></Modal>
+                {reportingConnect && <ConnectReportModal isOpen={isReportModalOpen} onClose={closeReportModal} connect={reportingConnect} members={allMembers} onSave={handleSaveConnectReport} />}
                 {managingCourse && <ManageCourseModal course={managingCourse} members={allMembers} isOpen={isManageCourseModalOpen} onClose={closeManageCourseModal} onSaveStudents={(students) => handleSaveCourseStudents(managingCourse.id, students)} onSaveAttendance={(dateId, statuses) => handleSaveAttendance(managingCourse.id, dateId, statuses)} />}
                 <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={handleConfirmDelete} title="Confirmar Exclusão" message={deleteAction?.message || ''} />
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -238,7 +444,7 @@ export default function App() {
                 </div>
 
                 <div className="mb-8"><h3 className="text-2xl font-bold text-gray-900 mb-4 border-b pb-2">Connects</h3>
-                    {loadingData ? <LoadingSpinner /> : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{displayedConnects.sort((a, b) => a.number - b.number).map(c => (<div key={c.id} className="bg-white rounded-lg p-4 shadow-md"><div className="flex justify-between items-start"><h4 className="font-bold text-lg text-[#DC2626]">Connect {c.number}</h4><div className="flex space-x-2"><button onClick={() => openConnectModal(c)} className="text-gray-500 hover:text-[#DC2626]"><Edit size={16}/></button>{isAdmin && <button onClick={() => triggerDelete('connect', c.id)} className="text-gray-500 hover:text-red-600"><Trash2 size={16}/></button>}</div></div><p className="text-gray-800 text-xl font-semibold">{c.name}</p><p className="text-gray-600 mt-2"><User size={14} className="inline mr-2"/>Líder: {c.leaderName}</p><p className="text-gray-600"><Mail size={14} className="inline mr-2"/>{c.leaderEmail}</p><p className="text-gray-600"><Calendar size={14} className="inline mr-2"/>{c.weekday}</p><p className="text-gray-600"><Clock size={14} className="inline mr-2"/>{c.time}</p><p className="text-gray-600"><MapPin size={14} className="inline mr-2"/>{c.address}</p></div>))}</div>)}
+                    {loadingData ? <LoadingSpinner /> : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{displayedConnects.sort((a, b) => a.number - b.number).map(c => (<div key={c.id} className="bg-white rounded-lg p-4 shadow-md"><div className="flex justify-between items-start"><h4 className="font-bold text-lg text-[#DC2626]">Connect {c.number}</h4><div className="flex space-x-2"><button onClick={() => openReportModal(c)} className="text-gray-500 hover:text-blue-600" title="Relatório de Presença"><ClipboardList size={16}/></button><button onClick={() => openConnectModal(c)} className="text-gray-500 hover:text-[#DC2626]"><Edit size={16}/></button>{isAdmin && <button onClick={() => triggerDelete('connect', c.id)} className="text-gray-500 hover:text-red-600"><Trash2 size={16}/></button>}</div></div><p className="text-gray-800 text-xl font-semibold">{c.name}</p><p className="text-gray-600 mt-2"><User size={14} className="inline mr-2"/>Líder: {c.leaderName}</p><p className="text-gray-600"><Mail size={14} className="inline mr-2"/>{c.leaderEmail}</p><p className="text-gray-600"><Calendar size={14} className="inline mr-2"/>{c.weekday}</p><p className="text-gray-600"><Clock size={14} className="inline mr-2"/>{c.time}</p><p className="text-gray-600"><MapPin size={14} className="inline mr-2"/>{c.address}</p></div>))}</div>)}
                 </div>
 
                 <div><h3 className="text-2xl font-bold text-gray-900 mb-4 border-b pb-2">Membros</h3>
@@ -251,4 +457,3 @@ export default function App() {
         </div>
     );
 }
-
