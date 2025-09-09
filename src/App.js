@@ -1,514 +1,957 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-    getAuth, 
-    signInAnonymously, 
-    onAuthStateChanged
-} from 'firebase/auth';
-import { 
-    getFirestore, 
-    collection, 
-    onSnapshot, 
-    addDoc, 
-    doc, 
-    setDoc, 
-    deleteDoc,
-    query,
-    getDocs,
-    where
-} from 'firebase/firestore';
-import { User, X, Users, Home, Calendar, Edit, Trash2, Plus } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import damerau from 'damerau-levenshtein';
+import { useAuthStore } from './store/authStore';
+import { useMultipleLoadingStates } from './hooks/useLoadingState';
+import LoadingMessage from './components/LoadingMessage';
 
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyCrFbwJq_mJnhaSe1znuIn08ITniuP0kjE",
-  authDomain: "tenda-church-app.firebaseapp.com",
-  projectId: "tenda-church-app",
-  storageBucket: "tenda-church-app.firebasestorage.app",
-  messagingSenderId: "101125626219",
-  appId: "1:101125626219:web:c1fc57f022abb21ab6542e",
-  measurementId: "G-QJ532E483W"
+// Firebase
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { collection, onSnapshot, addDoc, doc, setDoc, getDocs, deleteDoc, updateDoc, query, writeBatch, where, getDoc } from 'firebase/firestore';
+import { db, auth, appId } from './firebaseConfig';
+
+// (O resto das importações continua igual...)
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
+import LoginPage from './pages/LoginPage';
+import LoadingSpinner from './components/LoadingSpinner';
+import DashboardPage from './pages/DashboardPage';
+import MembersPage from './pages/MembersPage';
+import ConnectsPage from './pages/ConnectsPage';
+import CoursesPage from './pages/CoursesPage';
+import ProfilePage from './pages/ProfilePage';
+import ConnectTrackPage from './pages/ConnectTrackPage';
+import LeadershipHierarchyPage from './pages/LeadershipHierarchyPage';
+import Modal from './components/Modal';
+import ConfirmationModal from './components/ConfirmationModal';
+import MemberForm from './components/MemberForm';
+import ConnectForm from './components/ConnectForm';
+import CourseForm from './components/CourseForm';
+import CourseTemplateForm from './components/CourseTemplateForm';
+import ManageCourseModal from './components/ManageCourseModal';
+import ConnectReportModal from './components/ConnectReportModal';
+import ConnectFullReportModal from './components/ConnectFullReportModal';
+import LeadershipTrackModal from './components/LeadershipTrackModal';
+import DuplicateMemberModal from './components/DuplicateMemberModal';
+import UserAccessHelper from './components/UserAccessHelper';
+
+const ADMIN_EMAIL = "tendachurchgbi@batistavida.com.br";
+
+// (As funções de utilidade `calculateFinalGradeForStudent`, `getStudentStatusInfo`, `areNamesSimilar` continuam as mesmas aqui...)
+// --- FUNÇÕES DE UTILIDADE (HELPERS) ---
+const calculateFinalGradeForStudent = (student, course) => {
+    const scores = student.scores;
+    const { assessment } = course;
+    if (!scores || !assessment) return 0;
+    let total = 0;
+    total += (scores.tests || []).reduce((sum, score) => sum + (Number(score) || 0), 0);
+    total += (scores.assignments || []).reduce((sum, score) => sum + (Number(score) || 0), 0);
+    total += ((scores.activities || []).filter(done => done).length) * (assessment.activities.value || 0);
+    return parseFloat(total.toFixed(2));
 };
 
-
-// --- Inicialização do Firebase usando a configuração ---
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-const appId = firebaseConfig.projectId; // Pega o ID do projeto da configuração
-
-// --- Componentes da UI ---
-
-const Header = () => (
-  <header className="bg-[#991B1B] p-4 shadow-lg flex items-center justify-start">
-      <img 
-        src="https://firebasestorage.googleapis.com/v0/b/cad-prestadores---heberlog.firebasestorage.app/o/Logos%2FPrancheta%208.png?alt=media&token=b1ccc570-7210-48b6-b4a3-e01074bca3be"
-        onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/200x50/991B1B/FFFFFF?text=Logo+Tenda+Church'; }}
-        alt="Logo Tenda Church" 
-        className="h-10"
-      />
-  </header>
-);
-
-const Modal = ({ children, isOpen, onClose }) => {
-  if (!isOpen) return null;
-
-  return (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4"
-      onClick={onClose}
-    >
-      <div 
-        className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 relative"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-black transition-colors">
-          <X size={24} />
-        </button>
-        {children}
-      </div>
-    </div>
-  );
-};
-
-const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message }) => {
-  if (!isOpen) return null;
-
-  return (
-    <Modal isOpen={isOpen} onClose={onClose}>
-      <h2 className="text-2xl font-bold text-gray-800 mb-4">{title}</h2>
-      <p className="text-gray-600 mb-6">{message}</p>
-      <div className="flex justify-end space-x-3">
-        <button 
-          onClick={onClose} 
-          className="px-4 py-2 rounded-md bg-gray-200 text-gray-800 hover:bg-gray-300 transition-all"
-        >
-          Cancelar
-        </button>
-        <button 
-          onClick={onConfirm} 
-          className="px-4 py-2 rounded-md bg-[#DC2626] text-white font-semibold hover:bg-[#991B1B] transition-all"
-        >
-          Confirmar Exclusão
-        </button>
-      </div>
-    </Modal>
-  );
-};
-
-const ConnectForm = ({ onClose, onSave, members, editingConnect }) => {
-  const [formData, setFormData] = useState({
-    number: editingConnect?.number || '',
-    name: editingConnect?.name || '',
-    schedule: editingConnect?.schedule || '',
-    leaderId: editingConnect?.leaderId || '',
-  });
-  const [error, setError] = useState('');
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!formData.number || !formData.name || !formData.schedule || !formData.leaderId) {
-      setError('Todos os campos são obrigatórios.');
-      return;
-    }
-    const leader = members.find(m => m.id === formData.leaderId);
-    onSave({ ...formData, leaderName: leader?.name || 'Não encontrado' });
-    onClose();
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">{editingConnect ? 'Editar Connect' : 'Novo Connect'}</h2>
-      {error && <p className="text-red-600 bg-red-100 p-2 rounded-md">{error}</p>}
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="number" className="block text-sm font-medium text-gray-700 mb-1">Número do Connect</label>
-          <input type="number" name="number" id="number" value={formData.number} onChange={handleChange} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:border-[#DC2626] focus:outline-none" placeholder="Ex: 101" />
-        </div>
-        <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Nome do Connect</label>
-          <input type="text" name="name" id="name" value={formData.name} onChange={handleChange} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:border-[#DC2626] focus:outline-none" placeholder="Ex: Guerreiros da Fé" />
-        </div>
-      </div>
-      <div>
-        <label htmlFor="schedule" className="block text-sm font-medium text-gray-700 mb-1">Dia e Horário</label>
-        <input type="text" name="schedule" id="schedule" value={formData.schedule} onChange={handleChange} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:border-[#DC2626] focus:outline-none" placeholder="Ex: Quartas-feiras, 20h" />
-      </div>
-      <div>
-        <label htmlFor="leaderId" className="block text-sm font-medium text-gray-700 mb-1">Líder do Connect</label>
-        <select name="leaderId" id="leaderId" value={formData.leaderId} onChange={handleChange} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:border-[#DC2626] focus:outline-none">
-          <option value="">Selecione um líder</option>
-          {members.map(member => (
-            <option key={member.id} value={member.id}>{member.name}</option>
-          ))}
-        </select>
-      </div>
-      <div className="flex justify-end space-x-3 pt-4">
-        <button type="button" onClick={onClose} className="px-4 py-2 rounded-md bg-gray-200 text-gray-800 hover:bg-gray-300 transition-all">Cancelar</button>
-        <button type="submit" className="px-4 py-2 rounded-md bg-[#DC2626] text-white font-semibold hover:bg-[#991B1B] transition-all">{editingConnect ? 'Salvar Alterações' : 'Adicionar Connect'}</button>
-      </div>
-    </form>
-  );
-};
-
-const MemberForm = ({ onClose, onSave, connects, editingMember }) => {
-    const [formData, setFormData] = useState({
-        name: editingMember?.name || '',
-        dob: editingMember?.dob || '',
-        address: editingMember?.address || '',
-        phone: editingMember?.phone || '',
-        gender: editingMember?.gender || '',
-        connectId: editingMember?.connectId || '',
-    });
-    const [error, setError] = useState('');
-
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        if (!formData.name || !formData.dob || !formData.phone || !formData.gender) {
-            setError('Nome, Data de Nascimento, Celular e Sexo são obrigatórios.');
-            return;
+const getStudentStatusInfo = (student, course, attendanceRecords) => {
+    if (!attendanceRecords || !course || !student) return 'Pendente';
+    
+    let presentCount = 0;
+    attendanceRecords.forEach(record => {
+        if (record.statuses && (record.statuses[student.id] === 'presente' || record.statuses[student.id] === 'justificado')) {
+            presentCount++;
         }
-        onSave(formData);
-        onClose();
-    };
-
-    return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">{editingMember ? 'Editar Membro' : 'Novo Membro'}</h2>
-            {error && <p className="text-red-600 bg-red-100 p-2 rounded-md">{error}</p>}
-
-            <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Nome Completo</label>
-                <input type="text" name="name" id="name" value={formData.name} onChange={handleChange} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:border-[#DC2626] focus:outline-none" placeholder="Nome completo do membro" />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label htmlFor="dob" className="block text-sm font-medium text-gray-700 mb-1">Data de Nascimento</label>
-                    <input type="date" name="dob" id="dob" value={formData.dob} onChange={handleChange} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:border-[#DC2626] focus:outline-none" />
-                </div>
-                <div>
-                    <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">Celular</label>
-                    <input type="tel" name="phone" id="phone" value={formData.phone} onChange={handleChange} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:border-[#DC2626] focus:outline-none" placeholder="(99) 99999-9999" />
-                </div>
-            </div>
-
-            <div>
-                <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">Endereço</label>
-                <input type="text" name="address" id="address" value={formData.address} onChange={handleChange} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:border-[#DC2626] focus:outline-none" placeholder="Rua, Número, Bairro, Cidade" />
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-1">Sexo</label>
-                    <select name="gender" id="gender" value={formData.gender} onChange={handleChange} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:border-[#DC2626] focus:outline-none">
-                        <option value="">Selecione...</option>
-                        <option value="Masculino">Masculino</option>
-                        <option value="Feminino">Feminino</option>
-                    </select>
-                </div>
-                <div>
-                    <label htmlFor="connectId" className="block text-sm font-medium text-gray-700 mb-1">Connect</label>
-                    <select name="connectId" id="connectId" value={formData.connectId} onChange={handleChange} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:border-[#DC2626] focus:outline-none">
-                        <option value="">Nenhum</option>
-                        {connects.map(connect => (
-                            <option key={connect.id} value={connect.id}>{connect.number} - {connect.name}</option>
-                        ))}
-                    </select>
-                </div>
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-4">
-                <button type="button" onClick={onClose} className="px-4 py-2 rounded-md bg-gray-200 text-gray-800 hover:bg-gray-300 transition-all">Cancelar</button>
-                <button type="submit" className="px-4 py-2 rounded-md bg-[#DC2626] text-white font-semibold hover:bg-[#991B1B] transition-all">{editingMember ? 'Salvar Alterações' : 'Adicionar Membro'}</button>
-            </div>
-        </form>
-    );
+    });
+    const attendancePercentage = attendanceRecords.length > 0 ? Math.round((presentCount / attendanceRecords.length) * 100) : 0;
+    
+    const finalGrade = calculateFinalGradeForStudent(student, course);
+    
+    const { passingCriteria } = course;
+    if (!passingCriteria) return 'Cursando';
+    if (attendancePercentage < passingCriteria.minAttendance) return 'Reprovado por Falta';
+    if (finalGrade < passingCriteria.minGrade) return 'Reprovado por Nota';
+    
+    return 'Aprovado';
 };
 
-const LoadingSpinner = () => (
-    <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-[#DC2626]"></div>
-    </div>
-);
+const areNamesSimilar = (nameA, nameB, threshold) => {
+    const normalize = (str) => str.toLowerCase().trim().replace(/\s+/g, ' ');
 
+    const tokensA = normalize(nameA).split(' ');
+    const tokensB = normalize(nameB).split(' ');
 
-// --- Componente Principal da Aplicação ---
+    if (tokensA.length === 0 || tokensB.length === 0) {
+        return false;
+    }
+    const firstNameA = tokensA[0];
+    const firstNameB = tokensB[0];
+    if (damerau(firstNameA, firstNameB).similarity < threshold) {
+        return false;
+    }
+    if (tokensA.length === 1 && tokensB.length === 1) {
+        return true;
+    }
+    const surnamesA = tokensA.slice(1);
+    const surnamesB = tokensB.slice(1);
+    if (surnamesA.length === 0 || surnamesB.length === 0) {
+        return true;
+    }
+    for (const surnameA of surnamesA) {
+        for (const surnameB of surnamesB) {
+            if (damerau(surnameA, surnameB).similarity >= threshold) {
+                return true;
+            }
+        }
+    }
+    return false;
+};
+
 export default function App() {
-    const [isAuthReady, setIsAuthReady] = useState(false);
-    const [members, setMembers] = useState([]);
-    const [connects, setConnects] = useState([]);
-    const [loading, setLoading] = useState(true);
-
+    const { user, isAdmin, currentUserData, setAuthData, clearAuthData } = useAuthStore();
+    const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+    const [activePage, setActivePage] = useState('dashboard');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [allMembers, setAllMembers] = useState([]);
+    const [allConnects, setAllConnects] = useState([]);
+    const [allCourses, setAllCourses] = useState([]);
+    const [allCourseTemplates, setAllCourseTemplates] = useState([]);
+    const [allConnectReports, setAllConnectReports] = useState([]);
+    const [loadingData, setLoadingData] = useState(true);
+    const [connectionError, setConnectionError] = useState(null);
+    const [operationStatus, setOperationStatus] = useState({ type: null, message: null });
+    
+    // Loading states para operações específicas
+    const loadingStates = useMultipleLoadingStates([
+        'saveMember', 'saveConnect', 'saveCourse', 'saveCourseTemplate', 
+        'saveReport', 'deleteMember', 'deleteConnect', 'deleteCourse', 
+        'reactivateMember', 'saveAttendance'
+    ]);
     const [isMemberModalOpen, setMemberModalOpen] = useState(false);
     const [isConnectModalOpen, setConnectModalOpen] = useState(false);
+    const [isCourseModalOpen, setCourseModalOpen] = useState(false);
+    const [isCourseTemplateModalOpen, setCourseTemplateModalOpen] = useState(false);
+    const [isManageCourseModalOpen, setManageCourseModalOpen] = useState(false);
+    const [isReportModalOpen, setReportModalOpen] = useState(false);
+    const [isConfirmModalOpen, setConfirmModalOpen] = useState(false);
+    const [isConnectFullReportModalOpen, setConnectFullReportModalOpen] = useState(false);
+    const [isLeadershipTrackModalOpen, setLeadershipTrackModalOpen] = useState(false);
+    const [isDuplicateModalOpen, setDuplicateModalOpen] = useState(false);
+    const [existingMemberForCheck, setExistingMemberForCheck] = useState(null);
+    const [newMemberForCheck, setNewMemberForCheck] = useState(null);
     const [editingMember, setEditingMember] = useState(null);
     const [editingConnect, setEditingConnect] = useState(null);
-    const [searchTerm, setSearchTerm] = useState('');
-
-    const [isConfirmModalOpen, setConfirmModalOpen] = useState(false);
+    const [editingCourse, setEditingCourse] = useState(null);
+    const [editingCourseTemplate, setEditingCourseTemplate] = useState(null);
+    const [managingCourse, setManagingCourse] = useState(null);
+    const [reportingConnect, setReportingConnect] = useState(null);
+    const [generatingReportForConnect, setGeneratingReportForConnect] = useState(null);
+    const [viewingMember, setViewingMember] = useState(null);
+    const [viewingConnectTrack, setViewingConnectTrack] = useState(null);
+    const [membersWithCourses, setMembersWithCourses] = useState([]);
+    const [completedCourses, setCompletedCourses] = useState([]);
     const [deleteAction, setDeleteAction] = useState(null);
+    const [memberConnectHistoryDetails, setMemberConnectHistoryDetails] = useState([]);
 
-    // Efeito para autenticação
+    // --- Efeitos ---
+
+    // CORRIGIDO: useEffect 1 - Apenas para autenticação
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                try {
-                    await signInAnonymously(auth);
-                } catch (error) {
-                    console.error("Erro no login anônimo:", error);
+        const authUnsub = onAuthStateChanged(auth, (currentUser) => {
+            setAuthData({
+                user: currentUser,
+                isAdmin: currentUser?.email === ADMIN_EMAIL,
+                currentUserData: null // Será preenchido pelo próximo useEffect
+            });
+            setIsLoadingAuth(false);
+        });
+        return () => authUnsub();
+    }, [setAuthData]);
+
+    // CORRIGIDO: useEffect 2 - Para buscar todos os membros e encontrar o dado do usuário logado
+    useEffect(() => {
+        if (!user) {
+            setAllMembers([]); // Limpa a lista de membros se não houver usuário
+            return;
+        }
+        const membersUnsub = onSnapshot(
+            collection(db, `artifacts/${appId}/public/data/members`), 
+            (snapshot) => {
+                const membersList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                setAllMembers(membersList);
+                
+                // Encontra e atualiza os dados do usuário logado no store
+                const memberData = membersList.find(m => m.email?.toLowerCase() === user.email?.toLowerCase());
+                
+                setAuthData({ user, isAdmin, currentUserData: memberData || null });
+            },
+            (error) => {
+                console.error('Erro ao carregar membros:', error);
+                setConnectionError('Erro de conexão: Não foi possível carregar os dados dos membros.');
+                setAllMembers([]);
+                setAuthData({ user, isAdmin, currentUserData: null });
+            }
+        );
+        return () => membersUnsub();
+    }, [user, isAdmin, setAuthData]); // Depende do 'user' do store
+
+    // CORRIGIDO: useEffect 3 - Para buscar os outros dados (Connects, Cursos, etc.)
+    useEffect(() => {
+        if (!user) {
+            setLoadingData(false);
+            // Limpa os dados se o usuário fizer logout
+            setAllConnects([]);
+            setAllCourses([]);
+            setAllCourseTemplates([]);
+            setAllConnectReports([]);
+            return;
+        }
+        setLoadingData(true);
+        const unsubs = [
+            onSnapshot(
+                collection(db, `artifacts/${appId}/public/data/connects`), 
+                (s) => setAllConnects(s.docs.map(d => ({ id: d.id, ...d.data() }))),
+                (error) => {
+                    console.error('Erro ao carregar connects:', error);
+                    setConnectionError('Erro de conexão: Não foi possível carregar os dados dos connects.');
+                    setAllConnects([]);
+                }
+            ),
+            onSnapshot(
+                collection(db, `artifacts/${appId}/public/data/courses`), 
+                (s) => setAllCourses(s.docs.map(d => ({ id: d.id, ...d.data() }))),
+                (error) => {
+                    console.error('Erro ao carregar cursos:', error);
+                    setConnectionError('Erro de conexão: Não foi possível carregar os dados dos cursos.');
+                    setAllCourses([]);
+                }
+            ),
+            onSnapshot(
+                collection(db, `artifacts/${appId}/public/data/courseTemplates`), 
+                (s) => setAllCourseTemplates(s.docs.map(d => ({ id: d.id, ...d.data() }))),
+                (error) => {
+                    console.error('Erro ao carregar templates de curso:', error);
+                    setConnectionError('Erro de conexão: Não foi possível carregar os templates de curso.');
+                    setAllCourseTemplates([]);
+                }
+            ),
+            onSnapshot(
+                collection(db, `artifacts/${appId}/public/data/connect_reports`), 
+                (s) => setAllConnectReports(s.docs.map(d => ({ id: d.id, ...d.data() }))),
+                (error) => {
+                    console.error('Erro ao carregar relatórios:', error);
+                    setConnectionError('Erro de conexão: Não foi possível carregar os relatórios.');
+                    setAllConnectReports([]);
+                }
+            )
+        ];
+        // Um delay para dar a percepção de carregamento e evitar piscar a tela
+        setTimeout(() => setLoadingData(false), 500);
+        return () => unsubs.forEach(unsub => unsub());
+    }, [user]);
+
+    // O resto do arquivo permanece o mesmo...
+
+    const { visibleMembers, visibleConnects, visibleCourses, visibleReports } = useMemo(() => {
+        if (!user || !currentUserData) return { visibleMembers: [], visibleConnects: [], visibleCourses: [], visibleReports: [] };
+        
+        if (isAdmin) {
+            return { visibleMembers: allMembers, visibleConnects: allConnects, visibleCourses: allCourses, visibleReports: allConnectReports };
+        }
+        
+        const userEmail = currentUserData.email?.toLowerCase();
+        const supervisedConnects = allConnects.filter(c => c.supervisorEmail?.toLowerCase() === userEmail);
+        const ledConnects = allConnects.filter(c => c.leaderEmail?.toLowerCase() === userEmail);
+        const taughtCourses = allCourses.filter(c => c.teacherEmail?.toLowerCase() === userEmail);
+
+        const visibleConnectsSet = new Set([...supervisedConnects, ...ledConnects]);
+        const visibleConnects = Array.from(visibleConnectsSet);
+        const visibleConnectIds = visibleConnects.map(c => c.id);
+        
+        const visibleMembers = allMembers.filter(m => visibleConnectIds.includes(m.connectId));
+        const visibleReports = allConnectReports.filter(r => visibleConnectIds.includes(r.connectId));
+
+        return { visibleMembers, visibleConnects, visibleCourses: taughtCourses, visibleReports };
+
+    }, [user, isAdmin, currentUserData, allMembers, allConnects, allCourses, allConnectReports]);
+    
+    const attendanceAlerts = useMemo(() => {
+        const alerts = [];
+        if (!allMembers.length || !allConnectReports.length) {
+            return alerts;
+        }
+        const sortedReports = [...allConnectReports].sort((a, b) => {
+            const dateA = a.reportDate.toDate ? a.reportDate.toDate() : new Date(a.reportDate);
+            const dateB = b.reportDate.toDate ? b.reportDate.toDate() : new Date(b.reportDate);
+            return dateB - dateA;
+        });
+        const membersByConnect = allMembers.reduce((acc, member) => {
+            if (member.connectId) {
+                if (!acc[member.connectId]) acc[member.connectId] = [];
+                acc[member.connectId].push(member);
+            }
+            return acc;
+        }, {});
+        
+        for (const connectId in membersByConnect) {
+            const members = membersByConnect[connectId];
+            const reportsForConnect = sortedReports.filter(r => r.connectId === connectId);
+
+            if (reportsForConnect.length < 4) continue;
+
+            for (const member of members) {
+                let consecutiveAbsences = 0;
+                for (let i = 0; i < 4; i++) {
+                    if (!reportsForConnect[i]) break;
+                    const report = reportsForConnect[i];
+                    const attendanceStatus = report.attendance?.[member.id];
+                    if (attendanceStatus === 'ausente') {
+                        consecutiveAbsences++;
+                    } else {
+                        break;
+                    }
+                }
+
+                if (consecutiveAbsences >= 4) {
+                    let totalConsecutiveAbsences = 0;
+                    for (const report of reportsForConnect) {
+                        const attendanceStatus = report.attendance?.[member.id];
+                        if (attendanceStatus === 'ausente') {
+                            totalConsecutiveAbsences++;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    alerts.push({
+                        memberId: member.id,
+                        memberName: member.name,
+                        connectId: connectId,
+                        absences: totalConsecutiveAbsences,
+                        status: totalConsecutiveAbsences >= 6 ? 'inactive' : 'alert'
+                    });
                 }
             }
-            setIsAuthReady(true);
-        });
-        return () => unsubscribe();
-    }, []);
+        }
+        return alerts;
+    }, [allMembers, allConnectReports]);
 
-    // Efeito para carregar dados do Firestore
-    useEffect(() => {
-        if (!isAuthReady) return;
-        
-        setLoading(true);
-        const connectsCollectionPath = `artifacts/${appId}/public/data/connects`;
-        const membersCollectionPath = `artifacts/${appId}/public/data/members`;
-
-        const unsubConnects = onSnapshot(collection(db, connectsCollectionPath), (snapshot) => {
-            const connectsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setConnects(connectsData);
-        }, (error) => console.error("Erro ao buscar connects: ", error));
-
-        const unsubMembers = onSnapshot(collection(db, membersCollectionPath), (snapshot) => {
-            const membersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setMembers(membersData);
-            setLoading(false);
-        }, (error) => {
-            console.error("Erro ao buscar membros: ", error);
-            setLoading(false);
-        });
-
-        return () => {
-            unsubConnects();
-            unsubMembers();
-        };
-    }, [isAuthReady]);
+    const openMemberModal = (member = null) => { setEditingMember(member); setMemberModalOpen(true); };
+    const closeMemberModal = () => setMemberModalOpen(false);
+    const openConnectModal = (connect = null) => { setEditingConnect(connect); setConnectModalOpen(true); };
+    const closeConnectModal = () => setConnectModalOpen(false);
+    const openCourseModal = (course = null) => { setEditingCourse(course); setCourseModalOpen(true); };
+    const closeCourseModal = () => { setEditingCourse(null); setCourseModalOpen(false); };
+    const openCourseTemplateModal = (template = null) => { setEditingCourseTemplate(template); setCourseTemplateModalOpen(true); };
+    const closeCourseTemplateModal = () => { setEditingCourseTemplate(null); setCourseTemplateModalOpen(false); };
+    const openManageCourseModal = (course) => { setManagingCourse(course); setManageCourseModalOpen(true); };
+    const closeManageCourseModal = () => setManageCourseModalOpen(false);
+    const openReportModal = (connect) => { setReportingConnect(connect); setReportModalOpen(true); };
+    const closeReportModal = () => setReportModalOpen(false);
+    const openConnectFullReportModal = (connect) => { setGeneratingReportForConnect(connect); setConnectFullReportModalOpen(true); };
+    const closeConnectFullReportModal = () => setConnectFullReportModalOpen(false);
     
+    const openLeadershipTrackModal = async (member) => {
+        if (!member) return;
+        setViewingMember(member);
+        
+        try {
+            const coursesRef = collection(db, `artifacts/${appId}/public/data/members/${member.id}/completedCourses`);
+            const querySnapshot = await getDocs(coursesRef);
+            const courses = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setCompletedCourses(courses);
+
+            let historyDetails = [];
+            if (member.connectHistory && member.connectHistory.length > 0) {
+                for (const historyEntry of member.connectHistory) {
+                    const connectName = getConnectName(historyEntry.connectId);
+                    const relevantReports = allConnectReports.filter(report => {
+                        const reportDate = report.reportDate.toDate ? report.reportDate.toDate() : new Date(report.reportDate);
+                        const startDate = historyEntry.startDate.toDate ? historyEntry.startDate.toDate() : new Date(historyEntry.startDate);
+                        const endDate = historyEntry.endDate ? (historyEntry.endDate.toDate ? historyEntry.endDate.toDate() : new Date(historyEntry.endDate)) : null;
+                        
+                        return report.connectId === historyEntry.connectId &&
+                               reportDate >= startDate &&
+                               (!endDate || reportDate <= endDate);
+                    });
+                    
+                    let presenceCount = 0;
+                    let absenceCount = 0;
+                    relevantReports.forEach(report => {
+                        const status = report.attendance?.[member.id];
+                        if (status === 'presente' || status === 'justificado') {
+                            presenceCount++;
+                        } else if (status === 'ausente') {
+                            absenceCount++;
+                        }
+                    });
+
+                    historyDetails.push({
+                        ...historyEntry,
+                        connectName,
+                        presenceCount,
+                        absenceCount
+                    });
+                }
+            }
+            setMemberConnectHistoryDetails(historyDetails.sort((a, b) => (b.startDate.toDate ? b.startDate.toDate() : new Date(b.startDate)) - (a.startDate.toDate ? a.startDate.toDate() : new Date(a.startDate))));
+            
+        } catch (error) {
+            console.error("Erro ao buscar dados para o Trilho de Liderança:", error);
+            setCompletedCourses([]);
+            setMemberConnectHistoryDetails([]);
+        }
+
+        setLeadershipTrackModalOpen(true);
+    };
+    const closeLeadershipTrackModal = () => {
+        setLeadershipTrackModalOpen(false);
+        setViewingMember(null);
+        setCompletedCourses([]);
+        setMemberConnectHistoryDetails([]);
+    };
+
+    const openConnectTrackPage = async (connect) => {
+        if (!connect) return;
+        setViewingConnectTrack(connect);
+        
+        const connectMembers = allMembers.filter(m => m.connectId === connect.id);
+        const membersWithCoursesPromises = connectMembers.map(async (member) => {
+            const coursesRef = collection(db, `artifacts/${appId}/public/data/members/${member.id}/completedCourses`);
+            const querySnapshot = await getDocs(coursesRef);
+            const completedCourses = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            return { ...member, completedCourses };
+        });
+
+        const membersWithData = await Promise.all(membersWithCoursesPromises);
+        setMembersWithCourses(membersWithData);
+        setActivePage('connectTrack');
+    };
+    const closeConnectTrackPage = () => {
+        setViewingConnectTrack(null);
+        setMembersWithCourses([]);
+        setActivePage('connects');
+    };
+    const triggerDelete = (type, id) => {
+        let message = "Tem certeza que deseja excluir este item? Esta ação não pode ser desfeita.";
+        if (type === 'connect') {
+            message = "Atenção! Excluir este Connect removerá a associação de todos os membros a ele. Deseja continuar?";
+        }
+        setDeleteAction({ type, id, message });
+        setConfirmModalOpen(true);
+    };
+
+    const handleLogout = async () => { await signOut(auth); clearAuthData(); setActivePage('dashboard'); };
+    
+    const handleSaveMember = async (memberData, originalMember = null) => {
+        const collectionPath = `artifacts/${appId}/public/data/members`;
+        const today = new Date();
+        
+        loadingStates.setLoading('saveMember', 'Salvando membro...');
+        
+        try {
+            let dataToSave = { ...memberData };
+            
+            if (originalMember && originalMember.connectId !== dataToSave.connectId) {
+                const history = originalMember.connectHistory || [];
+                const lastEntry = history.find(entry => !entry.endDate);
+                
+                if (lastEntry) {
+                    lastEntry.endDate = today;
+                }
+                
+                if (dataToSave.connectId) {
+                    history.push({ connectId: dataToSave.connectId, startDate: today, endDate: null });
+                }
+                dataToSave.connectHistory = history;
+            } else if (!originalMember && dataToSave.connectId) {
+                dataToSave.connectHistory = [{ connectId: dataToSave.connectId, startDate: today, endDate: null }];
+            }
+
+            if (editingMember || originalMember) {
+                const memberId = editingMember?.id || originalMember?.id;
+                await setDoc(doc(db, collectionPath, memberId), dataToSave);
+            } else {
+                await addDoc(collection(db, collectionPath), dataToSave);
+            }
+            
+            loadingStates.setSuccess('saveMember', 'Membro salvo com sucesso!');
+            closeMemberModal();
+        } catch (error) {
+            console.error("Erro ao salvar membro:", error);
+            loadingStates.setError('saveMember', 'Erro ao salvar membro. Tente novamente.');
+        }
+    };
+    
+    const handleCheckDuplicate = async (newMemberData) => {
+        const SIMILARITY_THRESHOLD = 0.8;
+        const newEmail = newMemberData.email.toLowerCase().trim();
+        const newPhone = newMemberData.phone.replace(/\D/g, '');
+        const newDob = newMemberData.dob;
+        let potentialDuplicate = null;
+        for (const existingMember of allMembers) {
+            if (!existingMember.name) continue;
+            const existingEmail = existingMember.email?.toLowerCase().trim();
+            const existingPhone = existingMember.phone?.replace(/\D/g, '');
+            const existingDob = existingMember.dob;
+            const isEmailMatch = newEmail && newEmail === existingEmail;
+            const isPhoneMatch = newPhone && newPhone === existingPhone;
+            const isDobMatch = newDob && newDob === existingDob;
+            if (isEmailMatch || isPhoneMatch || isDobMatch) {
+                const isNameSimilar = areNamesSimilar(newMemberData.name, existingMember.name, SIMILARITY_THRESHOLD);
+                if (isNameSimilar) {
+                    potentialDuplicate = existingMember;
+                    break;
+                }
+            }
+        }
+        if (potentialDuplicate) {
+            setExistingMemberForCheck(potentialDuplicate);
+            setNewMemberForCheck(newMemberData);
+            setDuplicateModalOpen(true);
+            closeMemberModal();
+        } else {
+            handleSaveMember(newMemberData, null);
+        }
+    };
+    
+    const handleRejectDuplicate = () => {
+        handleSaveMember(newMemberForCheck, null);
+        setDuplicateModalOpen(false);
+    };
+    
+    const handleConfirmDuplicate = () => {
+        if (existingMemberForCheck?.connectId) {
+            const connect = allConnects.find(c => c.id === existingMemberForCheck.connectId);
+            const leader = allMembers.find(m => m.id === connect?.leaderId);
+            alert(`Este membro já pertence ao Connect ${connect?.number} - ${connect?.name}.\n\nPor favor, entre em contato com o líder: ${leader?.name} (${leader?.phone}) para atualizar o cadastro existente.`);
+        } else {
+            alert(`Este membro já está no sistema. Para evitar a criação de uma duplicata, por favor, feche esta janela e edite o cadastro existente de "${existingMemberForCheck.name}" na lista de membros.`);
+        }
+        setDuplicateModalOpen(false);
+    };
+
     const handleSaveConnect = async (connectData) => {
         const collectionPath = `artifacts/${appId}/public/data/connects`;
+        
+        loadingStates.setLoading('saveConnect', 'Salvando connect...');
+        
         try {
+            let connectId = editingConnect?.id;
             if (editingConnect) {
-                await setDoc(doc(db, collectionPath, editingConnect.id), connectData);
+                await setDoc(doc(db, collectionPath, connectId), connectData);
             } else {
                 const q = query(collection(db, collectionPath), where("number", "==", connectData.number));
                 const querySnapshot = await getDocs(q);
                 if (!querySnapshot.empty) {
-                    alert("Já existe um Connect com este número.");
+                    loadingStates.setError('saveConnect', 'Já existe um Connect com este número.');
                     return;
                 }
-                await addDoc(collection(db, collectionPath), connectData);
+                const newDocRef = await addDoc(collection(db, collectionPath), connectData);
+                connectId = newDocRef.id;
             }
+            const leaderRef = doc(db, `artifacts/${appId}/public/data/members`, connectData.leaderId);
+            await updateDoc(leaderRef, { connectId: connectId });
+            
+            loadingStates.setSuccess('saveConnect', 'Connect salvo com sucesso!');
             closeConnectModal();
         } catch (error) {
             console.error("Erro ao salvar connect:", error);
+            loadingStates.setError('saveConnect', 'Erro ao salvar connect. Tente novamente.');
         }
     };
-    
-    const handleSaveMember = async (memberData) => {
-        const collectionPath = `artifacts/${appId}/public/data/members`;
+    const generateAttendanceRecords = async (courseId, courseData) => { const batch = writeBatch(db); const weekDaysMap = { "Domingo": 0, "Segunda-feira": 1, "Terça-feira": 2, "Quarta-feira": 3, "Quinta-feira": 4, "Sexta-feira": 5, "Sábado": 6 }; const targetDay = weekDaysMap[courseData.classDay]; let currentDate = new Date(courseData.startDate + 'T00:00:00'); const endDate = new Date(courseData.endDate + 'T00:00:00'); while (currentDate <= endDate) { if (currentDate.getUTCDay() === targetDay) { const dateString = currentDate.toISOString().split('T')[0]; const attendanceRef = doc(db, `artifacts/${appId}/public/data/courses/${courseId}/attendance/${dateString}`); const initialStatuses = courseData.students.reduce((acc, student) => { acc[student.id] = 'pendente'; return acc; }, {}); batch.set(attendanceRef, { date: currentDate, statuses: initialStatuses }); } currentDate.setDate(currentDate.getDate() + 1); } await batch.commit(); };
+    const handleSaveCourse = async (courseData) => {
+        const collectionPath = `artifacts/${appId}/public/data/courses`;
+        
+        loadingStates.setLoading('saveCourse', 'Salvando curso...');
+        
         try {
-            if (editingMember) {
-                await setDoc(doc(db, collectionPath, editingMember.id), memberData);
+            if (editingCourse) {
+                await setDoc(doc(db, collectionPath, editingCourse.id), courseData);
             } else {
-                await addDoc(collection(db, collectionPath), memberData);
+                const newCourseRef = await addDoc(collection(db, collectionPath), courseData);
+                await generateAttendanceRecords(newCourseRef.id, courseData);
             }
-            closeMemberModal();
+            
+            loadingStates.setSuccess('saveCourse', 'Curso salvo com sucesso!');
+            closeCourseModal();
         } catch (error) {
-            console.error("Erro ao salvar membro:", error);
+            console.error("Erro ao salvar curso:", error);
+            loadingStates.setError('saveCourse', 'Erro ao salvar curso. Tente novamente.');
         }
     };
-    
-    const triggerDelete = (type, id) => {
-      let message = "Tem certeza que deseja excluir este membro? Esta ação não pode ser desfeita.";
-      if (type === 'connect') {
-          message = "Atenção! Excluir este Connect removerá a associação de todos os membros a ele. Deseja continuar?";
-      }
-      setDeleteAction({ type, id, message });
-      setConfirmModalOpen(true);
+    const handleSaveCourseTemplate = async (templateData) => { const collectionPath = `artifacts/${appId}/public/data/courseTemplates`; try { if (editingCourseTemplate) { await setDoc(doc(db, collectionPath, editingCourseTemplate.id), templateData); } else { await addDoc(collection(db, collectionPath), templateData); } closeCourseTemplateModal(); } catch (error) { console.error("Erro ao salvar modelo de curso:", error); } };
+    const handleSaveCourseStudents = async (courseId, students) => { const courseRef = doc(db, `artifacts/${appId}/public/data/courses/${courseId}`); try { await updateDoc(courseRef, { students: students }); } catch (error) { console.error("Erro ao salvar alunos do curso:", error); } };
+    const handleSaveAttendance = async (courseId, dateId, statuses) => { const attendanceRef = doc(db, `artifacts/${appId}/public/data/courses/${courseId}/attendance/${dateId}`); try { await updateDoc(attendanceRef, { statuses: statuses }); } catch (error) { console.error("Erro ao salvar presença:", error); } };
+    const handleSaveConnectReport = async (reportData) => {
+        const dateString = reportData.reportDate.toISOString().split('T')[0];
+        const reportId = `${reportData.connectId}_${dateString}`;
+        const reportRef = doc(db, `artifacts/${appId}/public/data/connect_reports`, reportId);
+        
+        loadingStates.setLoading('saveReport', 'Salvando relatório...');
+        
+        try {
+            await setDoc(reportRef, reportData);
+            loadingStates.setSuccess('saveReport', 'Relatório salvo com sucesso!');
+        } catch (error) {
+            console.error("Erro ao salvar relatório do Connect:", error);
+            loadingStates.setError('saveReport', 'Erro ao salvar relatório. Tente novamente.');
+        }
     };
-
+    // Funções de atualização de perfil removidas temporariamente (não utilizadas)
+    const handleSaveMilestones = async (memberId, milestones) => {
+        if (!memberId) throw new Error("ID do membro não fornecido.");
+        const memberRef = doc(db, `artifacts/${appId}/public/data/members`, memberId);
+        const milestonesToSave = { ...milestones };
+        Object.keys(milestonesToSave).forEach(key => {
+            milestonesToSave[key].completed = !!milestonesToSave[key].date;
+        });
+        await updateDoc(memberRef, { milestones: milestonesToSave });
+    };
+    const handleFinalizeCourse = async (course) => {
+        if (!course || !course.id) return;
+        const confirmation = window.confirm(`Tem certeza que deseja finalizar o curso "${course.name}" e processar os resultados? Esta ação não pode ser desfeita.`);
+        if (!confirmation) return;
+        try {
+            const attendanceRef = collection(db, `artifacts/${appId}/public/data/courses/${course.id}/attendance`);
+            const attendanceSnapshot = await getDocs(attendanceRef);
+            const attendanceRecords = attendanceSnapshot.docs.map(d => d.data());
+            let approvedCount = 0;
+            const students = course.students || [];
+            for (const student of students) {
+                const status = getStudentStatusInfo(student, course, attendanceRecords);
+                if (status === 'Aprovado') {
+                    approvedCount++;
+                    const finalGrade = calculateFinalGradeForStudent(student, course);
+                    const completedCourseRef = doc(db, `artifacts/${appId}/public/data/members/${student.id}/completedCourses/${course.id}`);
+                    await setDoc(completedCourseRef, {
+                        courseName: course.name,
+                        completionDate: new Date(),
+                        finalGrade: finalGrade,
+                        templateId: course.templateId || null,
+                    });
+                }
+            }
+            const courseRef = doc(db, `artifacts/${appId}/public/data/courses`, course.id);
+            await updateDoc(courseRef, { finalized: true });
+            alert(`Curso "${course.name}" finalizado com sucesso! ${approvedCount} de ${students.length} alunos foram aprovados e tiveram seus registros atualizados.`);
+        } catch (error) {
+            console.error("Erro ao finalizar o curso:", error);
+            alert("Ocorreu um erro ao processar os resultados do curso.");
+        }
+    };
+    const handleReopenCourse = async (course) => {
+        if (!course || !course.id) return;
+        const confirmation = window.confirm(`Tem certeza que deseja reabrir o curso "${course.name}"? Isso permitirá novas edições de notas e presenças, mas não removerá os registros do Trilho de Liderança já criados.`);
+        if (!confirmation) return;
+        try {
+            const courseRef = doc(db, `artifacts/${appId}/public/data/courses`, course.id);
+            await updateDoc(courseRef, { finalized: false });
+            alert(`Curso "${course.name}" foi reaberto com sucesso.`);
+        } catch (error) {
+            console.error("Erro ao reabrir o curso:", error);
+            alert("Ocorreu um erro ao reabrir o curso.");
+        }
+    };
+    const handleReactivateMember = async (member, connectId) => {
+        if (!member || !connectId) return;
+        const confirmation = window.confirm(`Tem certeza que deseja reativar ${member.name}? Isso registrará uma presença para este membro na data de hoje.`);
+        if (!confirmation) return;
+        try {
+            const today = new Date();
+            const dateString = today.toISOString().split('T')[0];
+            const reportId = `${connectId}_${dateString}`;
+            const reportRef = doc(db, `artifacts/${appId}/public/data/connect_reports`, reportId);
+            const reportSnap = await getDoc(reportRef);
+            let attendanceData = {};
+            if (reportSnap.exists()) {
+                attendanceData = reportSnap.data().attendance || {};
+            }
+            attendanceData[member.id] = 'presente';
+            const connect = allConnects.find(c => c.id === connectId);
+            const reportData = {
+                connectId: connectId,
+                connectName: connect?.name || '',
+                leaderId: connect?.leaderId || '',
+                leaderName: connect?.leaderName || '',
+                reportDate: today,
+                guests: reportSnap.exists() ? reportSnap.data().guests || 0 : 0,
+                offering: reportSnap.exists() ? reportSnap.data().offering || 0 : 0,
+                attendance: attendanceData
+            };
+            await setDoc(reportRef, reportData, { merge: true });
+            alert(`${member.name} foi reativado com sucesso.`);
+        } catch (error) {
+            console.error("Erro ao reativar membro:", error);
+            alert("Ocorreu um erro ao tentar reativar o membro.");
+        }
+    };
     const handleConfirmDelete = async () => {
         if (!deleteAction) return;
-        
         const { type, id } = deleteAction;
-
+        
+        loadingStates.setLoading('delete', 'Excluindo...');
+        
         try {
-            if (type === 'member') {
-                await deleteDoc(doc(db, `artifacts/${appId}/public/data/members`, id));
-            } else if (type === 'connect') {
-                const membersToUpdate = members.filter(m => m.connectId === id);
-                for (const member of membersToUpdate) {
-                    const memberRef = doc(db, `artifacts/${appId}/public/data/members`, member.id);
-                    const updatedData = { ...member, connectId: '' };
-                    delete updatedData.id;
-                    await setDoc(memberRef, updatedData);
-                }
-                await deleteDoc(doc(db, `artifacts/${appId}/public/data/connects`, id));
+            let collectionPath = `artifacts/${appId}/public/data/${type}s`;
+            if (type === 'courseTemplate') {
+                collectionPath = `artifacts/${appId}/public/data/courseTemplates`;
             }
+            
+            if (type === 'connect') {
+                const batch = writeBatch(db);
+                const membersToUpdateQuery = query(collection(db, `artifacts/${appId}/public/data/members`), where('connectId', '==', id));
+                const membersSnapshot = await getDocs(membersToUpdateQuery);
+                membersSnapshot.forEach(memberDoc => {
+                    batch.update(memberDoc.ref, { connectId: '' });
+                });
+                const connectRef = doc(db, collectionPath, id);
+                batch.delete(connectRef);
+                await batch.commit();
+            } else {
+                await deleteDoc(doc(db, collectionPath, id));
+            }
+            
+            loadingStates.setSuccess('delete', 'Item excluído com sucesso!');
         } catch (error) {
             console.error(`Erro ao deletar ${type}:`, error);
+            loadingStates.setError('delete', 'Erro ao excluir item. Tente novamente.');
         } finally {
             setConfirmModalOpen(false);
             setDeleteAction(null);
         }
     };
+    const getConnectName = useCallback((connectId) => { if (!connectId) return 'Sem Connect'; const connect = allConnects.find(c => c.id === connectId); return connect ? `${connect.number} - ${connect.name}` : '...'; }, [allConnects]);
 
-    const openMemberModal = (member = null) => { setEditingMember(member); setMemberModalOpen(true); };
-    const closeMemberModal = () => { setEditingMember(null); setMemberModalOpen(false); };
-    const openConnectModal = (connect = null) => { setEditingConnect(connect); setConnectModalOpen(true); };
-    const closeConnectModal = () => { setEditingConnect(null); setConnectModalOpen(false); };
-    
-    const filteredMembers = members.filter(member => 
-        member.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const renderActivePage = () => {
+        if (loadingData) return <LoadingSpinner />;
+        
+        if (activePage === 'connectTrack' && viewingConnectTrack) {
+            return <ConnectTrackPage 
+                        connect={viewingConnectTrack} 
+                        membersInConnect={membersWithCourses}
+                        allCourses={allCourses}
+                        allConnects={allConnects} 
+                        onBack={closeConnectTrackPage}
+                        attendanceAlerts={attendanceAlerts}
+                        onReactivateMember={handleReactivateMember}
+                    />;
+        }
 
-    const getConnectName = useCallback((connectId) => {
-        if (!connectId) return 'Sem Connect';
-        const connect = connects.find(c => c.id === connectId);
-        return connect ? `${connect.number} - ${connect.name}` : '...';
-    }, [connects]);
+        switch (activePage) {
+            case 'dashboard':
+                return <DashboardPage 
+                            members={visibleMembers} 
+                            connects={visibleConnects} 
+                            reports={visibleReports} 
+                            courses={visibleCourses}
+                            attendanceAlerts={attendanceAlerts.filter(a => visibleConnects.some(c => c.id === a.connectId))}
+                            getConnectName={getConnectName}
+                        />;
+            case 'members':
+                return <MembersPage 
+                            onAddMember={openMemberModal} 
+                            onEditMember={openMemberModal} 
+                            onDeleteMember={triggerDelete} 
+                            onViewTrack={openLeadershipTrackModal}
+                            getConnectName={getConnectName}
+                            isAdmin={isAdmin}
+                            currentUserData={currentUserData}
+                            allConnects={allConnects}
+                        />;
+            case 'connects':
+                return <ConnectsPage 
+                            connects={visibleConnects} 
+                            onAddConnect={openConnectModal} 
+                            onEditConnect={openConnectModal} 
+                            onDeleteConnect={triggerDelete} 
+                            onReport={openReportModal} 
+                            onGenerateReport={openConnectFullReportModal}
+                            onViewTrack={openConnectTrackPage}
+                            isAdmin={isAdmin} 
+                        />;
+            case 'courses':
+                return <CoursesPage 
+                            courses={visibleCourses} 
+                            courseTemplates={allCourseTemplates}
+                            onAddCourse={openCourseModal}
+                            onAddCourseTemplate={openCourseTemplateModal}
+                            onEditCourse={openCourseModal} 
+                            onEditCourseTemplate={openCourseTemplateModal}
+                            onDelete={triggerDelete}
+                            onManageCourse={openManageCourseModal} 
+                            onFinalizeCourse={handleFinalizeCourse}
+                            onReopenCourse={handleReopenCourse}
+                            isAdmin={isAdmin} 
+                        />;
+            case 'hierarchy':
+                return <LeadershipHierarchyPage 
+                            connects={allConnects}
+                            allMembers={allMembers}
+                            isAdmin={isAdmin}
+                        />;
+            case 'profile':
+                return <ProfilePage />;
+            default:
+                return <DashboardPage 
+                            members={visibleMembers} 
+                            connects={visibleConnects} 
+                            reports={visibleReports} 
+                            courses={visibleCourses}
+                            attendanceAlerts={attendanceAlerts.filter(a => visibleConnects.some(c => c.id === a.connectId))}
+                            getConnectName={getConnectName}
+                        />;
+        }
+    };
+
+    if (isLoadingAuth) return <LoadingSpinner />;
+    if (!user) return <LoginPage />;
+
+    // Exibe mensagem de erro de conexão se houver
+    if (connectionError) {
+        return (
+            <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+                <div className="bg-white p-8 rounded-lg shadow-md max-w-md w-full text-center">
+                    <div className="text-red-600 mb-4">
+                        <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                    </div>
+                    <h2 className="text-xl font-semibold text-gray-800 mb-4">Erro de Conexão</h2>
+                    <p className="text-gray-600 mb-6">{connectionError}</p>
+                    <div className="space-y-3">
+                        <button 
+                            onClick={() => {
+                                setConnectionError(null);
+                                window.location.reload();
+                            }}
+                            className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors"
+                        >
+                            Tentar Novamente
+                        </button>
+                        <button 
+                            onClick={handleLogout}
+                            className="w-full bg-gray-300 text-gray-700 py-2 px-4 rounded hover:bg-gray-400 transition-colors"
+                        >
+                            Fazer Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="min-h-screen bg-gray-100 text-gray-800 font-sans">
-            <Header />
-
-            <main className="p-4 md:p-8">
-                <Modal isOpen={isMemberModalOpen} onClose={closeMemberModal}>
-                    <MemberForm onClose={closeMemberModal} onSave={handleSaveMember} connects={connects} editingMember={editingMember} />
-                </Modal>
-                <Modal isOpen={isConnectModalOpen} onClose={closeConnectModal}>
-                    <ConnectForm onClose={closeConnectModal} onSave={handleSaveConnect} members={members} editingConnect={editingConnect} />
-                </Modal>
-                <ConfirmationModal 
-                  isOpen={isConfirmModalOpen}
-                  onClose={() => setConfirmModalOpen(false)}
-                  onConfirm={handleConfirmDelete}
-                  title="Confirmar Exclusão"
-                  message={deleteAction?.message || ''}
+        <div className="flex h-screen bg-gray-100">
+            <Sidebar 
+                activePage={activePage} 
+                setActivePage={setActivePage}
+                isOpen={isSidebarOpen}
+                setIsOpen={setIsSidebarOpen}
+            />
+            <div className="flex-1 flex flex-col overflow-hidden">
+                <Header 
+                    onLogout={handleLogout} 
+                    onMenuClick={() => setIsSidebarOpen(true)}
                 />
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                    <div className="bg-white p-6 rounded-xl shadow-md flex flex-col justify-between border border-gray-200">
-                        <div>
-                            <div className="flex items-center space-x-3 mb-2">
-                                <Users size={28} className="text-[#DC2626]" />
-                                <h2 className="text-2xl font-bold text-gray-900">Membros</h2>
-                            </div>
-                            <p className="text-gray-600">Gerencie todos os membros da igreja.</p>
-                            <p className="text-4xl font-black text-gray-800 mt-4">{members.length}</p>
-                        </div>
-                        <button onClick={() => openMemberModal()} className="mt-4 w-full bg-[#DC2626] hover:bg-[#991B1B] text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition-all">
-                            <Plus size={20} />
-                            <span>Adicionar Membro</span>
-                        </button>
-                    </div>
-                    <div className="bg-white p-6 rounded-xl shadow-md flex flex-col justify-between border border-gray-200">
-                        <div>
-                            <div className="flex items-center space-x-3 mb-2">
-                                <Home size={28} className="text-[#DC2626]" />
-                                <h2 className="text-2xl font-bold text-gray-900">Connects</h2>
-                            </div>
-                            <p className="text-gray-600">Gerencie as células (Connects).</p>
-                            <p className="text-4xl font-black text-gray-800 mt-4">{connects.length}</p>
-                        </div>
-                        <button onClick={() => openConnectModal()} className="mt-4 w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition-all">
-                            <Plus size={20} />
-                            <span>Adicionar Connect</span>
-                        </button>
-                    </div>
-                </div>
-
-                <div className="mb-8">
-                    <h3 className="text-xl font-bold text-gray-900 mb-4">Lista de Connects</h3>
-                    {loading ? <LoadingSpinner /> : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {connects.sort((a, b) => a.number - b.number).map(c => (
-                                <div key={c.id} className="bg-white rounded-lg p-4 flex flex-col justify-between transition-all shadow-md hover:shadow-lg hover:-translate-y-1 border border-gray-200">
-                                    <div>
-                                        <div className="flex justify-between items-start">
-                                            <h4 className="font-bold text-lg text-[#DC2626]">Connect {c.number}</h4>
-                                            <div className="flex space-x-2">
-                                                <button onClick={() => openConnectModal(c)} className="text-gray-500 hover:text-[#DC2626]"><Edit size={16}/></button>
-                                                <button onClick={() => triggerDelete('connect', c.id)} className="text-gray-500 hover:text-red-600"><Trash2 size={16}/></button>
-                                            </div>
-                                        </div>
-                                        <p className="text-gray-800 text-xl font-semibold">{c.name}</p>
-                                        <p className="text-gray-600 mt-2"><User size={14} className="inline mr-2"/>Líder: {c.leaderName}</p>
-                                        <p className="text-gray-600"><Calendar size={14} className="inline mr-2"/>{c.schedule}</p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-4">Lista de Membros</h3>
-                    <div className="mb-4">
-                         <input
-                            type="text"
-                            placeholder="Buscar membro pelo nome..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full max-w-md bg-white text-gray-900 rounded-md p-3 border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:border-[#DC2626] focus:outline-none shadow-sm"
+                {/* Mensagens de loading states */}
+                <div className="mx-4 md:mx-8 mt-4 space-y-2">
+                    {Object.entries(loadingStates.states).map(([operation, state]) => (
+                        <LoadingMessage
+                            key={operation}
+                            state={state.status}
+                            message={state.message}
                         />
-                    </div>
-                    {loading ? <LoadingSpinner /> : (
-                        <div className="bg-white rounded-lg overflow-hidden shadow-md border border-gray-200">
-                           <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead className="bg-gray-50 border-b border-gray-200">
-                                    <tr>
-                                        <th className="p-3 text-sm font-semibold tracking-wide text-gray-600">Nome</th>
-                                        <th className="p-3 text-sm font-semibold tracking-wide text-gray-600 hidden md:table-cell">Celular</th>
-                                        <th className="p-3 text-sm font-semibold tracking-wide text-gray-600 hidden lg:table-cell">Connect</th>
-                                        <th className="p-3 text-sm font-semibold tracking-wide text-gray-600">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-200">
-                                    {filteredMembers.map(member => (
-                                        <tr key={member.id} className="hover:bg-gray-50 transition-colors">
-                                            <td className="p-3">
-                                                <p className="font-bold text-gray-800">{member.name}</p>
-                                                <p className="text-gray-500 text-sm md:hidden">{member.phone}</p>
-                                            </td>
-                                            <td className="p-3 text-gray-600 hidden md:table-cell">{member.phone}</td>
-                                            <td className="p-3 text-gray-600 hidden lg:table-cell">{getConnectName(member.connectId)}</td>
-                                            <td className="p-3">
-                                                <div className="flex items-center space-x-3">
-                                                    <button onClick={() => openMemberModal(member)} className="text-gray-500 hover:text-[#DC2626]"><Edit size={18}/></button>
-                                                    <button onClick={() => triggerDelete('member', member.id)} className="text-gray-500 hover:text-red-600"><Trash2 size={18}/></button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                    ))}
+                </div>
+                
+                {/* Mensagem de status de operação (legacy) */}
+                {operationStatus.message && (
+                    <div className={`mx-4 md:mx-8 mt-4 p-3 rounded-md ${
+                        operationStatus.type === 'success' 
+                            ? 'bg-green-100 border border-green-400 text-green-700' 
+                            : 'bg-red-100 border border-red-400 text-red-700'
+                    }`}>
+                        <div className="flex items-center">
+                            <div className="flex-shrink-0">
+                                {operationStatus.type === 'success' ? (
+                                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                    </svg>
+                                ) : (
+                                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                    </svg>
+                                )}
+                            </div>
+                            <div className="ml-3">
+                                <p className="text-sm font-medium">{operationStatus.message}</p>
+                            </div>
+                            <div className="ml-auto pl-3">
+                                <button
+                                    onClick={() => setOperationStatus({ type: null, message: null })}
+                                    className="inline-flex text-sm font-medium hover:opacity-75"
+                                >
+                                    ×
+                                </button>
                             </div>
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
+                <main className="flex-1 overflow-y-auto p-4 md:p-8">
+                    <UserAccessHelper allMembers={allMembers} allConnects={allConnects} />
+                    {renderActivePage()}
+                </main>
+            </div>
 
-            </main>
+            <Modal isOpen={isMemberModalOpen} onClose={closeMemberModal}>
+                <MemberForm 
+                    onClose={closeMemberModal} 
+                    onSave={handleSaveMember} 
+                    connects={allConnects} 
+                    editingMember={editingMember} 
+                    isAdmin={isAdmin} 
+                    leaderConnects={visibleConnects} 
+                    onCheckDuplicate={handleCheckDuplicate}
+                />
+            </Modal>
+            <Modal isOpen={isConnectModalOpen} onClose={closeConnectModal}><ConnectForm onClose={closeConnectModal} onSave={handleSaveConnect} members={allMembers} editingConnect={editingConnect} /></Modal>
+            <Modal isOpen={isCourseModalOpen} onClose={closeCourseModal} size="2xl">
+                <CourseForm 
+                    onClose={closeCourseModal} 
+                    onSave={handleSaveCourse}
+                    members={allMembers}
+                    allCourseTemplates={allCourseTemplates}
+                    editingCourse={editingCourse}
+                />
+            </Modal>
+            <Modal isOpen={isCourseTemplateModalOpen} onClose={closeCourseTemplateModal} size="2xl">
+                <CourseTemplateForm
+                    onClose={closeCourseTemplateModal}
+                    onSave={handleSaveCourseTemplate}
+                    editingTemplate={editingCourseTemplate}
+                />
+            </Modal>
+            {reportingConnect && <ConnectReportModal isOpen={isReportModalOpen} onClose={closeReportModal} connect={reportingConnect} members={allMembers} onSave={handleSaveConnectReport} isAdmin={isAdmin} />}
+            {managingCourse && <ManageCourseModal course={managingCourse} members={allMembers} isOpen={isManageCourseModalOpen} onClose={closeManageCourseModal} onSaveStudents={handleSaveCourseStudents} onSaveAttendance={handleSaveAttendance} />}
+            <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={handleConfirmDelete} title="Confirmar Exclusão" message={deleteAction?.message} />
+            {generatingReportForConnect && <ConnectFullReportModal isOpen={isConnectFullReportModalOpen} onClose={closeConnectFullReportModal} connect={generatingReportForConnect} allMembers={allMembers} allReports={allConnectReports} />}
+            
+            {viewingMember && <LeadershipTrackModal 
+                isOpen={isLeadershipTrackModalOpen} 
+                onClose={closeLeadershipTrackModal} 
+                member={viewingMember} 
+                allConnects={allConnects} 
+                onSave={handleSaveMilestones} 
+                isAdmin={isAdmin} 
+                completedCourses={completedCourses}
+                memberConnectHistoryDetails={memberConnectHistoryDetails}
+            />}
+
+            <DuplicateMemberModal
+                isOpen={isDuplicateModalOpen}
+                onClose={() => setDuplicateModalOpen(false)}
+                existingMember={existingMemberForCheck}
+                newMemberData={newMemberForCheck}
+                onConfirm={handleConfirmDuplicate}
+                onReject={handleRejectDuplicate}
+            />
         </div>
     );
 }

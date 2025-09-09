@@ -1,14 +1,26 @@
-// Localizado em: src/firebaseConfig.js
+// src/firebaseConfig.js
+import { initializeApp } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
-// Vá para o seu painel do Firebase -> Configurações do Projeto (Project settings)
-// Na aba "Geral", role para baixo até "Seus apps".
-// Selecione seu app da Web e copie o objeto de configuração aqui.
-
+// Sua configuração, que já está correta.
 export const firebaseConfig = {
-  apiKey: "AIz..._...", // Cole o seu aqui
-  authDomain: "tenda-church-app.firebaseapp.com", // Cole o seu aqui
-  projectId: "tenda-church-app", // Cole o seu aqui
-  storageBucket: "tenda-church-app.appspot.com", // Cole o seu aqui
-  messagingSenderId: "...", // Cole o seu aqui
-  appId: "1:...", // Cole o seu aqui
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
 };
+
+// Inicialize o Firebase
+const app = initializeApp(firebaseConfig);
+
+// Crie e EXPORTE as instâncias do Firestore e do Auth
+export const db = getFirestore(app);
+export const auth = getAuth(app);
+export const appId = firebaseConfig.projectId; // Exportando o ID também, pois você usa
+
+// Opcional: exportar o app também pode ser útil
+export default app;
