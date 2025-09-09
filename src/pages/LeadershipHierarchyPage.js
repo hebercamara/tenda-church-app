@@ -1,119 +1,376 @@
-import React, { useState, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Users, Mail, MapPin, Calendar, Clock, User, Crown, Shield } from 'lucide-react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { ChevronDown, ChevronRight, Users, Mail, MapPin, Calendar, Clock, User, Crown, Shield, Search, Filter } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import ReactFlow, {
+  MiniMap,
+  Controls,
+  Background,
+  useNodesState,
+  useEdgesState,
+  addEdge,
+  ConnectionLineType,
+  Panel,
+} from 'reactflow';
+import 'reactflow/dist/style.css';
+
+// Componente customizado para nó de Supervisor
+const SupervisorNode = ({ data }) => {
+  return (
+    <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 min-w-[200px] shadow-lg">
+      <div className="flex items-center space-x-3 mb-2">
+        <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+          <Shield size={20} className="text-red-800" />
+        </div>
+        <div>
+          <h3 className="font-bold text-gray-800 text-sm">{data.name}</h3>
+          <div className="text-xs text-gray-600">Supervisor</div>
+        </div>
+      </div>
+      <div className="text-xs text-gray-600">
+        <div className="flex items-center space-x-1 mb-1">
+          <Mail size={10} />
+          <span className="truncate">{data.email}</span>
+        </div>
+        {data.phone && (
+          <div className="flex items-center space-x-1">
+            <User size={10} />
+            <span>{data.phone}</span>
+          </div>
+        )}
+      </div>
+      <div className="mt-2 text-xs font-semibold text-red-800">
+        {data.leaderCount} Líder{data.leaderCount !== 1 ? 'es' : ''}
+      </div>
+    </div>
+  );
+};
+
+// Componente customizado para nó de Líder
+const LeaderNode = ({ data }) => {
+  return (
+    <div className="bg-red-50 border-2 border-red-300 rounded-lg p-3 min-w-[180px] shadow-md">
+      <div className="flex items-center space-x-2 mb-2">
+        <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+          <Crown size={16} className="text-red-600" />
+        </div>
+        <div>
+          <h4 className="font-semibold text-gray-800 text-sm">{data.name}</h4>
+          <div className="text-xs text-gray-600">Líder</div>
+        </div>
+      </div>
+      <div className="text-xs text-gray-600">
+        <div className="flex items-center space-x-1 mb-1">
+          <Mail size={10} />
+          <span className="truncate">{data.email}</span>
+        </div>
+        {data.phone && (
+          <div className="flex items-center space-x-1">
+            <User size={10} />
+            <span>{data.phone}</span>
+          </div>
+        )}
+      </div>
+      <div className="mt-2 text-xs font-semibold text-red-700">
+        {data.connectCount} Connect{data.connectCount !== 1 ? 's' : ''}
+      </div>
+    </div>
+  );
+};
+
+// Componente customizado para nó de Connect
+const ConnectNode = ({ data }) => {
+  return (
+    <div className="bg-red-50 border border-red-200 rounded-lg p-2 min-w-[160px] shadow-sm">
+      <div className="flex items-center space-x-2 mb-1">
+        <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
+          <Users size={12} className="text-red-500" />
+        </div>
+        <div>
+          <h5 className="font-medium text-gray-800 text-xs">Connect {data.number}</h5>
+          <div className="text-xs text-gray-600">{data.name}</div>
+        </div>
+      </div>
+      <div className="text-xs text-gray-600">
+        <div className="flex items-center space-x-1 mb-1">
+          <Calendar size={8} />
+          <span>{data.weekday}</span>
+        </div>
+        <div className="flex items-center space-x-1">
+          <Clock size={8} />
+          <span>{data.time}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const nodeTypes = {
+  supervisor: SupervisorNode,
+  leader: LeaderNode,
+  connect: ConnectNode,
+};
 
 const LeadershipHierarchyPage = ({ connects, allMembers }) => {
   const { isAdmin } = useAuthStore();
-  const [expandedSupervisors, setExpandedSupervisors] = useState(new Set());
-  const [expandedLeaders, setExpandedLeaders] = useState(new Set());
+  const [viewMode, setViewMode] = useState('flow'); // 'list' ou 'flow'
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('all'); // 'all', 'supervisor', 'leader', 'connect'
 
   // Processar dados para criar hierarquia
   const hierarchyData = useMemo(() => {
-    if (!connects || !allMembers) return [];
+    if (!connects || !allMembers) return { supervisors: [], leadersWithoutSupervisor: [], orphanConnects: [] };
 
-    // Agrupar connects por supervisor
-    const supervisorGroups = {};
-    const leaderGroups = {};
+    // Agrupar connects por supervisor e líder
+    const connectsBySupervisor = {};
+    const connectsByLeader = {};
     const orphanConnects = [];
 
     connects.forEach(connect => {
-      if (connect.supervisorEmail) {
-        // Tem supervisor
-        if (!supervisorGroups[connect.supervisorEmail]) {
-          supervisorGroups[connect.supervisorEmail] = {
-            email: connect.supervisorEmail,
-            connects: [],
-            leaders: new Set()
-          };
-        }
-        supervisorGroups[connect.supervisorEmail].connects.push(connect);
-        if (connect.leaderEmail) {
-          supervisorGroups[connect.supervisorEmail].leaders.add(connect.leaderEmail);
-        }
-      } else if (connect.leaderEmail) {
-        // Tem líder mas não supervisor
-        if (!leaderGroups[connect.leaderEmail]) {
-          leaderGroups[connect.leaderEmail] = {
-            email: connect.leaderEmail,
-            name: connect.leaderName,
-            connects: []
-          };
-        }
-        leaderGroups[connect.leaderEmail].connects.push(connect);
-      } else {
-        // Não tem nem supervisor nem líder
-        orphanConnects.push(connect);
-      }
+       if (connect.supervisorEmail) {
+         if (!connectsBySupervisor[connect.supervisorEmail]) {
+           connectsBySupervisor[connect.supervisorEmail] = [];
+         }
+         connectsBySupervisor[connect.supervisorEmail].push(connect);
+       } else if (connect.leaderEmail) {
+         if (!connectsByLeader[connect.leaderEmail]) {
+           connectsByLeader[connect.leaderEmail] = [];
+         }
+         connectsByLeader[connect.leaderEmail].push(connect);
+       } else {
+         orphanConnects.push(connect);
+       }
+     });
+
+    // Criar estrutura de supervisores
+    const supervisors = Object.keys(connectsBySupervisor).map(supervisorEmail => {
+      const supervisorMember = allMembers.find(member => member.email === supervisorEmail);
+      const supervisorConnects = connectsBySupervisor[supervisorEmail];
+      
+      // Agrupar connects do supervisor por líder
+       const leaderGroups = {};
+       supervisorConnects.forEach(connect => {
+         if (connect.leaderEmail) {
+           if (!leaderGroups[connect.leaderEmail]) {
+             leaderGroups[connect.leaderEmail] = [];
+           }
+           leaderGroups[connect.leaderEmail].push(connect);
+         }
+       });
+
+      const leaders = Object.keys(leaderGroups).map(leaderEmail => {
+        const leaderMember = allMembers.find(member => member.email === leaderEmail);
+        return {
+          email: leaderEmail,
+          member: leaderMember,
+          connects: leaderGroups[leaderEmail]
+        };
+      });
+
+      return {
+        email: supervisorEmail,
+        member: supervisorMember,
+        leaders,
+        totalConnects: supervisorConnects.length
+      };
     });
 
-    // Converter para array e organizar
-    const hierarchy = [];
-
-    // Adicionar supervisores
-    Object.values(supervisorGroups).forEach(supervisor => {
-      const supervisorMember = allMembers.find(m => m.email?.toLowerCase() === supervisor.email?.toLowerCase());
-      
-      const supervisorData = {
-        type: 'supervisor',
-        email: supervisor.email,
-        name: supervisorMember?.name || 'Nome não encontrado',
-        phone: supervisorMember?.phone || '',
-        leaders: []
+    // Líderes sem supervisor
+    const leadersWithoutSupervisor = Object.keys(connectsByLeader).map(leaderEmail => {
+      const leaderMember = allMembers.find(member => member.email === leaderEmail);
+      return {
+        email: leaderEmail,
+        member: leaderMember,
+        connects: connectsByLeader[leaderEmail]
       };
+    });
 
-      // Agrupar connects por líder dentro deste supervisor
-      const leaderConnects = {};
-      supervisor.connects.forEach(connect => {
-        if (connect.leaderEmail) {
-          if (!leaderConnects[connect.leaderEmail]) {
-            leaderConnects[connect.leaderEmail] = {
-              email: connect.leaderEmail,
-              name: connect.leaderName,
-              connects: []
-            };
-          }
-          leaderConnects[connect.leaderEmail].connects.push(connect);
+    return { supervisors, leadersWithoutSupervisor, orphanConnects };
+  }, [connects, allMembers]);
+
+  // Converter dados hierárquicos em nós e arestas do React Flow
+  const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
+    const nodes = [];
+    const edges = [];
+    let yPosition = 0;
+    const levelHeight = 200;
+    const nodeSpacing = 300;
+
+    // Filtrar dados baseado na busca e filtro
+    const filteredData = {
+      supervisors: hierarchyData.supervisors.filter(supervisor => {
+        if (filterType !== 'all' && filterType !== 'supervisor') return false;
+        if (searchTerm && !supervisor.member?.name?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+        return true;
+      }),
+      leadersWithoutSupervisor: hierarchyData.leadersWithoutSupervisor.filter(leader => {
+        if (filterType !== 'all' && filterType !== 'leader') return false;
+        if (searchTerm && !leader.member?.name?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+        return true;
+      }),
+      orphanConnects: hierarchyData.orphanConnects.filter(connect => {
+        if (filterType !== 'all' && filterType !== 'connect') return false;
+        if (searchTerm && !connect.name?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+        return true;
+      })
+    };
+
+    // Adicionar nós de supervisores
+    filteredData.supervisors.forEach((supervisor, supervisorIndex) => {
+      const supervisorId = `supervisor-${supervisor.email}`;
+      
+      nodes.push({
+        id: supervisorId,
+        type: 'supervisor',
+        position: { x: supervisorIndex * nodeSpacing, y: yPosition },
+        data: {
+          name: supervisor.member?.name || supervisor.email,
+          email: supervisor.email,
+          phone: supervisor.member?.phone,
+          leaderCount: supervisor.leaders.length
         }
       });
 
-      // Adicionar líderes ao supervisor
-      Object.values(leaderConnects).forEach(leader => {
-        const leaderMember = allMembers.find(m => m.email?.toLowerCase() === leader.email?.toLowerCase());
-        supervisorData.leaders.push({
+      // Adicionar nós de líderes do supervisor
+      supervisor.leaders.forEach((leader, leaderIndex) => {
+        const leaderId = `leader-${supervisor.email}-${leader.email}`;
+        const leaderX = supervisorIndex * nodeSpacing + (leaderIndex - (supervisor.leaders.length - 1) / 2) * 250;
+        const leaderY = yPosition + levelHeight;
+
+        nodes.push({
+          id: leaderId,
           type: 'leader',
-          email: leader.email,
-          name: leader.name || leaderMember?.name || 'Nome não encontrado',
-          phone: leaderMember?.phone || '',
-          connects: leader.connects
+          position: { x: leaderX, y: leaderY },
+          data: {
+            name: leader.member?.name || leader.email,
+            email: leader.email,
+            phone: leader.member?.phone,
+            connectCount: leader.connects.length
+          }
+        });
+
+        // Conectar supervisor ao líder
+        edges.push({
+          id: `edge-${supervisorId}-${leaderId}`,
+          source: supervisorId,
+          target: leaderId,
+          type: 'smoothstep',
+          style: { stroke: '#dc2626', strokeWidth: 2 }
+        });
+
+        // Adicionar nós de connects do líder
+        leader.connects.forEach((connect, connectIndex) => {
+          const connectId = `connect-${leader.email}-${connect.id}`;
+          const connectX = leaderX + (connectIndex - (leader.connects.length - 1) / 2) * 180;
+          const connectY = leaderY + levelHeight;
+
+          nodes.push({
+            id: connectId,
+            type: 'connect',
+            position: { x: connectX, y: connectY },
+            data: {
+              name: connect.name,
+              number: connect.number,
+              weekday: connect.weekday,
+              time: connect.time
+            }
+          });
+
+          // Conectar líder ao connect
+          edges.push({
+            id: `edge-${leaderId}-${connectId}`,
+            source: leaderId,
+            target: connectId,
+            type: 'smoothstep',
+            style: { stroke: '#dc2626', strokeWidth: 1 }
+          });
         });
       });
-
-      hierarchy.push(supervisorData);
     });
 
+    // Calcular posição Y para líderes sem supervisor
+    const maxSupervisorY = Math.max(...nodes.map(node => node.position.y), -levelHeight) + levelHeight * 3;
+
     // Adicionar líderes sem supervisor
-    Object.values(leaderGroups).forEach(leader => {
-      const leaderMember = allMembers.find(m => m.email?.toLowerCase() === leader.email?.toLowerCase());
-      hierarchy.push({
+    filteredData.leadersWithoutSupervisor.forEach((leader, leaderIndex) => {
+      const leaderId = `leader-orphan-${leader.email}`;
+      
+      nodes.push({
+        id: leaderId,
         type: 'leader',
-        email: leader.email,
-        name: leader.name || leaderMember?.name || 'Nome não encontrado',
-        phone: leaderMember?.phone || '',
-        connects: leader.connects
+        position: { x: leaderIndex * nodeSpacing, y: maxSupervisorY },
+        data: {
+          name: leader.member?.name || leader.email,
+          email: leader.email,
+          phone: leader.member?.phone,
+          connectCount: leader.connects.length
+        }
+      });
+
+      // Adicionar connects do líder
+      leader.connects.forEach((connect, connectIndex) => {
+        const connectId = `connect-orphan-${leader.email}-${connect.id}`;
+        const connectX = leaderIndex * nodeSpacing + (connectIndex - (leader.connects.length - 1) / 2) * 180;
+        const connectY = maxSupervisorY + levelHeight;
+
+        nodes.push({
+          id: connectId,
+          type: 'connect',
+          position: { x: connectX, y: connectY },
+          data: {
+            name: connect.name,
+            number: connect.number,
+            weekday: connect.weekday,
+            time: connect.time
+          }
+        });
+
+        edges.push({
+          id: `edge-${leaderId}-${connectId}`,
+          source: leaderId,
+          target: connectId,
+          type: 'smoothstep',
+          style: { stroke: '#dc2626', strokeWidth: 1 }
+        });
       });
     });
 
     // Adicionar connects órfãos
-    if (orphanConnects.length > 0) {
-      hierarchy.push({
-        type: 'orphan',
-        name: 'Connects sem Líder/Supervisor',
-        connects: orphanConnects
+    const maxLeaderY = Math.max(...nodes.map(node => node.position.y), maxSupervisorY) + levelHeight * 2;
+    filteredData.orphanConnects.forEach((connect, connectIndex) => {
+      const connectId = `connect-orphan-${connect.id}`;
+      
+      nodes.push({
+        id: connectId,
+        type: 'connect',
+        position: { x: connectIndex * 200, y: maxLeaderY },
+        data: {
+          name: connect.name,
+          number: connect.number,
+          weekday: connect.weekday,
+          time: connect.time
+        }
       });
-    }
+    });
 
-    return hierarchy;
-  }, [connects, allMembers]);
+    return { nodes, edges };
+  }, [hierarchyData, searchTerm, filterType]);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  const onConnect = useCallback(
+    (params) => setEdges((eds) => addEdge(params, eds)),
+    [setEdges]
+  );
+
+  // Atualizar nós quando os dados mudarem
+  React.useEffect(() => {
+    setNodes(initialNodes);
+    setEdges(initialEdges);
+  }, [initialNodes, initialEdges, setNodes, setEdges]);
+
+  const [expandedSupervisors, setExpandedSupervisors] = useState(new Set());
+  const [expandedLeaders, setExpandedLeaders] = useState(new Set());
 
   const toggleSupervisor = (email) => {
     const newExpanded = new Set(expandedSupervisors);
@@ -188,15 +445,15 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
                 <Crown size={20} className="text-red-600" />
               </div>
               <div>
-                <h3 className="font-bold text-gray-800">{leader.name}</h3>
+                <h3 className="font-bold text-gray-800">{leader.member?.name || leader.email}</h3>
                 <div className="flex items-center space-x-1 text-sm text-gray-600">
                   <Mail size={12} />
                   <span>{leader.email}</span>
                 </div>
-                {leader.phone && (
+                {leader.member?.phone && (
                   <div className="flex items-center space-x-1 text-sm text-gray-600">
                     <User size={12} />
-                    <span>{leader.phone}</span>
+                    <span>{leader.member.phone}</span>
                   </div>
                 )}
               </div>
@@ -242,15 +499,15 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
                 <Shield size={24} className="text-red-800" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-gray-800">{supervisor.name}</h2>
+                <h2 className="text-xl font-bold text-gray-800">{supervisor.member?.name || supervisor.email}</h2>
                 <div className="flex items-center space-x-1 text-gray-600">
                   <Mail size={14} />
                   <span>{supervisor.email}</span>
                 </div>
-                {supervisor.phone && (
+                {supervisor.member?.phone && (
                   <div className="flex items-center space-x-1 text-gray-600">
                     <User size={14} />
-                    <span>{supervisor.phone}</span>
+                    <span>{supervisor.member.phone}</span>
                   </div>
                 )}
               </div>
@@ -291,37 +548,127 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
         <p className="text-gray-600">Visualização da estrutura organizacional de supervisores e líderes</p>
       </div>
 
-      {hierarchyData.length === 0 ? (
-        <div className="bg-gray-50 border border-gray-200 p-6 rounded-lg text-center">
-          <Users size={48} className="mx-auto text-gray-400 mb-4" />
-          <h3 className="text-lg font-semibold text-gray-600 mb-2">Nenhuma hierarquia encontrada</h3>
-          <p className="text-gray-500">Não há connects com líderes ou supervisores cadastrados.</p>
+      {/* Controles de visualização */}
+      <div className="mb-6 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Modo de visualização */}
+          <div className="flex items-center space-x-2">
+            <label className="text-sm font-medium text-gray-700">Visualização:</label>
+            <select
+              value={viewMode}
+              onChange={(e) => setViewMode(e.target.value)}
+              className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+            >
+              <option value="list">Lista</option>
+              <option value="flow">Fluxograma</option>
+            </select>
+          </div>
+
+          {/* Busca */}
+          <div className="flex items-center space-x-2">
+            <Search size={16} className="text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar por nome..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+          </div>
+
+          {/* Filtro */}
+          <div className="flex items-center space-x-2">
+            <Filter size={16} className="text-gray-400" />
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+            >
+              <option value="all">Todos</option>
+              <option value="supervisor">Supervisores</option>
+              <option value="leader">Líderes</option>
+              <option value="connect">Connects</option>
+            </select>
+          </div>
         </div>
-      ) : (
-        <div className="space-y-6">
-          {hierarchyData.map((item, index) => {
-            if (item.type === 'supervisor') {
-              return <SupervisorCard key={item.email} supervisor={item} />;
-            } else if (item.type === 'leader') {
-              return <LeaderCard key={item.email} leader={item} />;
-            } else if (item.type === 'orphan') {
-              return (
-                <div key="orphan" className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-yellow-800 mb-3 flex items-center">
-                    <Users size={20} className="mr-2" />
-                    {item.name}
-                  </h3>
-                  <div className="space-y-2">
-                    {item.connects.map(connect => (
-                      <ConnectCard key={connect.id} connect={connect} />
-                    ))}
+      </div>
+
+      {viewMode === 'flow' ? (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200" style={{ height: '600px' }}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            nodeTypes={nodeTypes}
+            connectionLineType={ConnectionLineType.SmoothStep}
+            fitView
+            fitViewOptions={{ padding: 0.2 }}
+          >
+            <Controls />
+            <MiniMap
+              nodeColor={(node) => {
+                switch (node.type) {
+                  case 'supervisor': return '#dc2626';
+                  case 'leader': return '#dc2626';
+                  case 'connect': return '#dc2626';
+                  default: return '#6b7280';
+                }
+              }}
+            />
+            <Background variant="dots" gap={12} size={1} />
+            <Panel position="top-right">
+              <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200">
+                <h4 className="font-semibold text-gray-800 mb-2">Legenda</h4>
+                <div className="space-y-1 text-xs">
+                  <div className="flex items-center space-x-2">
+                    <Shield size={12} className="text-red-800" />
+                    <span>Supervisor</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Crown size={12} className="text-red-600" />
+                    <span>Líder</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Users size={12} className="text-red-500" />
+                    <span>Connect</span>
                   </div>
                 </div>
-              );
-            }
-            return null;
-          })}
+              </div>
+            </Panel>
+          </ReactFlow>
         </div>
+      ) : (
+        hierarchyData.supervisors.length === 0 && hierarchyData.leadersWithoutSupervisor.length === 0 && hierarchyData.orphanConnects.length === 0 ? (
+          <div className="bg-gray-50 border border-gray-200 p-6 rounded-lg text-center">
+            <Users size={48} className="mx-auto text-gray-400 mb-4" />
+            <h3 className="text-lg font-semibold text-gray-600 mb-2">Nenhuma hierarquia encontrada</h3>
+            <p className="text-gray-500">Não há connects com líderes ou supervisores cadastrados.</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {hierarchyData.supervisors.map((supervisor) => (
+              <SupervisorCard key={supervisor.email} supervisor={supervisor} />
+            ))}
+            {hierarchyData.leadersWithoutSupervisor.map((leader) => (
+              <LeaderCard key={leader.email} leader={leader} />
+            ))}
+            {hierarchyData.orphanConnects.length > 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-yellow-800 mb-3 flex items-center">
+                  <Users size={20} className="mr-2" />
+                  Connects sem Líder/Supervisor
+                </h3>
+                <div className="space-y-2">
+                  {hierarchyData.orphanConnects.map(connect => (
+                    <ConnectCard key={connect.id} connect={connect} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )
       )}
 
       <div className="mt-8 bg-white p-4 rounded-xl shadow-md border border-gray-200">
