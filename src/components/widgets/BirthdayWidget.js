@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Gift } from 'lucide-react';
+import { formatDateToBrazilian } from '../../utils/dateUtils';
 
 const BirthdayWidget = ({ members }) => {
   const currentMonth = new Date().getMonth() + 1;
@@ -29,7 +30,7 @@ const BirthdayWidget = ({ members }) => {
             <li key={member.id} className="flex justify-between items-center text-xs sm:text-sm gap-2">
               <span className="truncate flex-1">{member.name}</span>
               <span className="font-semibold text-gray-600 flex-shrink-0">
-                {new Date(member.dob + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                {formatDateToBrazilian(member.dob, { day: '2-digit', month: '2-digit' })}
               </span>
             </li>
           ))}

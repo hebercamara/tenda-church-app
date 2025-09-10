@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, getDocs, orderBy } from 'firebase/firestore';
 import { db, appId } from '../firebaseConfig'; // Usando nossa configuração central
 import { Line } from 'react-chartjs-2';
+import { formatDateToBrazilian } from '../utils/dateUtils';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -43,7 +44,7 @@ const StatsDashboard = ({ courseId, courseName }) => {
 
                 querySnapshot.forEach(doc => {
                     const data = doc.data();
-                    const date = new Date(data.date.seconds * 1000).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'});
+                    const date = formatDateToBrazilian(new Date(data.date.seconds * 1000), 'short');
                     labels.push(date);
 
                     const presentCount = Object.values(data.statuses).filter(status => status === 'presente').length;

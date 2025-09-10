@@ -3,6 +3,7 @@ import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import { db, appId } from '../firebaseConfig';
 import Modal from './Modal';
 import { X, Check, Trash2, HelpCircle, Plus, Save } from 'lucide-react';
+import { formatDateToBrazilian } from '../utils/dateUtils';
 
 const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, onSaveAttendance }) => {
     const [activeTab, setActiveTab] = useState('attendance');
@@ -171,12 +172,12 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
                                 <h3 className="text-lg font-semibold text-gray-800 mb-3">Datas das Aulas</h3>
                                 <div className="space-y-1 max-h-96 overflow-y-auto pr-2">{attendanceRecords.map(record => (
                                     <button key={record.id} onClick={() => setSelectedDate(record.id)} className={`w-full text-left p-2 rounded-md ${selectedDate === record.id ? 'bg-red-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}>
-                                        {new Date(record.date.seconds * 1000).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}
+                                        {formatDateToBrazilian(new Date(record.date.seconds * 1000))}
                                     </button>
                                 ))}</div>
                             </div>
                             <div className="md:col-span-2">
-                                <h3 className="text-lg font-semibold text-gray-800 mb-3">Registo de Presença - {selectedDate && new Date(attendanceRecords.find(r=>r.id===selectedDate).date.seconds*1000).toLocaleDateString('pt-BR',{timeZone: 'UTC'})}</h3>
+                                <h3 className="text-lg font-semibold text-gray-800 mb-3">Registo de Presença - {selectedDate && formatDateToBrazilian(new Date(attendanceRecords.find(r=>r.id===selectedDate).date.seconds*1000))}</h3>
                                 <div className="space-y-2 max-h-96 overflow-y-auto pr-2">{draftEnrolledStudents.map(student => (
                                     <div key={student.id} className="flex justify-between items-center bg-gray-50 p-2 rounded-md">
                                         <span>{student.name}</span>

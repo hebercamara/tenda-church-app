@@ -4,6 +4,7 @@ import { damerauLevenshtein } from 'damerau-levenshtein';
 import { useAuthStore } from '../store/authStore';
 import { useLoadingState } from '../hooks/useLoadingState';
 import LoadingButton from './LoadingButton';
+import { formatDateForInput, formatDateToBrazilian, convertBrazilianDateToISO } from '../utils/dateUtils';
 
 // ALTERADO: O componente não recebe mais `isAdmin`
 const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, onCheckDuplicate }) => {
@@ -92,19 +93,28 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        
+        // Se for campo de data, converte formato brasileiro para ISO
+        let processedValue = value;
+        if (name === 'dob' && value) {
+            processedValue = convertBrazilianDateToISO(value);
+        }
+        
+        setFormData(prev => ({ ...prev, [name]: processedValue }));
         
         // Validação em tempo real
-        const fieldError = validateField(name, value);
+        const fieldError = validateField(name, processedValue);
         setFieldErrors(prev => ({ ...prev, ...fieldError, [name]: fieldError[name] || null }));
     };
 
     const handleMilestoneChange = (milestone, value) => {
+        // Converte a data brasileira para ISO antes de salvar
+        const isoDate = convertBrazilianDateToISO(value);
         setFormData(prev => ({
             ...prev,
             milestones: {
                 ...prev.milestones,
-                [milestone]: { date: value }
+                [milestone]: { date: isoDate }
             }
         }));
     };
@@ -190,11 +200,12 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
                         <div>
                             <label htmlFor="dob" className="block text-sm font-medium text-gray-700 mb-1">Data de Nascimento</label>
                             <input 
-                                type="date" 
+                                type="text" 
                                 name="dob" 
                                 id="dob" 
-                                value={formData.dob} 
+                                value={formData.dob ? formatDateToBrazilian(formData.dob) : ''} 
                                 onChange={handleChange} 
+                                placeholder="dd/mm/aaaa"
                                 className={`w-full bg-gray-100 text-gray-900 rounded-md p-2 border focus:ring-2 ${
                                     fieldErrors.dob 
                                         ? 'border-red-500 focus:ring-red-500' 
@@ -304,23 +315,23 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label htmlFor="salvation" className="block text-sm font-medium text-gray-700 mb-1">1. Aceitou a Jesus</label>
-                        <input type="date" name="salvation" id="salvation" value={formData.milestones.salvation.date} onChange={(e) => handleMilestoneChange('salvation', e.target.value)} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300"/>
+                        <input type="text" name="salvation" id="salvation" value={formData.milestones.salvation.date ? formatDateToBrazilian(formData.milestones.salvation.date) : ''} onChange={(e) => handleMilestoneChange('salvation', e.target.value)} placeholder="dd/mm/aaaa" className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent"/>
                     </div>
                      <div>
                         <label htmlFor="initialDiscipleship" className="block text-sm font-medium text-gray-700 mb-1">2. Discipulado Inicial</label>
-                        <input type="date" name="initialDiscipleship" id="initialDiscipleship" value={formData.milestones.initialDiscipleship.date} onChange={(e) => handleMilestoneChange('initialDiscipleship', e.target.value)} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300"/>
+                        <input type="text" name="initialDiscipleship" id="initialDiscipleship" value={formData.milestones.initialDiscipleship.date ? formatDateToBrazilian(formData.milestones.initialDiscipleship.date) : ''} onChange={(e) => handleMilestoneChange('initialDiscipleship', e.target.value)} placeholder="dd/mm/aaaa" className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent"/>
                     </div>
                     <div>
                         <label htmlFor="baptism" className="block text-sm font-medium text-gray-700 mb-1">3. Batismo</label>
-                        <input type="date" name="baptism" id="baptism" value={formData.milestones.baptism.date} onChange={(e) => handleMilestoneChange('baptism', e.target.value)} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300"/>
+                        <input type="text" name="baptism" id="baptism" value={formData.milestones.baptism.date ? formatDateToBrazilian(formData.milestones.baptism.date) : ''} onChange={(e) => handleMilestoneChange('baptism', e.target.value)} placeholder="dd/mm/aaaa" className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent"/>
                     </div>
                     <div>
                         <label htmlFor="membership" className="block text-sm font-medium text-gray-700 mb-1">4. Membresia</label>
-                        <input type="date" name="membership" id="membership" value={formData.milestones.membership.date} onChange={(e) => handleMilestoneChange('membership', e.target.value)} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300"/>
+                        <input type="text" name="membership" id="membership" value={formData.milestones.membership.date ? formatDateToBrazilian(formData.milestones.membership.date) : ''} onChange={(e) => handleMilestoneChange('membership', e.target.value)} placeholder="dd/mm/aaaa" className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent"/>
                     </div>
                      <div>
                         <label htmlFor="connectTraining" className="block text-sm font-medium text-gray-700 mb-1">5. Treinamento no Connect</label>
-                        <input type="date" name="connectTraining" id="connectTraining" value={formData.milestones.connectTraining.date} onChange={(e) => handleMilestoneChange('connectTraining', e.target.value)} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300"/>
+                        <input type="text" name="connectTraining" id="connectTraining" value={formData.milestones.connectTraining.date ? formatDateToBrazilian(formData.milestones.connectTraining.date) : ''} onChange={(e) => handleMilestoneChange('connectTraining', e.target.value)} placeholder="dd/mm/aaaa" className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent"/>
                     </div>
                 </div>
             </fieldset>

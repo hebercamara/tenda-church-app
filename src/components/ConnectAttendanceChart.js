@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, Title, Tooltip, Legend, PointElement } from 'chart.js';
+import { formatDateToBrazilian } from '../utils/dateUtils';
 
 // Registra todos os elementos necessários para um gráfico combinado
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend);
@@ -56,7 +57,7 @@ const ConnectAttendanceChart = ({ reports }) => {
       const averageGuests = reportingConnectsCount > 0 ? totalGuests / reportingConnectsCount : 0;
       
       return {
-        date: new Date(sundayDate + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+        date: formatDateToBrazilian(new Date(sundayDate + 'T00:00:00'), 'short'),
         averageTotal: averageTotal.toFixed(1),
         averageGuests: averageGuests.toFixed(1)
       };

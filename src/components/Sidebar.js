@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Users, Home, BookOpen, UserCog, X, Network } from 'lucide-react';
+import { LayoutDashboard, Users, Home, BookOpen, UserCog, X, Network, Upload } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
 const Sidebar = ({ activePage, setActivePage, isOpen, setIsOpen }) => {
@@ -11,6 +11,7 @@ const Sidebar = ({ activePage, setActivePage, isOpen, setIsOpen }) => {
     { id: 'connects', label: 'Connects', icon: Home },
     { id: 'courses', label: 'Cursos', icon: BookOpen },
     ...(isAdmin ? [{ id: 'hierarchy', label: 'Hierarquia', icon: Network }] : []),
+    ...(isAdmin ? [{ id: 'bulk-import', label: 'Importação em Massa', icon: Upload }] : []),
     { id: 'profile', label: 'Meu Perfil', icon: UserCog },
   ].filter(Boolean);
 

@@ -21,6 +21,7 @@ import CoursesPage from './pages/CoursesPage';
 import ProfilePage from './pages/ProfilePage';
 import ConnectTrackPage from './pages/ConnectTrackPage';
 import LeadershipHierarchyPage from './pages/LeadershipHierarchyPage';
+import BulkImportPage from './pages/BulkImportPage';
 import Modal from './components/Modal';
 import ConfirmationModal from './components/ConfirmationModal';
 import MemberForm from './components/MemberForm';
@@ -786,6 +787,8 @@ export default function App() {
                             allMembers={allMembers}
                             isAdmin={isAdmin}
                         />;
+            case 'bulk-import':
+                return <BulkImportPage />;
             case 'profile':
                 return <ProfilePage />;
             default:

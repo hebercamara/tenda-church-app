@@ -1,7 +1,8 @@
-    import React, { useState, useEffect } from 'react';
-    import { collection, query, getDocs, orderBy } from 'firebase/firestore';
-    import { db, appId } from '../firebaseConfig';
-    import { Line } from 'react-chartjs-2';
+import React, { useState, useEffect } from 'react';
+import { collection, query, getDocs, orderBy } from 'firebase/firestore';
+import { db, appId } from '../firebaseConfig';
+import { Line } from 'react-chartjs-2';
+import { formatDateToBrazilian } from '../utils/dateUtils';
 
     // O Chart.js já foi registrado na outra página, mas é bom manter aqui por organização
     import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
@@ -29,7 +30,7 @@
 
                     querySnapshot.forEach(doc => {
                         const data = doc.data();
-                        const date = new Date(data.date.seconds * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                        const date = formatDateToBrazilian(new Date(data.date.seconds * 1000), 'short');
                         labels.push(date);
                         
                         const totalStudents = Object.keys(data.statuses).length;

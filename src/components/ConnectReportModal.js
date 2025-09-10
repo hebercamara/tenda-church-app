@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db, appId } from '../firebaseConfig';
 import Modal from './Modal';
+import { formatDateToBrazilian, convertBrazilianDateToISO } from '../utils/dateUtils';
 
 const weekDaysMap = { "Domingo": 0, "Segunda-feira": 1, "Terça-feira": 2, "Quarta-feira": 3, "Quinta-feira": 4, "Sexta-feira": 5, "Sábado": 6 };
 
@@ -49,8 +50,8 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
             const previousWeekDateString = previousWeekMeeting.toISOString().split('T')[0];
             
             const dates = [
-                { label: `Semana Atual (${currentWeekMeeting.toLocaleDateString('pt-BR')})`, value: currentWeekDateString },
-                { label: `Semana Anterior (${previousWeekMeeting.toLocaleDateString('pt-BR')})`, value: previousWeekDateString }
+                { label: `Semana Atual (${formatDateToBrazilian(currentWeekMeeting)})`, value: currentWeekDateString },
+                { label: `Semana Anterior (${formatDateToBrazilian(previousWeekMeeting)})`, value: previousWeekDateString }
             ];
 
             setReportDates(dates);
@@ -125,11 +126,11 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
                         <div>
                             <label htmlFor="reportDate" className="block text-sm font-medium text-gray-700 mb-1">Selecione uma data para o relatório (Admin)</label>
                             <input 
-                                type="date"
+                                type="text"
                                 id="reportDate"
-                                value={selectedDate}
-                                max={new Date().toISOString().split('T')[0]} // Impede selecionar datas futuras
-                                onChange={(e) => setSelectedDate(e.target.value)}
+                                value={selectedDate ? formatDateToBrazilian(selectedDate) : ''}
+                                onChange={(e) => setSelectedDate(convertBrazilianDateToISO(e.target.value))}
+                                placeholder="dd/mm/aaaa"
                                 className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626]"
                             />
                         </div>

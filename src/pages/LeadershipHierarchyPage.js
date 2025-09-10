@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronRight, Users, Mail, MapPin, Calendar, Clock, User, Crown, Shield, Search, Filter } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import ReactFlow, {
@@ -10,100 +10,113 @@ import ReactFlow, {
   addEdge,
   ConnectionLineType,
   Panel,
+  Handle,
+  Position,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
 // Componente customizado para nó de Supervisor
 const SupervisorNode = ({ data }) => {
   return (
-    <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 min-w-[200px] shadow-lg">
-      <div className="flex items-center space-x-3 mb-2">
-        <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-          <Shield size={20} className="text-red-800" />
-        </div>
-        <div>
-          <h3 className="font-bold text-gray-800 text-sm">{data.name}</h3>
-          <div className="text-xs text-gray-600">Supervisor</div>
-        </div>
-      </div>
-      <div className="text-xs text-gray-600">
-        <div className="flex items-center space-x-1 mb-1">
-          <Mail size={10} />
-          <span className="truncate">{data.email}</span>
-        </div>
-        {data.phone && (
-          <div className="flex items-center space-x-1">
-            <User size={10} />
-            <span>{data.phone}</span>
+    <>
+      <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 min-w-[200px] shadow-lg">
+        <div className="flex items-center space-x-3 mb-2">
+          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+            <Shield size={20} className="text-red-800" />
           </div>
-        )}
+          <div>
+            <h3 className="font-bold text-gray-800 text-sm">{data.name}</h3>
+            <div className="text-xs text-gray-600">Supervisor</div>
+          </div>
+        </div>
+        <div className="text-xs text-gray-600">
+          <div className="flex items-center space-x-1 mb-1">
+            <Mail size={10} />
+            <span className="truncate">{data.email}</span>
+          </div>
+          {data.phone && (
+            <div className="flex items-center space-x-1">
+              <User size={10} />
+              <span>{data.phone}</span>
+            </div>
+          )}
+        </div>
+        <div className="mt-2 text-xs font-semibold text-red-800">
+          {data.leaderCount} Líder{data.leaderCount !== 1 ? 'es' : ''}
+        </div>
       </div>
-      <div className="mt-2 text-xs font-semibold text-red-800">
-        {data.leaderCount} Líder{data.leaderCount !== 1 ? 'es' : ''}
-      </div>
-    </div>
+      <Handle type="source" position={Position.Bottom} style={{ background: '#dc2626' }} />
+    </>
   );
 };
 
 // Componente customizado para nó de Líder
 const LeaderNode = ({ data }) => {
   return (
-    <div className="bg-red-50 border-2 border-red-300 rounded-lg p-3 min-w-[180px] shadow-md">
-      <div className="flex items-center space-x-2 mb-2">
-        <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-          <Crown size={16} className="text-red-600" />
-        </div>
-        <div>
-          <h4 className="font-semibold text-gray-800 text-sm">{data.name}</h4>
-          <div className="text-xs text-gray-600">Líder</div>
-        </div>
-      </div>
-      <div className="text-xs text-gray-600">
-        <div className="flex items-center space-x-1 mb-1">
-          <Mail size={10} />
-          <span className="truncate">{data.email}</span>
-        </div>
-        {data.phone && (
-          <div className="flex items-center space-x-1">
-            <User size={10} />
-            <span>{data.phone}</span>
+    <>
+      <Handle type="target" position={Position.Top} style={{ background: '#991b1b' }} />
+      <div className="bg-red-50 border-2 border-red-300 rounded-lg p-3 min-w-[180px] shadow-md">
+        <div className="flex items-center space-x-2 mb-2">
+          <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+            <Crown size={16} className="text-red-700" />
           </div>
-        )}
+          <div>
+            <h4 className="font-semibold text-gray-800 text-sm">{data.name}</h4>
+            <div className="text-xs text-gray-600">Líder</div>
+          </div>
+        </div>
+        <div className="text-xs text-gray-600">
+          <div className="flex items-center space-x-1 mb-1">
+            <Mail size={10} />
+            <span className="truncate">{data.email}</span>
+          </div>
+          {data.phone && (
+            <div className="flex items-center space-x-1">
+              <User size={10} />
+              <span>{data.phone}</span>
+            </div>
+          )}
+        </div>
+        <div className="mt-2 text-xs font-semibold text-red-800">
+          {data.connectCount} Connect{data.connectCount !== 1 ? 's' : ''}
+        </div>
       </div>
-      <div className="mt-2 text-xs font-semibold text-red-700">
-        {data.connectCount} Connect{data.connectCount !== 1 ? 's' : ''}
-      </div>
-    </div>
+      <Handle type="source" position={Position.Bottom} style={{ background: '#991b1b' }} />
+    </>
   );
 };
 
 // Componente customizado para nó de Connect
 const ConnectNode = ({ data }) => {
   return (
-    <div className="bg-red-50 border border-red-200 rounded-lg p-2 min-w-[160px] shadow-sm">
-      <div className="flex items-center space-x-2 mb-1">
-        <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
-          <Users size={12} className="text-red-500" />
+    <>
+      <Handle type="target" position={Position.Top} style={{ background: '#7f1d1d' }} />
+      <div className="bg-red-50 border border-red-200 rounded-lg p-2 min-w-[160px] shadow-sm">
+        <div className="flex items-center space-x-2 mb-1">
+          <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
+            <Users size={12} className="text-red-600" />
+          </div>
+          <div>
+            <h5 className="font-medium text-gray-800 text-xs">Connect {data.number}</h5>
+            <div className="text-xs text-gray-600">{data.name}</div>
+          </div>
         </div>
-        <div>
-          <h5 className="font-medium text-gray-800 text-xs">Connect {data.number}</h5>
-          <div className="text-xs text-gray-600">{data.name}</div>
+        <div className="text-xs text-gray-600">
+          <div className="flex items-center space-x-1 mb-1">
+            <Calendar size={8} />
+            <span>{data.weekday}</span>
+          </div>
+          <div className="flex items-center space-x-1">
+            <Clock size={8} />
+            <span>{data.time}</span>
+          </div>
         </div>
       </div>
-      <div className="text-xs text-gray-600">
-        <div className="flex items-center space-x-1 mb-1">
-          <Calendar size={8} />
-          <span>{data.weekday}</span>
-        </div>
-        <div className="flex items-center space-x-1">
-          <Clock size={8} />
-          <span>{data.time}</span>
-        </div>
-      </div>
-    </div>
+    </>
   );
 };
 
+// Definir nodeTypes fora do componente para evitar recriação
 const nodeTypes = {
   supervisor: SupervisorNode,
   leader: LeaderNode,
@@ -115,6 +128,43 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
   const [viewMode, setViewMode] = useState('flow'); // 'list' ou 'flow'
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all'); // 'all', 'supervisor', 'leader', 'connect'
+
+  // Ref para controlar o ReactFlow e evitar ResizeObserver warnings
+  const reactFlowWrapper = useRef(null);
+  const resizeTimeoutRef = useRef(null);
+
+  // Função de debouncing para redimensionamento
+  const debouncedResize = useCallback(() => {
+    if (resizeTimeoutRef.current) {
+      clearTimeout(resizeTimeoutRef.current);
+    }
+    resizeTimeoutRef.current = setTimeout(() => {
+      // Força uma atualização suave do layout
+      if (reactFlowWrapper.current) {
+        const reactFlowInstance = reactFlowWrapper.current;
+        if (reactFlowInstance.fitView) {
+          reactFlowInstance.fitView({ padding: 0.2, duration: 200 });
+        }
+      }
+    }, 100);
+  }, []);
+
+  // Cleanup do timeout de redimensionamento
+  useEffect(() => {
+    return () => {
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Debug logs
+  console.log('LeadershipHierarchyPage - Props received:', {
+    connects: connects?.length || 0,
+    allMembers: allMembers?.length || 0,
+    connectsData: connects?.slice(0, 3),
+    membersData: allMembers?.slice(0, 3)
+  });
 
   // Processar dados para criar hierarquia
   const hierarchyData = useMemo(() => {
@@ -184,11 +234,13 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
       };
     });
 
+    console.log('Hierarchy data processed:', { supervisors: supervisors.length, leadersWithoutSupervisor: leadersWithoutSupervisor.length, orphanConnects: orphanConnects.length });
     return { supervisors, leadersWithoutSupervisor, orphanConnects };
   }, [connects, allMembers]);
 
   // Converter dados hierárquicos em nós e arestas do React Flow
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
+    console.log('Creating nodes and edges from hierarchy data:', hierarchyData);
     const nodes = [];
     const edges = [];
     let yPosition = 0;
@@ -254,7 +306,15 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
           source: supervisorId,
           target: leaderId,
           type: 'smoothstep',
-          style: { stroke: '#dc2626', strokeWidth: 2 }
+          style: { 
+            stroke: '#dc2626', 
+            strokeWidth: 3,
+            strokeDasharray: '0'
+          },
+          markerEnd: {
+            type: 'arrowclosed',
+            color: '#dc2626'
+          }
         });
 
         // Adicionar nós de connects do líder
@@ -281,7 +341,15 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
             source: leaderId,
             target: connectId,
             type: 'smoothstep',
-            style: { stroke: '#dc2626', strokeWidth: 1 }
+            style: { 
+              stroke: '#dc2626', 
+              strokeWidth: 2,
+              strokeDasharray: '0'
+            },
+            markerEnd: {
+              type: 'arrowclosed',
+              color: '#dc2626'
+            }
           });
         });
       });
@@ -325,12 +393,20 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
         });
 
         edges.push({
-          id: `edge-${leaderId}-${connectId}`,
-          source: leaderId,
-          target: connectId,
-          type: 'smoothstep',
-          style: { stroke: '#dc2626', strokeWidth: 1 }
-        });
+           id: `edge-${leaderId}-${connectId}`,
+           source: leaderId,
+           target: connectId,
+           type: 'smoothstep',
+           style: { 
+             stroke: '#dc2626', 
+             strokeWidth: 2,
+             strokeDasharray: '0'
+           },
+           markerEnd: {
+             type: 'arrowclosed',
+             color: '#dc2626'
+           }
+         });
       });
     });
 
@@ -352,6 +428,9 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
       });
     });
 
+    console.log('Final nodes and edges created:', { nodes: nodes.length, edges: edges.length });
+    console.log('Nodes:', nodes);
+    console.log('Edges:', edges);
     return { nodes, edges };
   }, [hierarchyData, searchTerm, filterType]);
 
@@ -365,9 +444,25 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
 
   // Atualizar nós quando os dados mudarem
   React.useEffect(() => {
+    console.log('Updating nodes and edges:', { nodes: initialNodes.length, edges: initialEdges.length });
+    console.log('Edges:', initialEdges);
     setNodes(initialNodes);
     setEdges(initialEdges);
   }, [initialNodes, initialEdges, setNodes, setEdges]);
+
+  // Estilos customizados para as arestas
+  const edgeStyles = `
+    .react-flow__edge-path {
+      stroke: #991b1b !important;
+      stroke-width: 2px !important;
+    }
+    .react-flow__edge {
+      pointer-events: all !important;
+    }
+    .react-flow__arrowhead {
+      fill: #991b1b !important;
+    }
+  `;
 
   const [expandedSupervisors, setExpandedSupervisors] = useState(new Set());
   const [expandedLeaders, setExpandedLeaders] = useState(new Set());
@@ -595,7 +690,9 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
 
       {viewMode === 'flow' ? (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200" style={{ height: '600px' }}>
+          <style>{edgeStyles}</style>
           <ReactFlow
+            ref={reactFlowWrapper}
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
@@ -603,16 +700,30 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
             onConnect={onConnect}
             nodeTypes={nodeTypes}
             connectionLineType={ConnectionLineType.SmoothStep}
+            defaultEdgeOptions={{
+              type: 'smoothstep',
+              style: { stroke: '#991b1b', strokeWidth: 2 },
+              markerEnd: { type: 'arrowclosed', color: '#991b1b' }
+            }}
             fitView
-            fitViewOptions={{ padding: 0.2 }}
+            fitViewOptions={{ padding: 0.2, duration: 200 }}
+            elementsSelectable={true}
+            nodesConnectable={false}
+            nodesDraggable={true}
+            onResize={debouncedResize}
+            preventScrolling={false}
+            attributionPosition="bottom-left"
+            panOnDrag={true}
+            zoomOnScroll={true}
+            zoomOnPinch={true}
           >
             <Controls />
             <MiniMap
               nodeColor={(node) => {
                 switch (node.type) {
-                  case 'supervisor': return '#dc2626';
-                  case 'leader': return '#dc2626';
-                  case 'connect': return '#dc2626';
+                  case 'supervisor': return '#991b1b';
+                  case 'leader': return '#7f1d1d';
+                  case 'connect': return '#450a0a';
                   default: return '#6b7280';
                 }
               }}

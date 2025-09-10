@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import Modal from './Modal';
 import { Users, Clipboard, Calendar, UserPlus } from 'lucide-react';
+import { formatDateToBrazilian } from '../utils/dateUtils';
 
 const ConnectFullReportModal = ({ isOpen, onClose, connect, allMembers, allReports }) => {
 
@@ -72,7 +73,7 @@ const ConnectFullReportModal = ({ isOpen, onClose, connect, allMembers, allRepor
                         <div className="space-y-2">
                             {connectReports.map(report => (
                                 <div key={report.id} className="bg-gray-50 p-3 rounded-md border text-sm">
-                                    <p className="font-bold"><Calendar size={14} className="inline mr-1" /> Data: {(report.reportDate.toDate ? report.reportDate.toDate() : report.reportDate).toLocaleDateString('pt-BR')}</p>
+                                    <p className="font-bold"><Calendar size={14} className="inline mr-1" /> Data: {formatDateToBrazilian(report.reportDate)}</p>
                                     <p>Presentes: {Object.values(report.attendance || {}).filter(s => s === 'presente').length}</p>
                                     <p>Convidados: {report.guests || 0}</p>
                                     <p>Oferta: {(report.offering || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>

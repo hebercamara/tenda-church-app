@@ -3,6 +3,7 @@ import Modal from './Modal';
 import { CheckCircle2, Circle, Edit, Save, GraduationCap, History } from 'lucide-react';
 // NOVO: Importando o store
 import { useAuthStore } from '../store/authStore';
+import { formatDateToBrazilian, formatDateForInput, convertBrazilianDateToISO } from '../utils/dateUtils';
 
 // ALTERADO: O componente não recebe mais `currentUserData` e `isAdmin`
 const LeadershipTrackModal = ({ isOpen, onClose, member, allConnects, onSave, completedCourses, memberConnectHistoryDetails }) => {
@@ -49,9 +50,11 @@ const LeadershipTrackModal = ({ isOpen, onClose, member, allConnects, onSave, co
     }, [member, allConnects, milestonesData]);
 
     const handleDateChange = (milestoneId, date) => {
+        // Converte a data brasileira para ISO antes de salvar
+        const isoDate = convertBrazilianDateToISO(date);
         setMilestonesData(prev => ({
             ...prev,
-            [milestoneId]: { ...prev[milestoneId], date: date }
+            [milestoneId]: { ...prev[milestoneId], date: isoDate }
         }));
     };
 
@@ -72,7 +75,7 @@ const LeadershipTrackModal = ({ isOpen, onClose, member, allConnects, onSave, co
     const formatDate = (date) => {
         if (!date) return '';
         const dateObj = date.toDate ? date.toDate() : new Date(date);
-        return new Date(dateObj.getTime() + dateObj.getTimezoneOffset() * 60000).toLocaleDateString('pt-BR');
+        return formatDateToBrazilian(dateObj);
     }
 
     return (
@@ -107,7 +110,13 @@ const LeadershipTrackModal = ({ isOpen, onClose, member, allConnects, onSave, co
                                     <div className="flex-grow">
                                         <span className={milestone.data?.completed ? "text-gray-800" : "text-gray-500"}>{milestone.label}</span>
                                         {isEditing && !milestone.isAutomatic ? (
-                                            <input type="date" value={milestone.data?.date || ''} onChange={(e) => handleDateChange(milestone.id, e.target.value)} className="block w-full mt-1 text-sm bg-white rounded-md p-1 border border-gray-300"/>
+                                            <input 
+                                                type="text" 
+                                                value={milestone.data?.date ? formatDateToBrazilian(milestone.data.date) : ''} 
+                                                onChange={(e) => handleDateChange(milestone.id, e.target.value)} 
+                                                placeholder="dd/mm/aaaa"
+                                                className="block w-full mt-1 text-sm bg-white rounded-md p-1 border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                            />
                                         ) : !isEditing && milestone.data?.date && (
                                             <p className="text-xs text-gray-500">{milestone.id === 'connectLeader' ? milestone.data.date : `Concluído em: ${formatDate(milestone.data.date)}`}</p>
                                         )}

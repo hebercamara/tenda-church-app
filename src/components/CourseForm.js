@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { useLoadingState } from '../hooks/useLoadingState';
 import LoadingButton from './LoadingButton';
+import { formatDateForInput, formatDateToBrazilian, convertBrazilianDateToISO } from '../utils/dateUtils';
 
 const weekDaysMap = { "Domingo": 0, "Segunda-feira": 1, "Terça-feira": 2, "Quarta-feira": 3, "Quinta-feira": 4, "Sexta-feira": 5, "Sábado": 6 };
 
@@ -76,7 +77,12 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
-        const val = type === 'checkbox' ? checked : value;
+        let val = type === 'checkbox' ? checked : value;
+        
+        // Se for campo de data, converte formato brasileiro para ISO
+        if ((name === 'startDate' || name === 'endDate') && value && type !== 'checkbox') {
+            val = convertBrazilianDateToISO(value);
+        }
 
         const newFormData = { ...formData, [name]: val };
         if (name === 'isExtra' && checked) {
@@ -265,11 +271,12 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                             <div>
                                  <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">Data de Início</label>
                                  <input 
-                                     type="date" 
+                                     type="text" 
                                      name="startDate" 
                                      id="startDate" 
-                                     value={formData.startDate} 
+                                     value={formData.startDate ? formatDateToBrazilian(formData.startDate) : ''} 
                                      onChange={handleChange} 
+                                     placeholder="dd/mm/aaaa"
                                      className={`w-full bg-gray-100 rounded-md p-2 border focus:ring-2 ${
                                          fieldErrors.startDate 
                                              ? 'border-red-500 focus:ring-red-500' 
@@ -281,12 +288,12 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                             <div>
                                  <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">Data de Término</label>
                                  <input 
-                                     type="date" 
+                                     type="text" 
                                      name="endDate" 
                                      id="endDate" 
-                                     value={formData.endDate} 
+                                     value={formData.endDate ? formatDateToBrazilian(formData.endDate) : ''} 
                                      onChange={handleChange} 
-                                     min={formData.startDate} 
+                                     placeholder="dd/mm/aaaa" 
                                      className={`w-full bg-gray-100 rounded-md p-2 border focus:ring-2 ${
                                          fieldErrors.endDate 
                                              ? 'border-red-500 focus:ring-red-500' 
