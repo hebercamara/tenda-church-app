@@ -1,10 +1,126 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db, appId } from '../firebaseConfig';
 import Modal from './Modal';
 import { formatDateToBrazilian, convertBrazilianDateToISO } from '../utils/dateUtils';
 
 const weekDaysMap = { "Domingo": 0, "Segunda-feira": 1, "Terça-feira": 2, "Quarta-feira": 3, "Quinta-feira": 4, "Sexta-feira": 5, "Sábado": 6 };
+
+// Componente de seleção de data em português brasileiro
+const BrazilianDatePicker = ({ value, onChange, className }) => {
+    const hiddenInputRef = useRef(null);
+    const [displayValue, setDisplayValue] = useState('');
+    
+    // Atualiza o valor de exibição quando o valor ISO muda
+    useEffect(() => {
+        if (value) {
+            const date = new Date(value + 'T12:00:00');
+            setDisplayValue(date.toLocaleDateString('pt-BR'));
+        } else {
+            setDisplayValue('');
+        }
+    }, [value]);
+    
+    const handleDisplayClick = () => {
+        if (hiddenInputRef.current) {
+            // Tenta usar showPicker primeiro, se não funcionar, foca no input
+            try {
+                if (hiddenInputRef.current.showPicker) {
+                    hiddenInputRef.current.showPicker();
+                } else {
+                    hiddenInputRef.current.focus();
+                    hiddenInputRef.current.click();
+                }
+            } catch (error) {
+                // Fallback: foca no input oculto
+                hiddenInputRef.current.focus();
+                hiddenInputRef.current.click();
+            }
+        }
+    };
+    
+    const handleDateChange = (e) => {
+        onChange(e.target.value);
+    };
+    
+    const handleDisplayChange = (e) => {
+        const inputValue = e.target.value;
+        setDisplayValue(inputValue);
+        
+        // Tenta converter a data digitada para formato ISO
+        if (inputValue.length === 10) { // dd/mm/aaaa
+            const parts = inputValue.split('/');
+            if (parts.length === 3) {
+                const day = parts[0].padStart(2, '0');
+                const month = parts[1].padStart(2, '0');
+                const year = parts[2];
+                
+                if (day.length === 2 && month.length === 2 && year.length === 4) {
+                    const isoDate = `${year}-${month}-${day}`;
+                    const testDate = new Date(isoDate + 'T12:00:00');
+                    
+                    // Verifica se a data é válida
+                    if (!isNaN(testDate.getTime()) && 
+                        testDate.getDate() == day && 
+                        testDate.getMonth() + 1 == month && 
+                        testDate.getFullYear() == year) {
+                        onChange(isoDate);
+                    }
+                }
+            }
+        }
+    };
+    
+    const handleDisplayKeyDown = (e) => {
+        // Permite apenas números, barras e teclas de navegação
+        const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'];
+        if (!allowedKeys.includes(e.key) && !/[0-9\/]/.test(e.key)) {
+            e.preventDefault();
+        }
+        
+        // Auto-adiciona barras
+        if (/[0-9]/.test(e.key)) {
+            const currentValue = e.target.value;
+            if (currentValue.length === 2 || currentValue.length === 5) {
+                if (!currentValue.endsWith('/')) {
+                    setDisplayValue(currentValue + '/');
+                }
+            }
+        }
+    };
+    
+    return (
+        <div className="relative">
+            <div className="relative">
+                <input
+                    type="text"
+                    value={displayValue}
+                    onChange={handleDisplayChange}
+                    onKeyDown={handleDisplayKeyDown}
+                    placeholder="dd/mm/aaaa"
+                    maxLength="10"
+                    className={`${className} pr-10`}
+                />
+                <button
+                    type="button"
+                    onClick={handleDisplayClick}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 cursor-pointer z-10"
+                    title="Abrir calendário"
+                >
+                    📅
+                </button>
+            </div>
+            <input
+                ref={hiddenInputRef}
+                type="date"
+                value={value}
+                onChange={handleDateChange}
+                className="absolute opacity-0 pointer-events-auto w-full h-full top-0 left-0"
+                style={{ zIndex: -1 }}
+            />
+        </div>
+    );
+};
 
 const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin }) => {
     const [reportDates, setReportDates] = useState([]);
@@ -14,7 +130,41 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
     const [offering, setOffering] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const connectMembers = useMemo(() => members.filter(m => m.connectId === connect?.id), [members, connect]);
+    const connectMembers = useMemo(() => {
+        if (!connect || !selectedDate) return [];
+        
+        const reportDate = new Date(selectedDate + 'T12:00:00Z');
+        
+        // Filtra membros que estavam no Connect na data do relatório
+        return members.filter(member => {
+            // Se o membro está atualmente no Connect
+            if (member.connectId === connect.id) {
+                // Verifica se já estava no Connect na data do relatório
+                if (member.connectHistory && member.connectHistory.length > 0) {
+                    const currentEntry = member.connectHistory.find(entry => !entry.endDate);
+                    if (currentEntry) {
+                        const startDate = currentEntry.startDate.toDate ? currentEntry.startDate.toDate() : new Date(currentEntry.startDate);
+                        return reportDate >= startDate;
+                    }
+                }
+                return true; // Se não tem histórico, considera que sempre esteve
+            }
+            
+            // Se o membro não está atualmente no Connect, verifica o histórico
+            if (member.connectHistory && member.connectHistory.length > 0) {
+                return member.connectHistory.some(entry => {
+                    if (entry.connectId !== connect.id) return false;
+                    
+                    const startDate = entry.startDate.toDate ? entry.startDate.toDate() : new Date(entry.startDate);
+                    const endDate = entry.endDate ? (entry.endDate.toDate ? entry.endDate.toDate() : new Date(entry.endDate)) : null;
+                    
+                    return reportDate >= startDate && (!endDate || reportDate <= endDate);
+                });
+            }
+            
+            return false;
+        }).sort((a, b) => a.name.localeCompare(b.name));
+    }, [members, connect, selectedDate]);
 
     // Lógica de seleção de data baseada no papel do usuário (isAdmin)
     useEffect(() => {
@@ -125,12 +275,9 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
                     {isAdmin ? (
                         <div>
                             <label htmlFor="reportDate" className="block text-sm font-medium text-gray-700 mb-1">Selecione uma data para o relatório (Admin)</label>
-                            <input 
-                                type="text"
-                                id="reportDate"
-                                value={selectedDate ? formatDateToBrazilian(selectedDate) : ''}
-                                onChange={(e) => setSelectedDate(convertBrazilianDateToISO(e.target.value))}
-                                placeholder="dd/mm/aaaa"
+                            <BrazilianDatePicker
+                                value={selectedDate}
+                                onChange={setSelectedDate}
                                 className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626]"
                             />
                         </div>

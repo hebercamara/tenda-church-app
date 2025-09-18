@@ -276,11 +276,44 @@ export default function App() {
         if (!allMembers.length || !allConnectReports.length) {
             return alerts;
         }
+        
+        // Função para verificar se um membro estava em um Connect em uma data específica
+        const wasMemberInConnectAtDate = (member, connectId, date) => {
+            // Se o membro está atualmente no Connect
+            if (member.connectId === connectId) {
+                // Verifica se já estava no Connect na data
+                if (member.connectHistory && member.connectHistory.length > 0) {
+                    const currentEntry = member.connectHistory.find(entry => !entry.endDate);
+                    if (currentEntry) {
+                        const startDate = currentEntry.startDate.toDate ? currentEntry.startDate.toDate() : new Date(currentEntry.startDate);
+                        return date >= startDate;
+                    }
+                }
+                return true; // Se não tem histórico, considera que sempre esteve
+            }
+            
+            // Se o membro não está atualmente no Connect, verifica o histórico
+            if (member.connectHistory && member.connectHistory.length > 0) {
+                return member.connectHistory.some(entry => {
+                    if (entry.connectId !== connectId) return false;
+                    
+                    const startDate = entry.startDate.toDate ? entry.startDate.toDate() : new Date(entry.startDate);
+                    const endDate = entry.endDate ? (entry.endDate.toDate ? entry.endDate.toDate() : new Date(entry.endDate)) : null;
+                    
+                    return date >= startDate && (!endDate || date <= endDate);
+                });
+            }
+            
+            return false;
+        };
+        
         const sortedReports = [...allConnectReports].sort((a, b) => {
             const dateA = a.reportDate.toDate ? a.reportDate.toDate() : new Date(a.reportDate);
             const dateB = b.reportDate.toDate ? b.reportDate.toDate() : new Date(b.reportDate);
             return dateB - dateA;
         });
+        
+        // Agrupa membros por Connect atual
         const membersByConnect = allMembers.reduce((acc, member) => {
             if (member.connectId) {
                 if (!acc[member.connectId]) acc[member.connectId] = [];
@@ -300,22 +333,32 @@ export default function App() {
                 for (let i = 0; i < 4; i++) {
                     if (!reportsForConnect[i]) break;
                     const report = reportsForConnect[i];
-                    const attendanceStatus = report.attendance?.[member.id];
-                    if (attendanceStatus === 'ausente') {
-                        consecutiveAbsences++;
-                    } else {
-                        break;
+                    const reportDate = report.reportDate.toDate ? report.reportDate.toDate() : new Date(report.reportDate);
+                    
+                    // Verifica se o membro estava no Connect na data do relatório
+                    if (wasMemberInConnectAtDate(member, connectId, reportDate)) {
+                        const attendanceStatus = report.attendance?.[member.id];
+                        if (attendanceStatus === 'ausente') {
+                            consecutiveAbsences++;
+                        } else {
+                            break;
+                        }
                     }
                 }
 
                 if (consecutiveAbsences >= 4) {
                     let totalConsecutiveAbsences = 0;
                     for (const report of reportsForConnect) {
-                        const attendanceStatus = report.attendance?.[member.id];
-                        if (attendanceStatus === 'ausente') {
-                            totalConsecutiveAbsences++;
-                        } else {
-                            break;
+                        const reportDate = report.reportDate.toDate ? report.reportDate.toDate() : new Date(report.reportDate);
+                        
+                        // Verifica se o membro estava no Connect na data do relatório
+                        if (wasMemberInConnectAtDate(member, connectId, reportDate)) {
+                            const attendanceStatus = report.attendance?.[member.id];
+                            if (attendanceStatus === 'ausente') {
+                                totalConsecutiveAbsences++;
+                            } else {
+                                break;
+                            }
                         }
                     }
 
@@ -534,6 +577,16 @@ export default function App() {
         
         try {
             let connectId = editingConnect?.id;
+            
+            // Buscar membros atuais do Connect (se editando)
+            let currentMemberIds = [];
+            if (editingConnect) {
+                currentMemberIds = allMembers
+                    .filter(m => m.connectId === editingConnect.id)
+                    .map(m => m.id);
+            }
+            
+            // Salvar o Connect
             if (editingConnect) {
                 await setDoc(doc(db, collectionPath, connectId), connectData);
             } else {
@@ -546,14 +599,72 @@ export default function App() {
                 const newDocRef = await addDoc(collection(db, collectionPath), connectData);
                 connectId = newDocRef.id;
             }
+            
+            // Usar batch para sincronizar membros
+            const batch = writeBatch(db);
+            
+            // Remover connectId dos membros que não estão mais no Connect
+            const membersToRemove = currentMemberIds.filter(id => !connectData.memberIds.includes(id));
+            const today = new Date();
+            
+            membersToRemove.forEach(memberId => {
+                const member = allMembers.find(m => m.id === memberId);
+                if (member) {
+                    const history = member.connectHistory || [];
+                    const lastEntry = history.find(entry => !entry.endDate);
+                    
+                    if (lastEntry) {
+                        lastEntry.endDate = today;
+                    }
+                    
+                    const memberRef = doc(db, `artifacts/${appId}/public/data/members`, memberId);
+                    batch.update(memberRef, { 
+                        connectId: '',
+                        connectHistory: history
+                    });
+                }
+            });
+            
+            // Adicionar connectId aos novos membros do Connect
+            const membersToAdd = connectData.memberIds.filter(id => !currentMemberIds.includes(id));
+            membersToAdd.forEach(memberId => {
+                const member = allMembers.find(m => m.id === memberId);
+                if (member) {
+                    const history = member.connectHistory || [];
+                    const lastEntry = history.find(entry => !entry.endDate);
+                    
+                    // Finalizar entrada anterior se existir
+                    if (lastEntry) {
+                        lastEntry.endDate = today;
+                    }
+                    
+                    // Adicionar nova entrada
+                    history.push({ 
+                        connectId: connectId, 
+                        startDate: today, 
+                        endDate: null 
+                    });
+                    
+                    const memberRef = doc(db, `artifacts/${appId}/public/data/members`, memberId);
+                    batch.update(memberRef, { 
+                        connectId: connectId,
+                        connectHistory: history
+                    });
+                }
+            });
+            
+            // Garantir que o líder tenha o connectId correto
             const leaderRef = doc(db, `artifacts/${appId}/public/data/members`, connectData.leaderId);
-            await updateDoc(leaderRef, { connectId: connectId });
+            batch.update(leaderRef, { connectId: connectId });
+            
+            // Executar todas as atualizações em lote
+            await batch.commit();
             
             loadingStates.setSuccess('saveConnect', 'Connect salvo com sucesso!');
             closeConnectModal();
         } catch (error) {
             console.error("Erro ao salvar connect:", error);
-            loadingStates.setError('saveConnect', 'Erro ao salvar connect. Tente novamente.');
+            loadingStates.setError('saveConnect', `Erro ao salvar connect: ${error.message}`);
         }
     };
     const generateAttendanceRecords = async (courseId, courseData) => { const batch = writeBatch(db); const weekDaysMap = { "Domingo": 0, "Segunda-feira": 1, "Terça-feira": 2, "Quarta-feira": 3, "Quinta-feira": 4, "Sexta-feira": 5, "Sábado": 6 }; const targetDay = weekDaysMap[courseData.classDay]; let currentDate = new Date(courseData.startDate + 'T00:00:00'); const endDate = new Date(courseData.endDate + 'T00:00:00'); while (currentDate <= endDate) { if (currentDate.getUTCDay() === targetDay) { const dateString = currentDate.toISOString().split('T')[0]; const attendanceRef = doc(db, `artifacts/${appId}/public/data/courses/${courseId}/attendance/${dateString}`); const initialStatuses = courseData.students.reduce((acc, student) => { acc[student.id] = 'pendente'; return acc; }, {}); batch.set(attendanceRef, { date: currentDate, statuses: initialStatuses }); } currentDate.setDate(currentDate.getDate() + 1); } await batch.commit(); };
@@ -914,7 +1025,7 @@ export default function App() {
                     onCheckDuplicate={handleCheckDuplicate}
                 />
             </Modal>
-            <Modal isOpen={isConnectModalOpen} onClose={closeConnectModal}><ConnectForm onClose={closeConnectModal} onSave={handleSaveConnect} members={allMembers} editingConnect={editingConnect} /></Modal>
+            <Modal isOpen={isConnectModalOpen} onClose={closeConnectModal}><ConnectForm onClose={closeConnectModal} onSave={handleSaveConnect} members={allMembers} editingConnect={editingConnect} connects={allConnects} /></Modal>
             <Modal isOpen={isCourseModalOpen} onClose={closeCourseModal} size="2xl">
                 <CourseForm 
                     onClose={closeCourseModal} 

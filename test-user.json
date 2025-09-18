@@ -1,0 +1,9 @@
+{"users": [
+  {
+    "localId": "test123",
+    "email": "teste@exemplo.com",
+    "emailVerified": true,
+    "passwordHash": "password123",
+    "providerUserInfo": []
+  }
+]}

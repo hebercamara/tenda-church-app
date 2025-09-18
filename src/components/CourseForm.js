@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { useLoadingState } from '../hooks/useLoadingState';
 import LoadingButton from './LoadingButton';
+import PersonAutocomplete from './PersonAutocomplete';
 import { formatDateForInput, formatDateToBrazilian, convertBrazilianDateToISO } from '../utils/dateUtils';
 
 const weekDaysMap = { "Domingo": 0, "Segunda-feira": 1, "Terça-feira": 2, "Quarta-feira": 3, "Quinta-feira": 4, "Sexta-feira": 5, "Sábado": 6 };
@@ -215,20 +216,13 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                     <div className="space-y-2">
                         <div>
                             <label htmlFor="teacherId" className="block text-sm font-medium text-gray-700 mb-1">Professor</label>
-                            <select 
-                                name="teacherId" 
-                                id="teacherId" 
-                                value={formData.teacherId} 
-                                onChange={handleChange} 
-                                className={`w-full bg-gray-100 rounded-md p-2 border focus:ring-2 ${
-                                    fieldErrors.teacherId 
-                                        ? 'border-red-500 focus:ring-red-500' 
-                                        : 'border-gray-300 focus:ring-[#DC2626]'
-                                }`}
-                            >
-                                <option value="">Selecione um professor</option>
-                                {members.map(member => (<option key={member.id} value={member.id}>{member.name}</option>))}
-                            </select>
+                            <PersonAutocomplete
+                                value={formData.teacherId}
+                                onChange={(value) => setFormData(prev => ({ ...prev, teacherId: value }))}
+                                placeholder="Digite o nome do professor..."
+                                options={members.map(member => ({ value: member.id, label: member.name }))}
+                                className={fieldErrors.teacherId ? 'border-red-500' : ''}
+                            />
                             {fieldErrors.teacherId && <p className="text-red-600 text-sm mt-1">{fieldErrors.teacherId}</p>}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

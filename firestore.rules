@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Regras para a coleção de membros (caminho original)
+    match /members/{memberId} {
+      // Permitir leitura para usuários autenticados
+      allow read: if request.auth != null;
+      
+      // Permitir criação e atualização para usuários autenticados
+      // Validar apenas que o nome seja obrigatório
+      allow create, update: if request.auth != null 
+        && request.resource.data.name is string 
+        && request.resource.data.name.size() > 0;
+      
+      // Permitir exclusão apenas para admins
+      allow delete: if request.auth != null 
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+    
+    // Regras para a coleção de membros (caminho de artifacts usado pela aplicação)
+    match /artifacts/{appId}/public/data/members/{memberId} {
+      // Permitir leitura para usuários autenticados
+      allow read: if request.auth != null;
+      
+      // Permitir criação e atualização para usuários autenticados
+      // Validar apenas que o nome seja obrigatório
+      allow create, update: if request.auth != null 
+        && request.resource.data.name is string 
+        && request.resource.data.name.size() > 0;
+      
+      // Permitir exclusão apenas para admins
+      allow delete: if request.auth != null 
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+    
+    // Regras para a coleção de membros (caminho alternativo de apps)
+    match /apps/{appId}/members/{memberId} {
+      // Permitir leitura para usuários autenticados
+      allow read: if request.auth != null;
+      
+      // Permitir criação e atualização para usuários autenticados
+      // Validar apenas que o nome seja obrigatório
+      allow create, update: if request.auth != null 
+        && request.resource.data.name is string 
+        && request.resource.data.name.size() > 0;
+      
+      // Permitir exclusão apenas para admins
+      allow delete: if request.auth != null 
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+    
+    // Regras para a coleção de connects (caminho original)
+    match /connects/{connectId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Regras para a coleção de connects (caminho de artifacts)
+    match /artifacts/{appId}/public/data/connects/{connectId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Regras para a coleção de courses (caminho original)
+    match /courses/{courseId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Regras para a coleção de courses (caminho de artifacts)
+    match /artifacts/{appId}/public/data/courses/{courseId} {
+      allow read, write: if request.auth != null;
+      
+      // Regras para subcoleção de attendance
+      match /attendance/{attendanceId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+    
+    // Regras para a coleção de course templates
+    match /artifacts/{appId}/public/data/courseTemplates/{templateId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Regras para a coleção de connect reports
+    match /artifacts/{appId}/public/data/connect_reports/{reportId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Regras para subcoleção de cursos completados pelos membros
+    match /artifacts/{appId}/public/data/members/{memberId}/completedCourses/{courseId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Regras para a coleção de users
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Regras para outras coleções (fallback)
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

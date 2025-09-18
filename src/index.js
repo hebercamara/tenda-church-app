@@ -4,19 +4,41 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
+// Suprimir erros do ResizeObserver
+const resizeObserverErrorHandler = (e) => {
+  if (e.message === 'ResizeObserver loop completed with undelivered notifications.') {
+    const resizeObserverErrDiv = document.getElementById('webpack-dev-server-client-overlay-div');
+    const resizeObserverErr = document.getElementById('webpack-dev-server-client-overlay');
+    if (resizeObserverErr) {
+      resizeObserverErr.setAttribute('style', 'display: none');
+    }
+    if (resizeObserverErrDiv) {
+      resizeObserverErrDiv.setAttribute('style', 'display: none');
+    }
+  }
+};
+
+window.addEventListener('error', resizeObserverErrorHandler);
+
 // Global ResizeObserver Error Suppression
 // Intercepta e silencia completamente os warnings do ResizeObserver
 const originalConsoleError = console.error;
 console.error = (...args) => {
-  // Filtra especificamente os erros do ResizeObserver
-  const message = args[0];
-  if (typeof message === 'string' && 
-      (message.includes('ResizeObserver loop completed with undelivered notifications') ||
-       message.includes('ResizeObserver loop limit exceeded'))) {
-    return; // Silencia completamente
+  if (args[0] && typeof args[0] === 'string' && args[0].includes('ResizeObserver loop completed')) {
+    return;
   }
   originalConsoleError.apply(console, args);
 };
+
+// Suprimir overlay de erro do webpack para ResizeObserver
+if (process.env.NODE_ENV === 'development') {
+  window.addEventListener('error', (e) => {
+    if (e.message.includes('ResizeObserver loop completed')) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+    }
+  });
+}
 
 // Intercepta erros globais relacionados ao ResizeObserver
 window.addEventListener('error', (event) => {

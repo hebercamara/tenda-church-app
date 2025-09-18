@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useLoadingState } from '../hooks/useLoadingState';
 import LoadingButton from './LoadingButton';
+import PersonAutocomplete from './PersonAutocomplete';
 
 const weekDaysMap = { "Domingo": 0, "Segunda-feira": 1, "Terça-feira": 2, "Quarta-feira": 3, "Quinta-feira": 4, "Sexta-feira": 5, "Sábado": 6 };
 
-const ConnectForm = ({ onClose, onSave, members, editingConnect }) => {
+const ConnectForm = ({ onClose, onSave, members, editingConnect, connects }) => {
     const { isLoading, setLoading } = useLoadingState();
     
     const [formData, setFormData] = useState({
@@ -12,23 +13,42 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect }) => {
         name: '',
         weekday: '',
         time: '',
-        address: '',
+        street: '',
+        neighborhood: '',
+        city: '',
+        zipCode: '',
         leaderId: '',
         supervisorEmail: '',
+        pastorEmail: '',
+        memberIds: [],
     });
     const [error, setError] = useState('');
     const [fieldErrors, setFieldErrors] = useState({});
 
     useEffect(() => {
         if (editingConnect) {
+            // Buscar IDs baseados nos emails para supervisor e pastor
+            const supervisorMember = editingConnect.supervisorEmail ? 
+                members.find(m => m.email === editingConnect.supervisorEmail) : null;
+            const pastorMember = editingConnect.pastorEmail ? 
+                members.find(m => m.email === editingConnect.pastorEmail) : null;
+            
+            // Buscar membros que pertencem a este connect
+            const connectMembers = members.filter(m => m.connectId === editingConnect.id).map(m => m.id);
+            
             setFormData({
                 number: editingConnect.number || '',
                 name: editingConnect.name || '',
                 weekday: editingConnect.weekday || '',
                 time: editingConnect.time || '',
-                address: editingConnect.address || '',
+                street: editingConnect.street || editingConnect.address || '',
+                neighborhood: editingConnect.neighborhood || '',
+                city: editingConnect.city || '',
+                zipCode: editingConnect.zipCode || '',
                 leaderId: editingConnect.leaderId || '',
-                supervisorEmail: editingConnect.supervisorEmail || '',
+                supervisorEmail: supervisorMember?.id || editingConnect.supervisorEmail || '',
+                pastorEmail: pastorMember?.id || editingConnect.pastorEmail || '',
+                memberIds: connectMembers,
             });
         } else {
             // Reset form for new connect
@@ -37,12 +57,17 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect }) => {
                 name: '',
                 weekday: '',
                 time: '',
-                address: '',
+                street: '',
+                neighborhood: '',
+                city: '',
+                zipCode: '',
                 leaderId: '',
                 supervisorEmail: '',
+                pastorEmail: '',
+                memberIds: [],
             });
         }
-    }, [editingConnect]);
+    }, [editingConnect, members]);
 
 
     const validateField = (name, value) => {
@@ -63,16 +88,31 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect }) => {
             case 'time':
                 if (!value) errors.time = 'Horário é obrigatório';
                 break;
-            case 'address':
-                if (!value.trim()) errors.address = 'Endereço é obrigatório';
+            case 'street':
+                if (!value.trim()) errors.street = 'Endereço é obrigatório';
+                break;
+            case 'neighborhood':
+                if (!value.trim()) errors.neighborhood = 'Bairro é obrigatório';
+                break;
+            case 'city':
+                if (!value.trim()) errors.city = 'Município é obrigatório';
+                break;
+            case 'zipCode':
+                if (!value.trim()) errors.zipCode = 'CEP é obrigatório';
+                else if (!/^\d{5}-?\d{3}$/.test(value.replace(/\D/g, '').replace(/(\d{5})(\d{3})/, '$1-$2'))) {
+                    errors.zipCode = 'CEP deve ter o formato 00000-000';
+                }
                 break;
             case 'leaderId':
                 if (!value) errors.leaderId = 'Líder é obrigatório';
                 break;
             case 'supervisorEmail':
-                if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-                    errors.supervisorEmail = 'E-mail inválido';
-                }
+                // supervisorEmail agora é um ID, não precisa validar formato de email
+                break;
+            case 'pastorEmail':
+                // pastorEmail agora é um ID, não precisa validar formato de email
+                break;
+            default:
                 break;
         }
         
@@ -99,11 +139,11 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect }) => {
             // Validação completa
             const allErrors = {};
             Object.keys(formData).forEach(field => {
-                if (field !== 'supervisorEmail') { // supervisorEmail é opcional
+                if (field !== 'supervisorEmail' && field !== 'pastorEmail') { // supervisorEmail e pastorEmail são opcionais
                     const fieldError = validateField(field, formData[field]);
                     Object.assign(allErrors, fieldError);
                 } else if (formData[field]) {
-                    // Valida supervisorEmail apenas se preenchido
+                    // Valida supervisorEmail e pastorEmail apenas se preenchidos
                     const fieldError = validateField(field, formData[field]);
                     Object.assign(allErrors, fieldError);
                 }
@@ -111,8 +151,24 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect }) => {
             
             // Validação específica do líder
             const leader = members.find(m => m.id === formData.leaderId);
-            if (formData.leaderId && !leader?.email) {
+            if (formData.leaderId && !leader) {
+                allErrors.leaderId = 'Líder selecionado não encontrado';
+            } else if (formData.leaderId && !leader?.email) {
                 allErrors.leaderId = 'O líder selecionado precisa ter um e-mail cadastrado';
+            }
+            
+            // Validação: cada membro pode pertencer a apenas 1 Connect
+            const membersInOtherConnects = [];
+            formData.memberIds.forEach(memberId => {
+                const member = members.find(m => m.id === memberId);
+                if (member && member.connectId && member.connectId !== editingConnect?.id) {
+                    const existingConnect = connects.find(c => c.id === member.connectId);
+                    membersInOtherConnects.push(`${member.name} já pertence ao Connect ${existingConnect?.number || 'desconhecido'}`);
+                }
+            });
+            
+            if (membersInOtherConnects.length > 0) {
+                allErrors.memberIds = `Os seguintes membros já pertencem a outros Connects: ${membersInOtherConnects.join(', ')}`;
             }
             
             if (Object.keys(allErrors).length > 0) {
@@ -123,7 +179,23 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect }) => {
             
             setError('');
             setFieldErrors({});
-            await onSave({ ...formData, leaderName: leader?.name || 'Não encontrado', leaderEmail: leader?.email });
+            
+            // Buscar dados do supervisor e pastor
+            const supervisor = formData.supervisorEmail ? members.find(m => m.id === formData.supervisorEmail) : null;
+            const pastor = formData.pastorEmail ? members.find(m => m.id === formData.pastorEmail) : null;
+            
+            const saveData = {
+                ...formData,
+                leaderName: leader?.name || 'Não encontrado',
+                leaderEmail: leader?.email,
+                supervisorEmail: supervisor?.email || '',
+                supervisorName: supervisor?.name || '',
+                pastorEmail: pastor?.email || '',
+                pastorName: pastor?.name || '',
+                memberIds: formData.memberIds || []
+            };
+            
+            await onSave(saveData);
             onClose();
         } catch (error) {
             setError('Erro ao salvar connect. Tente novamente.');
@@ -178,22 +250,13 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect }) => {
 
             <div>
                 <label htmlFor="leaderId" className="block text-sm font-medium text-gray-700 mb-1">Líder</label>
-                <select 
-                    name="leaderId" 
-                    id="leaderId" 
-                    value={formData.leaderId} 
-                    onChange={handleChange} 
-                    className={`w-full bg-gray-100 text-gray-900 rounded-md p-2 border focus:ring-2 ${
-                        fieldErrors.leaderId 
-                            ? 'border-red-500 focus:ring-red-500' 
-                            : 'border-gray-300 focus:ring-[#DC2626]'
-                    }`}
-                >
-                    <option value="">Selecione um líder</option>
-                    {members.map(member => (
-                        <option key={member.id} value={member.id}>{member.name}</option>
-                    ))}
-                </select>
+                <PersonAutocomplete
+                    value={formData.leaderId}
+                    onChange={(value) => setFormData(prev => ({ ...prev, leaderId: value }))}
+                    placeholder="Digite o nome do líder..."
+                    options={members.map(member => ({ value: member.id, label: member.name }))}
+                    className={fieldErrors.leaderId ? 'border-red-500' : ''}
+                />
                 {fieldErrors.leaderId && <p className="text-red-600 text-sm mt-1">{fieldErrors.leaderId}</p>}
             </div>
 
@@ -234,40 +297,155 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect }) => {
                 </div>
             </div>
 
-            <div>
-                <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">Endereço</label>
-                <input 
-                    type="text" 
-                    name="address" 
-                    id="address" 
-                    value={formData.address} 
-                    onChange={handleChange} 
-                    className={`w-full bg-gray-100 text-gray-900 rounded-md p-2 border focus:ring-2 ${
-                        fieldErrors.address 
-                            ? 'border-red-500 focus:ring-red-500' 
-                            : 'border-gray-300 focus:ring-[#DC2626]'
-                    }`} 
-                    placeholder="Rua, Número, Bairro, Cidade" 
-                />
-                {fieldErrors.address && <p className="text-red-600 text-sm mt-1">{fieldErrors.address}</p>}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label htmlFor="street" className="block text-sm font-medium text-gray-700 mb-1">Endereço (Rua e Número)</label>
+                    <input 
+                        type="text" 
+                        name="street" 
+                        id="street" 
+                        value={formData.street} 
+                        onChange={handleChange} 
+                        className={`w-full bg-gray-100 text-gray-900 rounded-md p-2 border focus:ring-2 ${
+                            fieldErrors.street 
+                                ? 'border-red-500 focus:ring-red-500' 
+                                : 'border-gray-300 focus:ring-[#DC2626]'
+                        }`} 
+                        placeholder="Ex: Rua das Flores, 123" 
+                    />
+                    {fieldErrors.street && <p className="text-red-600 text-sm mt-1">{fieldErrors.street}</p>}
+                </div>
+                <div>
+                    <label htmlFor="neighborhood" className="block text-sm font-medium text-gray-700 mb-1">Bairro</label>
+                    <input 
+                        type="text" 
+                        name="neighborhood" 
+                        id="neighborhood" 
+                        value={formData.neighborhood} 
+                        onChange={handleChange} 
+                        className={`w-full bg-gray-100 text-gray-900 rounded-md p-2 border focus:ring-2 ${
+                            fieldErrors.neighborhood 
+                                ? 'border-red-500 focus:ring-red-500' 
+                                : 'border-gray-300 focus:ring-[#DC2626]'
+                        }`} 
+                        placeholder="Ex: Centro" 
+                    />
+                    {fieldErrors.neighborhood && <p className="text-red-600 text-sm mt-1">{fieldErrors.neighborhood}</p>}
+                </div>
+                <div>
+                    <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">Município</label>
+                    <input 
+                        type="text" 
+                        name="city" 
+                        id="city" 
+                        value={formData.city} 
+                        onChange={handleChange} 
+                        className={`w-full bg-gray-100 text-gray-900 rounded-md p-2 border focus:ring-2 ${
+                            fieldErrors.city 
+                                ? 'border-red-500 focus:ring-red-500' 
+                                : 'border-gray-300 focus:ring-[#DC2626]'
+                        }`} 
+                        placeholder="Ex: São Paulo" 
+                    />
+                    {fieldErrors.city && <p className="text-red-600 text-sm mt-1">{fieldErrors.city}</p>}
+                </div>
+                <div>
+                    <label htmlFor="zipCode" className="block text-sm font-medium text-gray-700 mb-1">CEP</label>
+                    <input 
+                        type="text" 
+                        name="zipCode" 
+                        id="zipCode" 
+                        value={formData.zipCode} 
+                        onChange={handleChange} 
+                        className={`w-full bg-gray-100 text-gray-900 rounded-md p-2 border focus:ring-2 ${
+                            fieldErrors.zipCode 
+                                ? 'border-red-500 focus:ring-red-500' 
+                                : 'border-gray-300 focus:ring-[#DC2626]'
+                        }`} 
+                        placeholder="00000-000" 
+                        maxLength="9"
+                    />
+                    {fieldErrors.zipCode && <p className="text-red-600 text-sm mt-1">{fieldErrors.zipCode}</p>}
+                </div>
             </div>
             
             <div>
-                <label htmlFor="supervisorEmail" className="block text-sm font-medium text-gray-700 mb-1">E-mail do Supervisor</label>
-                <input 
-                    type="email" 
-                    name="supervisorEmail" 
-                    id="supervisorEmail" 
-                    value={formData.supervisorEmail} 
-                    onChange={handleChange} 
-                    className={`w-full bg-gray-100 text-gray-900 rounded-md p-2 border focus:ring-2 ${
-                        fieldErrors.supervisorEmail 
-                            ? 'border-red-500 focus:ring-red-500' 
-                            : 'border-gray-300 focus:ring-[#DC2626]'
-                    }`} 
-                    placeholder="email.supervisor@exemplo.com" 
+                <label htmlFor="supervisorEmail" className="block text-sm font-medium text-gray-700 mb-1">Supervisor</label>
+                <PersonAutocomplete
+                    value={formData.supervisorEmail}
+                    onChange={(value) => setFormData(prev => ({ ...prev, supervisorEmail: value }))}
+                    placeholder="Digite o nome do supervisor..."
+                    options={members.filter(member => member.email).map(member => ({ value: member.id, label: member.name }))}
+                    className={fieldErrors.supervisorEmail ? 'border-red-500' : ''}
                 />
                 {fieldErrors.supervisorEmail && <p className="text-red-600 text-sm mt-1">{fieldErrors.supervisorEmail}</p>}
+            </div>
+            
+            <div>
+                <label htmlFor="pastorEmail" className="block text-sm font-medium text-gray-700 mb-1">Pastor</label>
+                <PersonAutocomplete
+                    value={formData.pastorEmail}
+                    onChange={(value) => setFormData(prev => ({ ...prev, pastorEmail: value }))}
+                    placeholder="Digite o nome do pastor..."
+                    options={members.filter(member => member.email).map(member => ({ value: member.id, label: member.name }))}
+                    className={fieldErrors.pastorEmail ? 'border-red-500' : ''}
+                />
+                {fieldErrors.pastorEmail && <p className="text-red-600 text-sm mt-1">{fieldErrors.pastorEmail}</p>}
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Adicionar Membros ao Connect</label>
+                <PersonAutocomplete
+                    value=""
+                    onChange={(value) => {
+                        if (value && !formData.memberIds.includes(value)) {
+                            setFormData(prev => ({
+                                ...prev,
+                                memberIds: [...prev.memberIds, value]
+                            }));
+                        }
+                    }}
+                    placeholder="Digite o nome do membro para adicionar..."
+                    options={members
+                        .filter(member => !formData.memberIds.includes(member.id))
+                        .map(member => ({ value: member.id, label: member.name }))
+                    }
+                    className={fieldErrors.memberIds ? 'border-red-500' : ''}
+                />
+                {fieldErrors.memberIds && <p className="text-red-600 text-sm mt-1">{fieldErrors.memberIds}</p>}
+                
+                {formData.memberIds.length > 0 && (
+                    <div className="mt-3">
+                        <p className="text-sm font-medium text-gray-700 mb-2">Membros selecionados:</p>
+                        <div className="bg-gray-50 border border-gray-300 rounded-md p-3 max-h-32 overflow-y-auto">
+                            <div className="space-y-2">
+                                {formData.memberIds.map(memberId => {
+                                    const member = members.find(m => m.id === memberId);
+                                    return member ? (
+                                        <div key={memberId} className="flex items-center justify-between bg-white p-2 rounded border">
+                                            <span className="text-sm text-gray-700">{member.name}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setFormData(prev => ({
+                                                        ...prev,
+                                                        memberIds: prev.memberIds.filter(id => id !== memberId)
+                                                    }));
+                                                }}
+                                                className="text-red-500 hover:text-red-700 text-sm font-medium"
+                                            >
+                                                Remover
+                                            </button>
+                                        </div>
+                                    ) : null;
+                                })}
+                            </div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                            {formData.memberIds.length} membro(s) selecionado(s)
+                        </p>
+                    </div>
+                )}
             </div>
 
             <div className="flex justify-end space-x-3 pt-4">

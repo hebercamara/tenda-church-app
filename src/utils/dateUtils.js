@@ -93,3 +93,35 @@ export const formatDateForInput = (date) => {
   
   return `${year}-${month}-${day}`;
 };
+
+/**
+ * Formata uma data para exibição abreviada (Ex: 19/Set)
+ * @param {string|Date} date - Data a ser formatada
+ * @returns {string} Data formatada no formato abreviado
+ */
+export const formatDateToAbbreviated = (date) => {
+  if (!date) return '';
+  
+  let dateObj;
+  if (typeof date === 'string') {
+    if (date.includes('-')) {
+      dateObj = new Date(date + 'T00:00:00');
+    } else {
+      dateObj = new Date(date);
+    }
+  } else {
+    dateObj = date;
+  }
+  
+  if (isNaN(dateObj.getTime())) return '';
+  
+  const monthNames = [
+    'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+    'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
+  ];
+  
+  const day = dateObj.getDate();
+  const month = monthNames[dateObj.getMonth()];
+  
+  return `${day}/${month}`;
+};

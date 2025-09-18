@@ -14,11 +14,48 @@ const getSundayOfWeek = (date) => {
     return new Date(dateObj.setUTCDate(diff));
 };
 
-const ConnectAttendanceChart = ({ reports }) => {
+const ConnectAttendanceChart = ({ reports, allMembers, connectId }) => {
   const chartData = useMemo(() => {
     const validReports = reports.filter(r => r && r.reportDate && typeof r.attendance === 'object');
 
     if (!validReports || validReports.length === 0) return null;
+
+    // Função para obter membros que estavam no Connect em uma data específica
+    const getMembersAtDate = (date, targetConnectId = null) => {
+      if (!allMembers) return [];
+      
+      // Se connectId é null, retorna todos os membros (para dashboard geral)
+      if (!targetConnectId) return allMembers;
+      
+      return allMembers.filter(member => {
+        // Se o membro está atualmente no Connect
+        if (member.connectId === targetConnectId) {
+          // Verifica se já estava no Connect na data
+          if (member.connectHistory && member.connectHistory.length > 0) {
+            const currentEntry = member.connectHistory.find(entry => !entry.endDate);
+            if (currentEntry) {
+              const startDate = currentEntry.startDate.toDate ? currentEntry.startDate.toDate() : new Date(currentEntry.startDate);
+              return date >= startDate;
+            }
+          }
+          return true; // Se não tem histórico, considera que sempre esteve
+        }
+        
+        // Se o membro não está atualmente no Connect, verifica o histórico
+        if (member.connectHistory && member.connectHistory.length > 0) {
+          return member.connectHistory.some(entry => {
+            if (entry.connectId !== targetConnectId) return false;
+            
+            const startDate = entry.startDate.toDate ? entry.startDate.toDate() : new Date(entry.startDate);
+            const endDate = entry.endDate ? (entry.endDate.toDate ? entry.endDate.toDate() : new Date(entry.endDate)) : null;
+            
+            return date >= startDate && (!endDate || date <= endDate);
+          });
+        }
+        
+        return false;
+      });
+    };
 
     // Agrupa os relatórios por SEMANA (usando o domingo como chave)
     const reportsByWeek = validReports.reduce((acc, report) => {
@@ -43,9 +80,19 @@ const ConnectAttendanceChart = ({ reports }) => {
     const dataByWeek = recentWeeks.map(sundayDate => {
       const reportsForWeek = reportsByWeek[sundayDate];
       
-      const totalPresent = reportsForWeek.reduce((sum, report) => {
-          return sum + Object.values(report.attendance).filter(status => status === 'presente').length;
-      }, 0);
+      let totalPresent = 0;
+      
+      reportsForWeek.forEach(report => {
+        const reportDate = report.reportDate.toDate ? report.reportDate.toDate() : new Date(report.reportDate);
+        const membersAtReportDate = getMembersAtDate(reportDate, connectId || report.connectId);
+        
+        // Conta apenas presenças de membros que estavam no Connect na data do relatório
+        const validAttendance = Object.entries(report.attendance || {}).filter(([memberId, status]) => {
+          return membersAtReportDate.some(member => member.id === memberId) && status === 'presente';
+        });
+        
+        totalPresent += validAttendance.length;
+      });
 
       // --- NOVA LÓGICA ---
       const totalGuests = reportsForWeek.reduce((sum, report) => sum + (Number(report.guests) || 0), 0);

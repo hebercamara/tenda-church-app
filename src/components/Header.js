@@ -12,8 +12,15 @@ const Header = ({ onLogout, onMenuClick }) => {
               <Menu size={20} className="sm:w-6 sm:h-6" />
           </button>
           <img
-              src="https://firebasestorage.googleapis.com/v0/b/tenda-church-app.firebasestorage.app/o/LOGO%20TENDA%20BRANCO.png?alt=media&token=ed7c6ad0-de20-46a3-bb4c-552934e3d3ca"
-              onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/200x50/991B1B/FFFFFF?text=Logo+Tenda+Church'; }}
+              src="/logo192.png"
+              onError={(e) => { 
+                if (e.target.src.includes('logo192.png')) {
+                  e.target.src = 'https://firebasestorage.googleapis.com/v0/b/tenda-church-app.firebasestorage.app/o/LOGO%20TENDA%20BRANCO.png?alt=media&token=ed7c6ad0-de20-46a3-bb4c-552934e3d3ca';
+                } else {
+                  e.target.onerror = null; 
+                  e.target.src = 'https://placehold.co/200x50/991B1B/FFFFFF?text=Logo+Tenda+Church';
+                }
+              }}
               alt="Logo Tenda Church"
               className="h-8 sm:h-10 flex-shrink-0"
           />

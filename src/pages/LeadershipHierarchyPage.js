@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { ChevronDown, ChevronRight, Users, Mail, MapPin, Calendar, Clock, User, Crown, Shield, Search, Filter } from 'lucide-react';
+import { ChevronDown, ChevronRight, Users, Mail, MapPin, Calendar, Clock, User, Crown, Shield, Search, Filter, Star } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import { formatFullAddress, hasAddressData } from '../utils/addressUtils';
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -15,10 +16,46 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
+// Componente customizado para nó de Pastor
+const PastorNode = ({ data }) => {
+  return (
+    <>
+      <div className="bg-red-100 border-2 border-red-300 rounded-lg p-4 min-w-[220px] shadow-xl">
+        <div className="flex items-center space-x-3 mb-2">
+          <div className="w-12 h-12 bg-red-200 rounded-full flex items-center justify-center">
+            <Star size={24} className="text-red-900" />
+          </div>
+          <div>
+            <h3 className="font-bold text-gray-800 text-base">{data.name}</h3>
+            <div className="text-sm text-gray-700 font-semibold">Pastor</div>
+          </div>
+        </div>
+        <div className="text-xs text-gray-600">
+          <div className="flex items-center space-x-1 mb-1">
+            <Mail size={10} />
+            <span className="truncate">{data.email}</span>
+          </div>
+          {data.phone && (
+            <div className="flex items-center space-x-1">
+              <User size={10} />
+              <span>{data.phone}</span>
+            </div>
+          )}
+        </div>
+        <div className="mt-2 text-sm font-bold text-red-900">
+          {data.supervisorCount} Supervisor{data.supervisorCount !== 1 ? 'es' : ''}
+        </div>
+      </div>
+      <Handle type="source" position={Position.Bottom} style={{ background: '#7f1d1d' }} />
+    </>
+  );
+};
+
 // Componente customizado para nó de Supervisor
 const SupervisorNode = ({ data }) => {
   return (
     <>
+      <Handle type="target" position={Position.Top} style={{ background: '#7f1d1d' }} />
       <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 min-w-[200px] shadow-lg">
         <div className="flex items-center space-x-3 mb-2">
           <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
@@ -118,6 +155,7 @@ const ConnectNode = ({ data }) => {
 
 // Definir nodeTypes fora do componente para evitar recriação
 const nodeTypes = {
+  pastor: PastorNode,
   supervisor: SupervisorNode,
   leader: LeaderNode,
   connect: ConnectNode,
@@ -127,7 +165,7 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
   const { isAdmin } = useAuthStore();
   const [viewMode, setViewMode] = useState('flow'); // 'list' ou 'flow'
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState('all'); // 'all', 'supervisor', 'leader', 'connect'
+  const [filterType, setFilterType] = useState('all'); // 'all', 'pastor', 'supervisor', 'leader', 'connect'
 
   // Ref para controlar o ReactFlow e evitar ResizeObserver warnings
   const reactFlowWrapper = useRef(null);
@@ -168,15 +206,21 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
 
   // Processar dados para criar hierarquia
   const hierarchyData = useMemo(() => {
-    if (!connects || !allMembers) return { supervisors: [], leadersWithoutSupervisor: [], orphanConnects: [] };
+    if (!connects || !allMembers) return { pastors: [], supervisors: [], leadersWithoutSupervisor: [], orphanConnects: [] };
 
-    // Agrupar connects por supervisor e líder
+    // Agrupar connects por pastor, supervisor e líder
+    const connectsByPastor = {};
     const connectsBySupervisor = {};
     const connectsByLeader = {};
     const orphanConnects = [];
 
     connects.forEach(connect => {
-       if (connect.supervisorEmail) {
+       if (connect.pastorEmail) {
+         if (!connectsByPastor[connect.pastorEmail]) {
+           connectsByPastor[connect.pastorEmail] = [];
+         }
+         connectsByPastor[connect.pastorEmail].push(connect);
+       } else if (connect.supervisorEmail) {
          if (!connectsBySupervisor[connect.supervisorEmail]) {
            connectsBySupervisor[connect.supervisorEmail] = [];
          }
@@ -191,8 +235,64 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
        }
      });
 
-    // Criar estrutura de supervisores
-    const supervisors = Object.keys(connectsBySupervisor).map(supervisorEmail => {
+    // Criar estrutura de pastores
+    const pastors = Object.keys(connectsByPastor).map(pastorEmail => {
+      const pastorMember = allMembers.find(member => member.email === pastorEmail);
+      const pastorConnects = connectsByPastor[pastorEmail];
+      
+      // Agrupar connects do pastor por supervisor
+      const supervisorGroups = {};
+      pastorConnects.forEach(connect => {
+        if (connect.supervisorEmail) {
+          if (!supervisorGroups[connect.supervisorEmail]) {
+            supervisorGroups[connect.supervisorEmail] = [];
+          }
+          supervisorGroups[connect.supervisorEmail].push(connect);
+        }
+      });
+
+      const supervisors = Object.keys(supervisorGroups).map(supervisorEmail => {
+        const supervisorMember = allMembers.find(member => member.email === supervisorEmail);
+        const supervisorConnects = supervisorGroups[supervisorEmail];
+        
+        // Agrupar connects do supervisor por líder
+        const leaderGroups = {};
+        supervisorConnects.forEach(connect => {
+          if (connect.leaderEmail) {
+            if (!leaderGroups[connect.leaderEmail]) {
+              leaderGroups[connect.leaderEmail] = [];
+            }
+            leaderGroups[connect.leaderEmail].push(connect);
+          }
+        });
+
+        const leaders = Object.keys(leaderGroups).map(leaderEmail => {
+          const leaderMember = allMembers.find(member => member.email === leaderEmail);
+          return {
+            email: leaderEmail,
+            member: leaderMember,
+            connects: leaderGroups[leaderEmail]
+          };
+        });
+
+        return {
+          email: supervisorEmail,
+          member: supervisorMember,
+          leaders,
+          totalConnects: supervisorConnects.length
+        };
+      });
+
+      return {
+        email: pastorEmail,
+        member: pastorMember,
+        supervisors,
+        totalConnects: pastorConnects.length
+      };
+    });
+
+    // Criar estrutura de supervisores sem pastor
+    const supervisorsWithoutPastor = Object.keys(connectsBySupervisor).map(supervisorEmail => {
       const supervisorMember = allMembers.find(member => member.email === supervisorEmail);
       const supervisorConnects = connectsBySupervisor[supervisorEmail];
       
@@ -234,8 +334,8 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
       };
     });
 
-    console.log('Hierarchy data processed:', { supervisors: supervisors.length, leadersWithoutSupervisor: leadersWithoutSupervisor.length, orphanConnects: orphanConnects.length });
-    return { supervisors, leadersWithoutSupervisor, orphanConnects };
+    console.log('Hierarchy data processed:', { pastors: pastors.length, supervisors: supervisorsWithoutPastor.length, leadersWithoutSupervisor: leadersWithoutSupervisor.length, orphanConnects: orphanConnects.length });
+    return { pastors, supervisors: supervisorsWithoutPastor, leadersWithoutSupervisor, orphanConnects };
   }, [connects, allMembers]);
 
   // Converter dados hierárquicos em nós e arestas do React Flow
@@ -249,6 +349,11 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
 
     // Filtrar dados baseado na busca e filtro
     const filteredData = {
+      pastors: hierarchyData.pastors.filter(pastor => {
+        if (filterType !== 'all' && filterType !== 'pastor') return false;
+        if (searchTerm && !pastor.member?.name?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+        return true;
+      }),
       supervisors: hierarchyData.supervisors.filter(supervisor => {
         if (filterType !== 'all' && filterType !== 'supervisor') return false;
         if (searchTerm && !supervisor.member?.name?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
@@ -266,7 +371,137 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
       })
     };
 
-    // Adicionar nós de supervisores
+    // Adicionar nós de pastores
+    filteredData.pastors.forEach((pastor, pastorIndex) => {
+      const pastorId = `pastor-${pastor.email}`;
+      
+      nodes.push({
+        id: pastorId,
+        type: 'pastor',
+        position: { x: pastorIndex * nodeSpacing, y: yPosition },
+        data: {
+          name: pastor.member?.name || pastor.email,
+          email: pastor.email,
+          phone: pastor.member?.phone,
+          supervisorCount: pastor.supervisors.length
+        }
+      });
+
+      // Adicionar nós de supervisores do pastor
+      pastor.supervisors.forEach((supervisor, supervisorIndex) => {
+        const supervisorId = `supervisor-${pastor.email}-${supervisor.email}`;
+        const supervisorX = pastorIndex * nodeSpacing + (supervisorIndex - (pastor.supervisors.length - 1) / 2) * 250;
+        const supervisorY = yPosition + levelHeight;
+
+        nodes.push({
+          id: supervisorId,
+          type: 'supervisor',
+          position: { x: supervisorX, y: supervisorY },
+          data: {
+            name: supervisor.member?.name || supervisor.email,
+            email: supervisor.email,
+            phone: supervisor.member?.phone,
+            leaderCount: supervisor.leaders.length
+          }
+        });
+
+        // Conectar pastor ao supervisor
+        edges.push({
+          id: `edge-${pastorId}-${supervisorId}`,
+          source: pastorId,
+          target: supervisorId,
+          type: 'smoothstep',
+          style: { 
+            stroke: '#7c3aed', 
+            strokeWidth: 3,
+            strokeDasharray: '0'
+          },
+          markerEnd: {
+            type: 'arrowclosed',
+            color: '#7c3aed'
+          }
+        });
+
+        // Adicionar nós de líderes do supervisor
+        supervisor.leaders.forEach((leader, leaderIndex) => {
+          const leaderId = `leader-${pastor.email}-${supervisor.email}-${leader.email}`;
+          const leaderX = supervisorX + (leaderIndex - (supervisor.leaders.length - 1) / 2) * 200;
+          const leaderY = supervisorY + levelHeight;
+
+          nodes.push({
+            id: leaderId,
+            type: 'leader',
+            position: { x: leaderX, y: leaderY },
+            data: {
+              name: leader.member?.name || leader.email,
+              email: leader.email,
+              phone: leader.member?.phone,
+              connectCount: leader.connects.length
+            }
+          });
+
+          // Conectar supervisor ao líder
+          edges.push({
+            id: `edge-${supervisorId}-${leaderId}`,
+            source: supervisorId,
+            target: leaderId,
+            type: 'smoothstep',
+            style: { 
+              stroke: '#dc2626', 
+              strokeWidth: 3,
+              strokeDasharray: '0'
+            },
+            markerEnd: {
+              type: 'arrowclosed',
+              color: '#dc2626'
+            }
+          });
+
+          // Adicionar nós de connects do líder
+          leader.connects.forEach((connect, connectIndex) => {
+            const connectId = `connect-${pastor.email}-${supervisor.email}-${leader.email}-${connect.id}`;
+            const connectX = leaderX + (connectIndex - (leader.connects.length - 1) / 2) * 150;
+            const connectY = leaderY + levelHeight;
+
+            nodes.push({
+              id: connectId,
+              type: 'connect',
+              position: { x: connectX, y: connectY },
+              data: {
+                name: connect.name,
+                number: connect.number,
+                weekday: connect.weekday,
+                time: connect.time,
+                address: connect.address,
+                memberCount: connect.members?.length || 0
+              }
+            });
+
+            // Conectar líder ao connect
+            edges.push({
+              id: `edge-${leaderId}-${connectId}`,
+              source: leaderId,
+              target: connectId,
+              type: 'smoothstep',
+              style: { 
+                stroke: '#059669', 
+                strokeWidth: 2,
+                strokeDasharray: '0'
+              },
+              markerEnd: {
+                type: 'arrowclosed',
+                color: '#059669'
+              }
+            });
+          });
+        });
+      });
+    });
+
+    // Atualizar posição Y para supervisores sem pastor
+    yPosition = filteredData.pastors.length > 0 ? yPosition + (levelHeight * 4) : yPosition;
+
+    // Adicionar nós de supervisores sem pastor
     filteredData.supervisors.forEach((supervisor, supervisorIndex) => {
       const supervisorId = `supervisor-${supervisor.email}`;
       
@@ -510,7 +745,13 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
           </div>
         </div>
       </div>
-      {connect.address && (
+      {hasAddressData(connect) && (
+        <div className="mt-2 flex items-center space-x-1 text-sm text-gray-600">
+          <MapPin size={12} />
+          <span>{formatFullAddress(connect)}</span>
+        </div>
+      )}
+      {!hasAddressData(connect) && connect.address && (
         <div className="mt-2 flex items-center space-x-1 text-sm text-gray-600">
           <MapPin size={12} />
           <span>{connect.address}</span>
@@ -680,6 +921,7 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
               className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
             >
               <option value="all">Todos</option>
+              <option value="pastor">Pastores</option>
               <option value="supervisor">Supervisores</option>
               <option value="leader">Líderes</option>
               <option value="connect">Connects</option>

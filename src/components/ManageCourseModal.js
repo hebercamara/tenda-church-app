@@ -2,11 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import { db, appId } from '../firebaseConfig';
 import Modal from './Modal';
-import { X, Check, Trash2, HelpCircle, Plus, Save } from 'lucide-react';
-import { formatDateToBrazilian } from '../utils/dateUtils';
+import PersonAutocomplete from './PersonAutocomplete';
+import { X, Check, Trash2, HelpCircle, Plus, Save, ChevronLeft, ChevronRight } from 'lucide-react';
+import { formatDateToBrazilian, formatDateToAbbreviated } from '../utils/dateUtils';
 
 const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, onSaveAttendance }) => {
     const [activeTab, setActiveTab] = useState('attendance');
+    const [selectedMemberToEnroll, setSelectedMemberToEnroll] = useState('');
     
     // Estados locais para rascunho (draft)
     const [draftEnrolledStudents, setDraftEnrolledStudents] = useState([]);
@@ -14,6 +16,10 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
     const [attendanceRecords, setAttendanceRecords] = useState([]);
     const [selectedDate, setSelectedDate] = useState(null);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    
+    // Estados para navegação das datas
+    const [currentDateIndex, setCurrentDateIndex] = useState(0);
+    const [visibleDatesCount, setVisibleDatesCount] = useState(3);
 
     // Funções de cálculo
     const calculateFinalGrade = useCallback((student) => {
@@ -57,6 +63,21 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
         return { text: 'Cursando', color: 'bg-blue-500' };
     }, [calculateFinalGrade, calculateAttendancePercentage, course]);
 
+    // Hook para detectar tamanho da tela e ajustar quantidade de datas
+    useEffect(() => {
+        const updateVisibleDatesCount = () => {
+            const width = window.innerWidth;
+            // Mobile: até 768px = 3 datas
+            // Desktop: acima de 768px = 7 datas
+            setVisibleDatesCount(width >= 768 ? 7 : 3);
+        };
+
+        updateVisibleDatesCount();
+        window.addEventListener('resize', updateVisibleDatesCount);
+        
+        return () => window.removeEventListener('resize', updateVisibleDatesCount);
+    }, []);
+
     useEffect(() => {
         if (course && isOpen) {
             const studentsWithScores = (course.students || []).map(s => ({...s, scores: s.scores || { tests: [], activities: [], assignments: [] }}));
@@ -71,13 +92,60 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
             const unsubscribe = onSnapshot(q, (snapshot) => {
                 const records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 setAttendanceRecords(records);
-                if (records.length > 0 && !selectedDate) {
-                    setSelectedDate(records[0].id);
+                
+                // Encontrar a data mais próxima do dia atual
+                if (records.length > 0) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    
+                    let closestIndex = 0;
+                    let minDiff = Math.abs(new Date(records[0].date.seconds * 1000) - today);
+                    
+                    records.forEach((record, index) => {
+                        const recordDate = new Date(record.date.seconds * 1000);
+                        const diff = Math.abs(recordDate - today);
+                        if (diff < minDiff) {
+                            minDiff = diff;
+                            closestIndex = index;
+                        }
+                    });
+                    
+                    // Ajustar o índice para centralizar baseado na quantidade de datas visíveis
+                    const halfVisible = Math.floor(visibleDatesCount / 2);
+                    const centerIndex = Math.max(halfVisible, Math.min(closestIndex, records.length - halfVisible - 1));
+                    setCurrentDateIndex(centerIndex);
+                    
+                    if (!selectedDate) {
+                        setSelectedDate(records[centerIndex].id);
+                    }
                 }
             });
             return () => unsubscribe();
         }
-    }, [isOpen, course]);
+    }, [isOpen, course, visibleDatesCount]);
+    
+    // Funções para navegação das datas
+    const getVisibleDates = () => {
+        if (attendanceRecords.length === 0) return [];
+        
+        // Mostra a quantidade dinâmica de datas baseada no tamanho da tela
+        const endIndex = Math.min(attendanceRecords.length, currentDateIndex + visibleDatesCount);
+        const startIndex = Math.max(0, endIndex - visibleDatesCount);
+        
+        return attendanceRecords.slice(startIndex, endIndex);
+    };
+    
+    const navigateDates = (direction) => {
+        if (direction === -1 && currentDateIndex > 0) {
+            const newIndex = currentDateIndex - 1;
+            setCurrentDateIndex(newIndex);
+            setSelectedDate(attendanceRecords[newIndex].id);
+        } else if (direction === 1 && currentDateIndex < attendanceRecords.length - 1) {
+            const newIndex = currentDateIndex + 1;
+            setCurrentDateIndex(newIndex);
+            setSelectedDate(attendanceRecords[newIndex].id);
+        }
+    };
     
     const handleEnroll = (studentId) => {
         const student = members.find(m => m.id === studentId);
@@ -85,6 +153,13 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
             const newStudent = { id: student.id, name: student.name, scores: { tests: [], activities: [], assignments: [] } };
             setDraftEnrolledStudents(prev => [...prev, newStudent]);
             setHasUnsavedChanges(true);
+        }
+    };
+
+    const handleMemberSelect = (memberId) => {
+        if (memberId) {
+            handleEnroll(memberId);
+            setSelectedMemberToEnroll(''); // Limpar o campo após inscrever
         }
     };
 
@@ -135,11 +210,21 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
     const assessment = course.assessment;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} size="6xl">
-            <div className="flex flex-col h-[85vh]">
+        <Modal isOpen={isOpen} onClose={onClose} size="6xl" hideHeader={true}>
+            <div className="flex flex-col h-[95vh] p-6">
                 <div className="flex-shrink-0">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Gerir Curso: {course.name}</h2>
-                    <p className="text-gray-600 mb-6">Professor: {course.teacherName}</p>
+                    <div className="flex items-center justify-between mb-4">
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-900">Gerir Curso: {course.name}</h2>
+                            <p className="text-gray-600 mt-1">Professor: {course.teacherName}</p>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="text-gray-400 hover:text-red-500 hover:bg-red-100 rounded-full p-2 transition-all flex-shrink-0"
+                        >
+                            <X size={24} />
+                        </button>
+                    </div>
                     <div className="border-b border-gray-200">
                         <nav className="-mb-px flex flex-wrap space-x-4 sm:space-x-8" aria-label="Tabs">
                             <button onClick={() => setActiveTab('attendance')} className={`${activeTab === 'attendance' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Lista de Presença</button>
@@ -149,36 +234,86 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
                     </div>
                 </div>
 
-                <div className="flex-grow overflow-y-auto mt-6 pr-2">
+                <div className="flex-grow mt-6 min-h-0">
                     {activeTab === 'students' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div>
+                        <div className="flex flex-col h-full space-y-6">
+                            <div className="flex-shrink-0">
                                 <h3 className="text-lg font-semibold text-gray-800 mb-3">Inscrever Alunos</h3>
-                                <div className="space-y-2 max-h-96 overflow-y-auto pr-2">{notEnrolledMembers.map(member => (
-                                    <div key={member.id} className="flex justify-between items-center bg-gray-50 p-2 rounded-md"><span>{member.name}</span><button onClick={() => handleEnroll(member.id)} className="text-sm bg-green-500 hover:bg-green-600 text-white py-1 px-2 rounded-md transition-colors"><Plus size={16}/></button></div>
-                                ))}</div>
+                                <PersonAutocomplete
+                                    value={selectedMemberToEnroll}
+                                    onChange={handleMemberSelect}
+                                    placeholder="Digite o nome do aluno para inscrever..."
+                                    options={notEnrolledMembers.map(member => ({
+                                        value: member.id,
+                                        label: member.name
+                                    }))}
+                                    className="w-full"
+                                />
                             </div>
-                            <div>
+                            
+                            <div className="flex-grow min-h-0">
                                 <h3 className="text-lg font-semibold text-gray-800 mb-3">Alunos Inscritos</h3>
-                                <div className="space-y-2 max-h-96 overflow-y-auto pr-2">{draftEnrolledStudents.map(student => (
-                                    <div key={student.id} className="flex justify-between items-center bg-blue-50 p-2 rounded-md space-x-2"><span className="flex-1">{student.name}</span><button onClick={() => handleUnenroll(student.id)} className="text-sm bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-md transition-colors"><Trash2 size={16}/></button></div>
-                                ))}</div>
+                                <div className="space-y-2 overflow-y-auto h-full pr-2">
+                                    {draftEnrolledStudents.map(student => (
+                                        <div key={student.id} className="flex justify-between items-center bg-blue-50 p-3 rounded-md space-x-2">
+                                            <span className="flex-1 font-medium">{student.name}</span>
+                                            <button 
+                                                onClick={() => handleUnenroll(student.id)} 
+                                                className="text-sm bg-red-500 hover:bg-red-600 text-white p-2 rounded-md transition-colors"
+                                            >
+                                                <Trash2 size={16}/>
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {draftEnrolledStudents.length === 0 && (
+                                        <div className="text-center text-gray-500 py-8">
+                                            Nenhum aluno inscrito ainda.
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
                     {activeTab === 'attendance' && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                            <div>
-                                <h3 className="text-lg font-semibold text-gray-800 mb-3">Datas das Aulas</h3>
-                                <div className="space-y-1 max-h-96 overflow-y-auto pr-2">{attendanceRecords.map(record => (
-                                    <button key={record.id} onClick={() => setSelectedDate(record.id)} className={`w-full text-left p-2 rounded-md ${selectedDate === record.id ? 'bg-red-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}>
-                                        {formatDateToBrazilian(new Date(record.date.seconds * 1000))}
+                        <div className="flex flex-col h-full">
+                            <div className="flex-shrink-0 mb-6">
+                                <div className="flex items-center justify-center space-x-2">
+                                    <button 
+                                        onClick={() => navigateDates(-1)} 
+                                        disabled={currentDateIndex === 0}
+                                        className={`p-2 rounded-md ${currentDateIndex === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'}`}
+                                    >
+                                        <ChevronLeft size={20} />
                                     </button>
-                                ))}</div>
+                                    
+                                    <div className="flex space-x-2">
+                                        {getVisibleDates().map((record, index) => (
+                                            <button 
+                                                key={record.id} 
+                                                onClick={() => setSelectedDate(record.id)} 
+                                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                                                    selectedDate === record.id 
+                                                        ? 'bg-red-500 text-white' 
+                                                        : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                                                }`}
+                                            >
+                                                {formatDateToAbbreviated(new Date(record.date.seconds * 1000))}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    
+                                    <button 
+                                        onClick={() => navigateDates(1)} 
+                                        disabled={currentDateIndex >= attendanceRecords.length - visibleDatesCount}
+                                        className={`p-2 rounded-md ${currentDateIndex >= attendanceRecords.length - visibleDatesCount ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'}`}
+                                    >
+                                        <ChevronRight size={20} />
+                                    </button>
+                                </div>
                             </div>
-                            <div className="md:col-span-2">
-                                <h3 className="text-lg font-semibold text-gray-800 mb-3">Registo de Presença - {selectedDate && formatDateToBrazilian(new Date(attendanceRecords.find(r=>r.id===selectedDate).date.seconds*1000))}</h3>
-                                <div className="space-y-2 max-h-96 overflow-y-auto pr-2">{draftEnrolledStudents.map(student => (
+                            <div className="flex flex-col min-h-0 flex-grow">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-3 flex-shrink-0">Registo de Presença - {selectedDate && formatDateToBrazilian(new Date(attendanceRecords.find(r=>r.id===selectedDate).date.seconds*1000))}</h3>
+                                <div className="space-y-2 overflow-y-auto flex-grow pr-2">{draftEnrolledStudents.map(student => (
                                     <div key={student.id} className="flex justify-between items-center bg-gray-50 p-2 rounded-md">
                                         <span>{student.name}</span>
                                         <div className="flex space-x-1">
@@ -192,7 +327,7 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
                         </div>
                     )}
                     {activeTab === 'grades' && (
-                        <div className="overflow-x-auto">
+                        <div className="overflow-x-auto overflow-y-auto h-full">
                             <table className="w-full text-sm text-left">
                                 <thead className="bg-gray-100">
                                     <tr>

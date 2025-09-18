@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { collection, writeBatch, doc } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+import { collection, writeBatch, doc, getDocs } from 'firebase/firestore';
+import { db, appId } from '../firebaseConfig';
 import { useAuthStore } from '../store/authStore';
-import { Upload, Download, Users, AlertCircle, CheckCircle, X, FileText, Plus, Eye } from 'lucide-react';
+import { Upload, Download, Users, AlertCircle, CheckCircle, X, FileText, Plus, Eye, Trash2 } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Modal from '../components/Modal';
-import { convertBrazilianDateToISO, convertISOToBrazilianDate } from '../utils/dateUtils';
+import { convertBrazilianDateToISO } from '../utils/dateUtils';
 import * as XLSX from 'xlsx';
 
 const BulkImportPage = () => {
@@ -13,12 +13,16 @@ const BulkImportPage = () => {
   const [importMethod, setImportMethod] = useState('manual'); // 'manual', 'csv' ou 'file'
   const [csvData, setCsvData] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
-  const [manualData, setManualData] = useState('');
+
   const [manualMembers, setManualMembers] = useState([{
     nome: '',
+    conhecidoPor: '',
     email: '',
     telefone: '',
     endereco: '',
+    bairro: '',
+    municipio: '',
+    cep: '',
     dataNascimento: '',
     genero: '',
     estadoCivil: '',
@@ -40,9 +44,9 @@ const BulkImportPage = () => {
 
 
   // Template CSV para download
-  const csvTemplate = `nome,email,telefone,endereco,dataNascimento,genero,estadoCivil,connect,supervisor,lider,aceitouJesus,discipuladoInicial,batismo,membresia,treinamentoConnect
-João Silva,joao@email.com,11999999999,"Rua A, 123",15/01/1990,Masculino,Solteiro,Connect Alpha,Maria Santos,Pedro Lima,15/01/2023,20/02/2023,10/03/2023,15/04/2023,20/05/2023
-Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada,Connect Beta,Ana Costa,Carlos Oliveira,10/01/2022,15/02/2022,05/03/2022,20/04/2022,25/05/2022`;
+  const csvTemplate = `nome,conhecidoPor,email,telefone,endereco,bairro,municipio,cep,dataNascimento,genero,estadoCivil,connect,supervisor,lider,aceitouJesus,discipuladoInicial,batismo,membresia,treinamentoConnect
+João Silva,João,joao@email.com,11999999999,"Rua das Flores, 123",Centro,São Paulo,01234-567,15/01/1990,Masculino,Solteiro,Connect Alpha,Maria Santos,Pedro Lima,15/01/2023,20/02/2023,10/03/2023,15/04/2023,20/05/2023
+Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Rio de Janeiro,98765-432,20/05/1985,Feminino,Casada,Connect Beta,Ana Costa,Carlos Oliveira,10/01/2022,15/02/2022,05/03/2022,20/04/2022,25/05/2022`;
 
   // Função para fazer download do template CSV
   const downloadTemplate = () => {
@@ -64,17 +68,17 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
     // Dados do template
     const templateData = [
       [
-        'nome', 'email', 'telefone', 'endereco', 'dataNascimento', 'genero', 
+        'nome', 'conhecidoPor', 'email', 'telefone', 'endereco', 'bairro', 'municipio', 'cep', 'dataNascimento', 'genero', 
         'estadoCivil', 'connect', 'supervisor', 'lider', 'aceitouJesus', 
         'discipuladoInicial', 'batismo', 'membresia', 'treinamentoConnect'
       ],
       [
-        'João Silva', 'joao@email.com', '11999999999', 'Rua das Flores, 123', 
+        'João Silva', 'João', 'joao@email.com', '11999999999', 'Rua das Flores, 123', 'Centro', 'São Paulo', '01234-567',
         '15/03/1990', 'Masculino', 'Casado', 'Connect Alpha', 'Maria Santos', 
         'Pedro Costa', '10/01/2020', '15/02/2020', '20/06/2020', '10/12/2020', '05/03/2021'
       ],
       [
-        'Maria Oliveira', 'maria@email.com', '11888888888', 'Av. Principal, 456', 
+        'Maria Oliveira', 'Maria', 'maria@email.com', '11888888888', 'Av. Principal, 456', 'Vila Nova', 'Rio de Janeiro', '98765-432',
         '22/07/1985', 'Feminino', 'Solteira', 'Connect Beta', 'João Silva', 
         'Ana Lima', '05/05/2019', '10/06/2019', '15/09/2019', '20/01/2020', '25/04/2020'
       ]
@@ -85,9 +89,13 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
     // Definir larguras das colunas
     const colWidths = [
       { wch: 15 }, // nome
+      { wch: 15 }, // conhecidoPor
       { wch: 25 }, // email
       { wch: 15 }, // telefone
       { wch: 30 }, // endereco
+      { wch: 15 }, // bairro
+      { wch: 15 }, // municipio
+      { wch: 12 }, // cep
       { wch: 12 }, // dataNascimento
       { wch: 10 }, // genero
       { wch: 12 }, // estadoCivil
@@ -117,14 +125,9 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
         if (!member.nome.trim()) {
           errors.push(`Membro ${index + 1}: Nome é obrigatório`);
         }
-        if (!member.email.trim()) {
-          errors.push(`Membro ${index + 1}: Email é obrigatório`);
-        }
-        if (!member.telefone.trim()) {
-          errors.push(`Membro ${index + 1}: Telefone é obrigatório`);
-        }
+        // Email e telefone são opcionais
         
-        if (member.nome.trim() && member.email.trim() && member.telefone.trim()) {
+        if (member.nome.trim()) {
           const dataNascimento = member.dataNascimento ? convertBrazilianDateToISO(member.dataNascimento) : '';
           const aceitouJesus = member.aceitouJesus ? convertBrazilianDateToISO(member.aceitouJesus) : '';
           const discipuladoInicial = member.discipuladoInicial ? convertBrazilianDateToISO(member.discipuladoInicial) : '';
@@ -132,11 +135,18 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
           const membresia = member.membresia ? convertBrazilianDateToISO(member.membresia) : '';
           const treinamentoConnect = member.treinamentoConnect ? convertBrazilianDateToISO(member.treinamentoConnect) : '';
           
+          // Definir conhecidoPor com fallback para primeiro nome
+          const conhecidoPor = member.conhecidoPor.trim() || member.nome.trim().split(' ')[0];
+          
           members.push({
             nome: member.nome.trim(),
+            knownBy: conhecidoPor,
             email: member.email.trim(),
             telefone: member.telefone.trim(),
             endereco: member.endereco.trim(),
+            bairro: member.bairro ? member.bairro.trim() : '',
+            municipio: member.municipio ? member.municipio.trim() : '',
+            cep: member.cep ? member.cep.trim() : '',
             dataNascimento,
             genero: member.genero,
             estadoCivil: member.estadoCivil,
@@ -185,12 +195,27 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
           const fieldMap = {
             'nome': 'nome',
             'name': 'nome',
+            'conhecidopor': 'conhecidoPor',
+            'conhecido_por': 'conhecidoPor',
+            'conhecido por': 'conhecidoPor',
+            'known_by': 'conhecidoPor',
+            'knownby': 'conhecidoPor',
             'email': 'email',
             'telefone': 'telefone',
             'phone': 'telefone',
             'endereco': 'endereco',
             'endereço': 'endereco',
             'address': 'endereco',
+            'bairro': 'bairro',
+            'neighborhood': 'bairro',
+            'municipio': 'municipio',
+            'município': 'municipio',
+            'city': 'municipio',
+            'cidade': 'municipio',
+            'cep': 'cep',
+            'zipcode': 'cep',
+            'zip_code': 'cep',
+            'postal_code': 'cep',
             'datanascimento': 'dataNascimento',
             'data_nascimento': 'dataNascimento',
             'data de nascimento': 'dataNascimento',
@@ -266,16 +291,21 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
                 connectTraining: member.treinamentoConnect ? { completed: true, date: member.treinamentoConnect } : { completed: false, date: null }
               };
               
+              // Definir knownBy com fallback para primeiro nome
+              const conhecidoPor = member.conhecidoPor || (member.nome ? member.nome.split(' ')[0] : '');
+              member.knownBy = conhecidoPor;
+              
               // Remover campos temporários
               delete member.aceitouJesus;
               delete member.discipuladoInicial;
               delete member.batismo;
               delete member.membresia;
               delete member.treinamentoConnect;
+              delete member.conhecidoPor;
               
-              // Validação básica
-              if (!member.nome || !member.email) {
-                errors.push(`Linha ${i + 1}: Nome e email são obrigatórios`);
+              // Validação básica - apenas nome é obrigatório
+              if (!member.nome || member.nome.trim() === '') {
+                errors.push(`Linha ${i + 1}: Nome é obrigatório`);
               } else {
                 members.push(member);
               }
@@ -307,12 +337,27 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
     const fieldMap = {
       'nome': 'nome',
       'name': 'nome',
+      'conhecidopor': 'conhecidoPor',
+      'conhecido_por': 'conhecidoPor',
+      'conhecido por': 'conhecidoPor',
+      'known_by': 'conhecidoPor',
+      'knownby': 'conhecidoPor',
       'email': 'email',
       'telefone': 'telefone',
       'phone': 'telefone',
       'endereco': 'endereco',
       'endereço': 'endereco',
       'address': 'endereco',
+      'bairro': 'bairro',
+      'neighborhood': 'bairro',
+      'municipio': 'municipio',
+      'município': 'municipio',
+      'city': 'municipio',
+      'cidade': 'municipio',
+      'cep': 'cep',
+      'zipcode': 'cep',
+      'zip_code': 'cep',
+      'postal_code': 'cep',
       'datanascimento': 'dataNascimento',
       'data_nascimento': 'dataNascimento',
       'birthdate': 'dataNascimento',
@@ -375,16 +420,21 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
           connectTraining: member.treinamentoConnect ? { completed: true, date: member.treinamentoConnect } : { completed: false, date: null }
         };
         
+        // Definir knownBy com fallback para primeiro nome
+        const conhecidoPor = member.conhecidoPor || (member.nome ? member.nome.split(' ')[0] : '');
+        member.knownBy = conhecidoPor;
+        
         // Remover campos temporários
         delete member.aceitouJesus;
         delete member.discipuladoInicial;
         delete member.batismo;
         delete member.membresia;
         delete member.treinamentoConnect;
+        delete member.conhecidoPor;
 
-        // Validação básica
-        if (!member.nome || !member.email) {
-          errors.push(`Linha ${i + 1}: Nome e email são obrigatórios`);
+        // Validação básica - apenas nome é obrigatório
+        if (!member.nome || member.nome.trim() === '') {
+          errors.push(`Linha ${i + 1}: Nome é obrigatório`);
         } else {
           members.push(member);
         }
@@ -424,9 +474,13 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
   const addManualMember = () => {
     setManualMembers([...manualMembers, {
       nome: '',
+      conhecidoPor: '',
       email: '',
       telefone: '',
       endereco: '',
+      bairro: '',
+      municipio: '',
+      cep: '',
       dataNascimento: '',
       genero: '',
       estadoCivil: '',
@@ -468,8 +522,39 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
       for (let i = 0; i < parsedMembers.length; i++) {
         const member = parsedMembers[i];
         try {
-          const docRef = doc(collection(db, 'members'));
-          batch.set(docRef, member);
+          // Converter campos de endereço para o formato do Firebase
+          const memberData = {
+            ...member,
+            name: member.nome,
+            street: member.endereco || '',
+            neighborhood: member.bairro || '',
+            city: member.municipio || '',
+            zipCode: member.cep || '',
+            phone: member.telefone || '',
+            dob: member.dataNascimento || '',
+            gender: member.genero || '',
+            maritalStatus: member.estadoCivil || '',
+            connectId: member.connect || '',
+            milestones: member.milestonesData || {}
+          };
+          
+          // Remover campos antigos
+          delete memberData.nome;
+          delete memberData.endereco;
+          delete memberData.bairro;
+          delete memberData.municipio;
+          delete memberData.cep;
+          delete memberData.telefone;
+          delete memberData.dataNascimento;
+          delete memberData.genero;
+          delete memberData.estadoCivil;
+          delete memberData.connect;
+          delete memberData.supervisor;
+          delete memberData.lider;
+          delete memberData.milestonesData;
+          
+          const docRef = doc(collection(db, `artifacts/${appId}/public/data/members`));
+          batch.set(docRef, memberData);
           results.success++;
         } catch (error) {
           results.errors.push(`${member.nome}: ${error.message}`);
@@ -483,7 +568,6 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
       // Limpar dados após importação bem-sucedida
       if (results.errors.length === 0) {
         setCsvData('');
-        setManualData('');
         setParsedMembers([]);
       }
     } catch (error) {
@@ -510,6 +594,58 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
     );
   }
 
+  // Função para remover duplicatas
+  const removeDuplicates = async () => {
+    if (!window.confirm('Esta ação irá remover membros duplicados (com todos os campos iguais). Deseja continuar?')) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const membersCollection = collection(db, `artifacts/${appId}/public/data/members`);
+      const querySnapshot = await getDocs(membersCollection);
+      const allMembers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      const duplicates = [];
+      const seen = new Map();
+      
+      allMembers.forEach(member => {
+        const key = JSON.stringify({
+          name: member.name,
+          email: member.email,
+          phone: member.phone,
+          connectId: member.connectId
+        });
+        
+        if (seen.has(key)) {
+          duplicates.push(member.id);
+        } else {
+          seen.set(key, member.id);
+        }
+      });
+      
+      if (duplicates.length > 0) {
+        const batch = writeBatch(db);
+        duplicates.forEach(id => {
+          const docRef = doc(db, `artifacts/${appId}/public/data/members`, id);
+          batch.delete(docRef);
+        });
+        
+        await batch.commit();
+        alert(`${duplicates.length} membros duplicados foram removidos.`);
+      } else {
+        alert('Nenhuma duplicata encontrada.');
+      }
+    } catch (error) {
+      console.error('Erro ao remover duplicatas:', error);
+      alert('Erro ao remover duplicatas: ' + error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-6xl mx-auto">
@@ -522,6 +658,16 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
           <p className="text-gray-600">
             Importe múltiplos membros de uma vez através de CSV ou inserção manual
           </p>
+          <div className="mt-4">
+            <button
+              onClick={removeDuplicates}
+              disabled={isLoading}
+              className="bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-400 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+            >
+              <Trash2 size={16} />
+              <span>Remover Duplicatas</span>
+            </button>
+          </div>
         </div>
 
         {/* Método de Importação */}
@@ -679,6 +825,20 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
                         />
                       </div>
                       
+                      {/* Conhecido por */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Conhecido por
+                        </label>
+                        <input
+                          type="text"
+                          value={member.conhecidoPor}
+                          onChange={(e) => updateManualMember(index, 'conhecidoPor', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                          placeholder="Como a pessoa é conhecida (opcional)"
+                        />
+                      </div>
+                      
                       {/* Email */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -707,17 +867,59 @@ Maria Santos,maria@email.com,11888888888,"Rua B, 456",20/05/1985,Feminino,Casada
                         />
                       </div>
                       
-                      {/* Endereço */}
+                      {/* Endereço (Rua e Número) */}
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Endereço
+                          Endereço (Rua e Número)
                         </label>
                         <input
                           type="text"
                           value={member.endereco}
                           onChange={(e) => updateManualMember(index, 'endereco', e.target.value)}
                           className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                          placeholder="Rua, número, bairro, cidade"
+                          placeholder="Rua das Flores, 123"
+                        />
+                      </div>
+                      
+                      {/* Bairro */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Bairro
+                        </label>
+                        <input
+                          type="text"
+                          value={member.bairro}
+                          onChange={(e) => updateManualMember(index, 'bairro', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                          placeholder="Centro"
+                        />
+                      </div>
+                      
+                      {/* Município */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Município
+                        </label>
+                        <input
+                          type="text"
+                          value={member.municipio}
+                          onChange={(e) => updateManualMember(index, 'municipio', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                          placeholder="São Paulo"
+                        />
+                      </div>
+                      
+                      {/* CEP */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          CEP
+                        </label>
+                        <input
+                          type="text"
+                          value={member.cep}
+                          onChange={(e) => updateManualMember(index, 'cep', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                          placeholder="01234-567"
                         />
                       </div>
                       

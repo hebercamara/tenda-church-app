@@ -102,7 +102,7 @@ const DashboardPage = ({ members, connects, reports, courses, attendanceAlerts, 
                     </div>
                     
                     <div className="overflow-x-auto">
-                        {chartType === 'connectAttendance' && <ConnectAttendanceChart reports={reports} />}
+                        {chartType === 'connectAttendance' && <ConnectAttendanceChart reports={reports} allMembers={members} connectId={null} />}
                         {chartType === 'courseAttendance' && <CourseAttendanceChart courseId={selectedCourse} courseName={courses.find(c=>c.id===selectedCourse)?.name} />}
                     </div>
 

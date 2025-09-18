@@ -8,7 +8,40 @@ const ConnectFullReportModal = ({ isOpen, onClose, connect, allMembers, allRepor
     const reportData = useMemo(() => {
         if (!connect) return null;
 
-        const connectMembers = allMembers.filter(m => m.connectId === connect.id).sort((a,b) => a.name.localeCompare(b.name));
+        // Função para obter membros que estavam no Connect em uma data específica
+        const getMembersAtDate = (date) => {
+            return allMembers.filter(member => {
+                // Se o membro está atualmente no Connect
+                if (member.connectId === connect.id) {
+                    // Verifica se já estava no Connect na data
+                    if (member.connectHistory && member.connectHistory.length > 0) {
+                        const currentEntry = member.connectHistory.find(entry => !entry.endDate);
+                        if (currentEntry) {
+                            const startDate = currentEntry.startDate.toDate ? currentEntry.startDate.toDate() : new Date(currentEntry.startDate);
+                            return date >= startDate;
+                        }
+                    }
+                    return true; // Se não tem histórico, considera que sempre esteve
+                }
+                
+                // Se o membro não está atualmente no Connect, verifica o histórico
+                if (member.connectHistory && member.connectHistory.length > 0) {
+                    return member.connectHistory.some(entry => {
+                        if (entry.connectId !== connect.id) return false;
+                        
+                        const startDate = entry.startDate.toDate ? entry.startDate.toDate() : new Date(entry.startDate);
+                        const endDate = entry.endDate ? (entry.endDate.toDate ? entry.endDate.toDate() : new Date(entry.endDate)) : null;
+                        
+                        return date >= startDate && (!endDate || date <= endDate);
+                    });
+                }
+                
+                return false;
+            });
+        };
+
+        // Membros atualmente no Connect
+        const connectMembers = getMembersAtDate(new Date()).sort((a,b) => a.name.localeCompare(b.name));
         
         const connectReports = allReports.filter(r => r && r.reportDate && r.connectId === connect.id).sort((a, b) => {
             const dateA = a.reportDate.toDate ? a.reportDate.toDate() : a.reportDate;
@@ -22,9 +55,18 @@ const ConnectFullReportModal = ({ isOpen, onClose, connect, allMembers, allRepor
         // --- Cálculos baseados nos últimos 6 encontros ---
         const totalGuestsLastSix = lastSixReports.reduce((sum, r) => sum + (r.guests || 0), 0);
         let totalAttendanceLastSix = 0;
+        
         lastSixReports.forEach(report => {
             if (report.attendance) {
-                totalAttendanceLastSix += Object.values(report.attendance).filter(status => status === 'presente').length;
+                const reportDate = report.reportDate.toDate ? report.reportDate.toDate() : new Date(report.reportDate);
+                const membersAtReportDate = getMembersAtDate(reportDate);
+                
+                // Conta apenas presenças de membros que estavam no Connect na data do relatório
+                const validAttendance = Object.entries(report.attendance).filter(([memberId, status]) => {
+                    return membersAtReportDate.some(member => member.id === memberId) && status === 'presente';
+                });
+                
+                totalAttendanceLastSix += validAttendance.length;
             }
         });
         
@@ -73,7 +115,7 @@ const ConnectFullReportModal = ({ isOpen, onClose, connect, allMembers, allRepor
                         <div className="space-y-2">
                             {connectReports.map(report => (
                                 <div key={report.id} className="bg-gray-50 p-3 rounded-md border text-sm">
-                                    <p className="font-bold"><Calendar size={14} className="inline mr-1" /> Data: {formatDateToBrazilian(report.reportDate)}</p>
+                                    <p className="font-bold"><Calendar size={14} className="inline mr-1" /> Data: {formatDateToBrazilian(report.reportDate.toDate ? report.reportDate.toDate() : report.reportDate)}</p>
                                     <p>Presentes: {Object.values(report.attendance || {}).filter(s => s === 'presente').length}</p>
                                     <p>Convidados: {report.guests || 0}</p>
                                     <p>Oferta: {(report.offering || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
