@@ -24,6 +24,7 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
         phone: '',
         gender: '',
         connectId: '',
+        isAdmin: false,
         milestones: {
             salvation: { date: '' },
             initialDiscipleship: { date: '' },
@@ -56,6 +57,7 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
                 phone: editingMember.phone || '',
                 gender: editingMember.gender || '',
                 connectId: editingMember.connectId || '',
+                isAdmin: editingMember.isAdmin || false,
                 milestones: {
                     salvation: { date: milestones.salvation?.date ? convertISOToBrazilianDate(milestones.salvation.date) : '' },
                     initialDiscipleship: { date: milestones.initialDiscipleship?.date ? convertISOToBrazilianDate(milestones.initialDiscipleship.date) : '' },
@@ -77,6 +79,7 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
                 phone: '',
                 gender: '',
                 connectId: '',
+                isAdmin: false,
                 milestones: {
                     salvation: { date: '' },
                     initialDiscipleship: { date: '' },
@@ -137,6 +140,12 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
                     if (age < 0 || age > 120) {
                         errors.dob = 'Data de nascimento inválida';
                     }
+                }
+                break;
+            case 'connectId':
+                // Connect é obrigatório para não-admins que têm connects disponíveis
+                if (!isAdmin && (!value || value.trim() === '') && leaderConnects && leaderConnects.length > 0) {
+                    errors.connectId = 'Connect é obrigatório';
                 }
                 break;
             default:
@@ -215,7 +224,7 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
             // Validação completa de todos os campos
             const allErrors = {};
             Object.keys(formData).forEach(key => {
-                if (key !== 'milestones' && key !== 'connectId') {
+                if (key !== 'milestones') {
                     const fieldError = validateField(key, formData[key]);
                     Object.assign(allErrors, fieldError);
                 }
@@ -228,7 +237,10 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
             if (!formData.gender) allErrors.gender = 'Sexo é obrigatório';
             if (!formData.email?.trim()) allErrors.email = 'E-mail é obrigatório';
             
-            // Connect será gerenciado apenas pelo formulário do Connect
+            // Validação do Connect para não-admins
+            if (!isAdmin && (!formData.connectId || formData.connectId.trim() === '') && leaderConnects && leaderConnects.length > 0) {
+                allErrors.connectId = 'Connect é obrigatório';
+            }
             
             setFieldErrors(allErrors);
             
@@ -463,21 +475,56 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Connect Atual</label>
-                        <div className="w-full bg-gray-50 text-gray-700 rounded-md p-2 border border-gray-300">
-                            {formData.connectId ? (
-                                (() => {
-                                    const currentConnect = availableConnects.find(c => c.id === formData.connectId);
-                                    return currentConnect ? `${currentConnect.number} - ${currentConnect.name}` : 'Connect não encontrado';
-                                })()
-                            ) : (
-                                <span className="text-gray-500 italic">Não está em nenhum Connect</span>
-                            )}
-                        </div>
+                        <label htmlFor="connectId" className="block text-sm font-medium text-gray-700 mb-1">
+                            Connect {!isAdmin && availableConnects.length > 0 && <span className="text-red-500">*</span>}
+                        </label>
+                        <select
+                            name="connectId"
+                            id="connectId"
+                            value={formData.connectId}
+                            onChange={handleChange}
+                            className={`w-full bg-gray-100 text-gray-900 rounded-md p-2 border focus:ring-2 ${
+                                fieldErrors.connectId 
+                                    ? 'border-red-500 focus:ring-red-500' 
+                                    : 'border-gray-300 focus:ring-[#DC2626]'
+                            }`}
+                        >
+                            <option value="">
+                                {isAdmin ? 'Selecione um Connect (opcional)' : 'Selecione um Connect'}
+                            </option>
+                            {availableConnects.map(connect => (
+                                <option key={connect.id} value={connect.id}>
+                                    {connect.number} - {connect.name}
+                                </option>
+                            ))}
+                        </select>
+                        {fieldErrors.connectId && <p className="text-red-600 text-sm mt-1">{fieldErrors.connectId}</p>}
                         <p className="text-xs text-gray-500 mt-1">
-                            Para alterar o Connect, use o cadastro do Connect desejado
+                            {isAdmin 
+                                ? 'Administradores podem deixar vazio ou escolher qualquer Connect'
+                                : 'Obrigatório: escolha um dos Connects que você lidera'
+                            }
                         </p>
                     </div>
+                    
+                    {/* Campo isAdmin - visível apenas para administradores */}
+                    {isAdmin && (
+                        <div>
+                            <label className="flex items-center space-x-2">
+                                <input
+                                    type="checkbox"
+                                    name="isAdmin"
+                                    checked={formData.isAdmin}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, isAdmin: e.target.checked }))}
+                                    className="w-4 h-4 text-red-600 bg-gray-100 border-gray-300 rounded focus:ring-red-500 focus:ring-2"
+                                />
+                                <span className="text-sm font-medium text-gray-700">Administrador do Sistema</span>
+                            </label>
+                            <p className="text-xs text-gray-500 mt-1">
+                                Concede acesso total ao sistema (apenas administradores podem alterar)
+                            </p>
+                        </div>
+                    )}
                 </div>
             </fieldset>
 

@@ -8,7 +8,7 @@ const Header = ({ onLogout, onMenuClick }) => {
   return (
     <header className="bg-[#991B1B] px-3 sm:px-4 py-2 sm:py-4 shadow-lg flex items-center justify-between z-10">
         <div className="flex items-center space-x-2 sm:space-x-4 min-w-0 flex-1">
-          <button onClick={onMenuClick} className="text-white md:hidden p-1.5 sm:p-2 rounded-md hover:bg-white/20 flex-shrink-0">
+          <button onClick={onMenuClick} className="text-white p-1.5 sm:p-2 rounded-md hover:bg-white/20 flex-shrink-0">
               <Menu size={20} className="sm:w-6 sm:h-6" />
           </button>
           <img

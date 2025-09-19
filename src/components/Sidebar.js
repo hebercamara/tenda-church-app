@@ -1,32 +1,56 @@
 import React from 'react';
-import { LayoutDashboard, Users, Home, BookOpen, UserCog, X, Network, Upload } from 'lucide-react';
+import { LayoutDashboard, Users, Home, BookOpen, UserCog, X, Network, Upload, GraduationCap, User } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
-const Sidebar = ({ activePage, setActivePage, isOpen, setIsOpen }) => {
-  const { isAdmin } = useAuthStore();
+const Sidebar = ({ activePage, setActivePage, isOpen, setIsOpen, allConnects = [], allCourses = [] }) => {
+  const { isAdmin, currentUserData } = useAuthStore();
+  
+  // Determinar perfis do usuário
+  const isLeader = currentUserData && allConnects.some(c => c.leaderId === currentUserData.id);
+  const isSupervisor = currentUserData && allConnects.some(c => c.supervisorEmail === currentUserData.email);
+  const isTeacher = currentUserData && allCourses.some(c => c.teacherEmail === currentUserData.email);
+  
+  // Determinar se é membro comum (não tem nenhum perfil especial)
+  const isCommonMember = !isAdmin && !isLeader && !isSupervisor && !isTeacher;
   
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'members', label: 'Membros', icon: Users },
-    { id: 'connects', label: 'Connects', icon: Home },
-    { id: 'courses', label: 'Cursos', icon: BookOpen },
-    ...(isAdmin ? [{ id: 'hierarchy', label: 'Hierarquia', icon: Network }] : []),
-    ...(isAdmin ? [{ id: 'bulk-import', label: 'Importação em Massa', icon: Upload }] : []),
-    { id: 'profile', label: 'Meu Perfil', icon: UserCog },
+    // Para membros comuns, mostrar apenas itens básicos
+    // Para outros perfis, mostrar todos os itens específicos
+    ...(isCommonMember ? [] : [
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { id: 'members', label: 'Membros', icon: Users },
+      
+      // Connects - Visível para Admins, Líderes e Supervisores (não para Professores apenas)
+      ...((isAdmin || isLeader || isSupervisor) && !(!isAdmin && !isLeader && !isSupervisor && isTeacher) ? 
+        [{ id: 'connects', label: 'Connects', icon: Home }] : []),
+      
+      // Cursos - Visível para Admins e Professores (não para Líderes apenas)
+      ...((isAdmin || isTeacher) && !(!isAdmin && !isTeacher && (isLeader || isSupervisor)) ? 
+        [{ id: 'courses', label: 'Cursos', icon: BookOpen }] : []),
+      
+      // Meus Alunos - Visível apenas para Professores
+      ...(isTeacher && !isAdmin ? [{ id: 'my-students', label: 'Meus Alunos', icon: GraduationCap }] : []),
+      
+      // Hierarquia - Visível para Admins, Líderes e Supervisores
+      ...((isAdmin || isLeader || isSupervisor) ? [{ id: 'hierarchy', label: 'Hierarquia', icon: Network }] : []),
+    ]),
   ].filter(Boolean);
+
+  // Item separado para Minha Área - sempre visível para todos os usuários
+  const personalAreaItem = { id: 'personal-portal', label: 'Minha Área', icon: User };
 
   return (
     <>
-      {/* Overlay para mobile */}
+      {/* Overlay para todas as telas */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden" 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40" 
           onClick={() => setIsOpen(false)}
         />
       )}
       
       {/* Sidebar */}
-      <div className={`fixed left-0 top-0 h-full w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out z-50 md:relative md:translate-x-0 md:shadow-none ${
+      <div className={`fixed left-0 top-0 h-full w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${
         isOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
         <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200">
@@ -38,31 +62,50 @@ const Sidebar = ({ activePage, setActivePage, isOpen, setIsOpen }) => {
           </div>
           <button 
             onClick={() => setIsOpen(false)}
-            className="md:hidden p-1 rounded-md hover:bg-gray-100"
+            className="p-1 rounded-md hover:bg-gray-100"
           >
             <X size={18} className="sm:w-5 sm:h-5 text-gray-600" />
           </button>
         </div>
         
-        <nav className="mt-4 sm:mt-6">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActivePage(item.id);
-                  setIsOpen(false); // Fecha o sidebar no mobile após selecionar
-                }}
-                className={`w-full flex items-center space-x-3 px-3 sm:px-4 py-2.5 sm:py-3 text-left hover:bg-gray-100 transition-colors ${
-                  activePage === item.id ? 'bg-[#991B1B] text-white hover:bg-[#991B1B]' : 'text-gray-700'
-                }`}
-              >
-                <Icon size={18} className="sm:w-5 sm:h-5" />
-                <span className="font-medium text-sm sm:text-base">{item.label}</span>
-              </button>
-            );
-          })}
+        <nav className="mt-4 sm:mt-6 flex flex-col flex-1">
+          {/* Itens principais do menu */}
+          <div className="flex-1">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActivePage(item.id);
+                    setIsOpen(false); // Fecha o sidebar no mobile após selecionar
+                  }}
+                  className={`w-full flex items-center space-x-3 px-3 sm:px-4 py-2.5 sm:py-3 text-left hover:bg-gray-100 transition-colors ${
+                    activePage === item.id ? 'bg-[#991B1B] text-white hover:bg-[#991B1B]' : 'text-gray-700'
+                  }`}
+                >
+                  <Icon size={18} className="sm:w-5 sm:h-5" />
+                  <span className="font-medium text-sm sm:text-base">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Separador e item "Minha Área" no final */}
+          <div className="border-t border-gray-200 mt-4 pt-4 mb-4">
+            <button
+              onClick={() => {
+                setActivePage(personalAreaItem.id);
+                setIsOpen(false);
+              }}
+              className={`w-full flex items-center space-x-3 px-3 sm:px-4 py-2.5 sm:py-3 text-left hover:bg-gray-100 transition-colors ${
+                activePage === personalAreaItem.id ? 'bg-[#991B1B] text-white hover:bg-[#991B1B]' : 'text-gray-700'
+              }`}
+            >
+              <personalAreaItem.icon size={18} className="sm:w-5 sm:h-5" />
+              <span className="font-medium text-sm sm:text-base">{personalAreaItem.label}</span>
+            </button>
+          </div>
         </nav>
       </div>
     </>

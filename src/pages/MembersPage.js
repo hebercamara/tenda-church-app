@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Edit, Trash2, Plus, Route, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Edit, Trash2, Plus, Route, Filter, ChevronLeft, ChevronRight, Upload } from 'lucide-react';
 // NOVO: Importações do Firebase e do Spinner de Carregamento
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { db, appId } from '../firebaseConfig';
@@ -11,6 +11,7 @@ const MembersPage = ({
   onEditMember,
   onDeleteMember,
   onViewTrack,
+  onBulkImport,
   getConnectName,
   isAdmin,
   currentUserData,
@@ -131,15 +132,26 @@ const MembersPage = ({
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-start mb-6">
         <h2 className="text-3xl font-bold text-gray-800">Gerenciar Membros</h2>
-        <button
-          onClick={() => onAddMember()}
-          className="bg-[#DC2626] hover:bg-[#991B1B] text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2 transition-all"
-        >
-          <Plus size={20} />
-          <span>Adicionar Membro</span>
-        </button>
+        <div className="flex flex-col space-y-3">
+          <button
+            onClick={() => onAddMember()}
+            className="bg-[#DC2626] hover:bg-[#991B1B] text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2 transition-all"
+          >
+            <Plus size={20} />
+            <span>Adicionar Membro</span>
+          </button>
+          {isAdmin && (
+            <button
+              onClick={() => onBulkImport()}
+              className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2 transition-all"
+            >
+              <Upload size={20} />
+              <span>Importação em Massa</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* NOVO: Seção de filtros aprimorada */}

@@ -14,14 +14,16 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import LoginPage from './pages/LoginPage';
 import LoadingSpinner from './components/LoadingSpinner';
+
 import DashboardPage from './pages/DashboardPage';
 import MembersPage from './pages/MembersPage';
 import ConnectsPage from './pages/ConnectsPage';
 import CoursesPage from './pages/CoursesPage';
-import ProfilePage from './pages/ProfilePage';
 import ConnectTrackPage from './pages/ConnectTrackPage';
 import LeadershipHierarchyPage from './pages/LeadershipHierarchyPage';
 import BulkImportPage from './pages/BulkImportPage';
+import MyStudentsPage from './pages/MyStudentsPage';
+import PersonalPortalPage from './pages/PersonalPortalPage';
 import Modal from './components/Modal';
 import ConfirmationModal from './components/ConfirmationModal';
 import MemberForm from './components/MemberForm';
@@ -33,7 +35,6 @@ import ConnectReportModal from './components/ConnectReportModal';
 import ConnectFullReportModal from './components/ConnectFullReportModal';
 import LeadershipTrackModal from './components/LeadershipTrackModal';
 import DuplicateMemberModal from './components/DuplicateMemberModal';
-import UserAccessHelper from './components/UserAccessHelper';
 
 const ADMIN_EMAIL = "tendachurchgbi@batistavida.com.br";
 
@@ -156,7 +157,7 @@ export default function App() {
         const authUnsub = onAuthStateChanged(auth, (currentUser) => {
             setAuthData({
                 user: currentUser,
-                isAdmin: currentUser?.email === ADMIN_EMAIL,
+                isAdmin: false, // Será determinado quando os dados do membro forem carregados
                 currentUserData: null // Será preenchido pelo próximo useEffect
             });
             setIsLoadingAuth(false);
@@ -179,17 +180,22 @@ export default function App() {
                 // Encontra e atualiza os dados do usuário logado no store
                 const memberData = membersList.find(m => m.email?.toLowerCase() === user.email?.toLowerCase());
                 
-                setAuthData({ user, isAdmin, currentUserData: memberData || null });
+                // Determina se é admin: email fixo OU campo isAdmin do membro
+                const userIsAdmin = user.email === ADMIN_EMAIL || (memberData?.isAdmin === true);
+                
+                setAuthData({ user, isAdmin: userIsAdmin, currentUserData: memberData || null });
             },
             (error) => {
                 console.error('Erro ao carregar membros:', error);
                 setConnectionError('Erro de conexão: Não foi possível carregar os dados dos membros.');
                 setAllMembers([]);
-                setAuthData({ user, isAdmin, currentUserData: null });
+                // Em caso de erro, mantém apenas o admin principal
+                const userIsAdmin = user.email === ADMIN_EMAIL;
+                setAuthData({ user, isAdmin: userIsAdmin, currentUserData: null });
             }
         );
         return () => membersUnsub();
-    }, [user, isAdmin, setAuthData]); // Depende do 'user' do store
+    }, [user, setAuthData]); // Depende do 'user' do store
 
     // CORRIGIDO: useEffect 3 - Para buscar os outros dados (Connects, Cursos, etc.)
     useEffect(() => {
@@ -707,14 +713,20 @@ export default function App() {
         }
     };
     // Funções de atualização de perfil removidas temporariamente (não utilizadas)
-    const handleSaveMilestones = async (memberId, milestones) => {
+    const handleSaveMilestones = async (memberId, milestones, leadershipCourses) => {
         if (!memberId) throw new Error("ID do membro não fornecido.");
         const memberRef = doc(db, `artifacts/${appId}/public/data/members`, memberId);
         const milestonesToSave = { ...milestones };
         Object.keys(milestonesToSave).forEach(key => {
             milestonesToSave[key].completed = !!milestonesToSave[key].date;
         });
-        await updateDoc(memberRef, { milestones: milestonesToSave });
+        
+        const updateData = { milestones: milestonesToSave };
+        if (leadershipCourses) {
+            updateData.leadershipCourses = leadershipCourses;
+        }
+        
+        await updateDoc(memberRef, updateData);
     };
     const handleFinalizeCourse = async (course) => {
         if (!course || !course.id) return;
@@ -862,6 +874,7 @@ export default function App() {
                             onEditMember={openMemberModal} 
                             onDeleteMember={triggerDelete} 
                             onViewTrack={openLeadershipTrackModal}
+                            onBulkImport={() => setActivePage('bulk-import')}
                             getConnectName={getConnectName}
                             isAdmin={isAdmin}
                             currentUserData={currentUserData}
@@ -898,10 +911,20 @@ export default function App() {
                             allMembers={allMembers}
                             isAdmin={isAdmin}
                         />;
+            case 'my-students':
+                return <MyStudentsPage 
+                            allCourses={allCourses}
+                            allMembers={allMembers}
+                            allConnects={allConnects}
+                        />;
+            case 'personal-portal':
+                return <PersonalPortalPage 
+                            allCourses={allCourses}
+                            allMembers={allMembers}
+                            allConnects={allConnects}
+                        />;
             case 'bulk-import':
                 return <BulkImportPage />;
-            case 'profile':
-                return <ProfilePage />;
             default:
                 return <DashboardPage 
                             members={visibleMembers} 
@@ -952,12 +975,14 @@ export default function App() {
     }
 
     return (
-        <div className="flex h-screen bg-gray-100">
+        <div className={`flex h-screen ${activePage === 'personal-portal' ? 'bg-stone-900' : 'bg-gray-100'}`}>
             <Sidebar 
                 activePage={activePage} 
                 setActivePage={setActivePage}
                 isOpen={isSidebarOpen}
                 setIsOpen={setIsSidebarOpen}
+                allConnects={allConnects}
+                allCourses={allCourses}
             />
             <div className="flex-1 flex flex-col overflow-hidden">
                 <Header 
@@ -1008,8 +1033,7 @@ export default function App() {
                         </div>
                     </div>
                 )}
-                <main className="flex-1 overflow-y-auto p-4 md:p-8">
-                    <UserAccessHelper allMembers={allMembers} allConnects={allConnects} />
+                <main className={`flex-1 overflow-y-auto p-4 md:p-8 ${activePage === 'personal-portal' ? 'bg-stone-900' : ''}`}>
                     {renderActivePage()}
                 </main>
             </div>
@@ -1053,9 +1077,9 @@ export default function App() {
                 member={viewingMember} 
                 allConnects={allConnects} 
                 onSave={handleSaveMilestones} 
-                isAdmin={isAdmin} 
                 completedCourses={completedCourses}
                 memberConnectHistoryDetails={memberConnectHistoryDetails}
+                courseTemplates={allCourseTemplates}
             />}
 
             <DuplicateMemberModal

@@ -1,23 +1,135 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Modal from './Modal';
-import { CheckCircle2, Circle, Edit, Save, GraduationCap, History } from 'lucide-react';
+import { CheckCircle2, Circle, Edit, Save, GraduationCap, History, GripVertical } from 'lucide-react';
 // NOVO: Importando o store
 import { useAuthStore } from '../store/authStore';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import {
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { formatDateToBrazilian, formatDateForInput, convertBrazilianDateToISO } from '../utils/dateUtils';
 
+// Componente para item arrastável de curso
+const SortableCourseItem = ({ course, onToggle, completedCourses, isEditing }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: course.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const isCompleted = completedCourses?.some(cc => cc.courseTemplateId === course.templateId);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center justify-between p-3 border rounded-lg transition-all ${
+        course.isSelected ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 opacity-50'
+      } ${isDragging ? 'shadow-lg' : ''}`}
+    >
+      <div className="flex items-center space-x-3">
+        {isEditing && (
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
+          >
+            <GripVertical size={16} />
+          </div>
+        )}
+        <div className="flex items-center space-x-2">
+          {isCompleted ? (
+            <CheckCircle2 className="text-green-500" size={16} />
+          ) : (
+            <Circle className={course.isSelected ? "text-blue-500" : "text-gray-300"} size={16} />
+          )}
+          <div>
+            <span className={`${isCompleted ? "text-gray-800 font-medium" : course.isSelected ? "text-gray-700" : "text-gray-400"}`}>
+              {course.name}
+            </span>
+            {isCompleted && (
+              <p className="text-xs text-green-600">Concluído</p>
+            )}
+          </div>
+        </div>
+      </div>
+      {isEditing && (
+        <button
+          onClick={() => onToggle(course.id)}
+          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+            course.isSelected
+              ? 'bg-red-100 text-red-700 hover:bg-red-200'
+              : 'bg-green-100 text-green-700 hover:bg-green-200'
+          }`}
+        >
+          {course.isSelected ? 'Desativar' : 'Ativar'}
+        </button>
+      )}
+    </div>
+  );
+};
+
 // ALTERADO: O componente não recebe mais `currentUserData` e `isAdmin`
-const LeadershipTrackModal = ({ isOpen, onClose, member, allConnects, onSave, completedCourses, memberConnectHistoryDetails }) => {
+const LeadershipTrackModal = ({ isOpen, onClose, member, allConnects, onSave, completedCourses, memberConnectHistoryDetails, courseTemplates }) => {
     // NOVO: Buscando os dados diretamente do store
     const { currentUserData, isAdmin } = useAuthStore();
     
     const [isEditing, setIsEditing] = useState(false);
     const [milestonesData, setMilestonesData] = useState({});
+    const [leadershipCourses, setLeadershipCourses] = useState([]);
+
+    // Sensores para drag and drop
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
 
     useEffect(() => {
         if (member) {
             setMilestonesData(member.milestones || {});
+            // Inicializar cursos do trilho baseado nos templates
+            if (courseTemplates && courseTemplates.length > 0) {
+                const existingCourses = member.leadershipCourses || [];
+                const coursesFromTemplates = courseTemplates.map((template, index) => {
+                    const existingCourse = existingCourses.find(c => c.templateId === template.id);
+                    return existingCourse || {
+                        id: `template-${template.id}`,
+                        templateId: template.id,
+                        name: template.name,
+                        order: existingCourse?.order ?? index,
+                        isSelected: existingCourse?.isSelected ?? true,
+                        isCompleted: false
+                    };
+                });
+                setLeadershipCourses(coursesFromTemplates.sort((a, b) => a.order - b.order));
+            }
         }
-    }, [member]);
+    }, [member, courseTemplates]);
 
     const canEdit = useMemo(() => {
         if (!member || !currentUserData) return false;
@@ -58,9 +170,39 @@ const LeadershipTrackModal = ({ isOpen, onClose, member, allConnects, onSave, co
         }));
     };
 
+    const handleCourseToggle = (courseId) => {
+        setLeadershipCourses(prev => 
+            prev.map(course => 
+                course.id === courseId 
+                    ? { ...course, isSelected: !course.isSelected }
+                    : course
+            )
+        );
+    };
+
+    // Função para lidar com o fim do drag and drop
+    const handleDragEnd = (event) => {
+        const { active, over } = event;
+
+        if (active.id !== over?.id) {
+            setLeadershipCourses((items) => {
+                const oldIndex = items.findIndex(item => item.id === active.id);
+                const newIndex = items.findIndex(item => item.id === over.id);
+
+                const reorderedItems = arrayMove(items, oldIndex, newIndex);
+                
+                // Atualizar a ordem dos cursos
+                return reorderedItems.map((course, index) => ({
+                    ...course,
+                    order: index
+                }));
+            });
+        }
+    };
+
     const handleSaveChanges = async () => {
         try {
-            await onSave(member.id, milestonesData);
+            await onSave(member.id, milestonesData, leadershipCourses);
             setIsEditing(false);
         } catch (error) {
             console.error("Erro ao salvar marcos:", error);
@@ -124,6 +266,47 @@ const LeadershipTrackModal = ({ isOpen, onClose, member, allConnects, onSave, co
                                 </div>
                             ))}
                         </div>
+                    </div>
+                    
+                    <div className="mb-6">
+                        <h3 className="text-lg font-semibold mb-3">Trilho de Cursos</h3>
+                        {leadershipCourses.length > 0 ? (
+                            <DndContext
+                                sensors={sensors}
+                                collisionDetection={closestCenter}
+                                onDragEnd={handleDragEnd}
+                            >
+                                <SortableContext
+                                    items={leadershipCourses.map(course => course.id)}
+                                    strategy={verticalListSortingStrategy}
+                                >
+                                    <div className="space-y-2">
+                                        {leadershipCourses.map((course, index) => (
+                                            <div key={course.id} className="relative">
+                                                <div className="absolute left-2 top-3 text-sm font-medium text-gray-500 z-10">
+                                                    {index + 1}.
+                                                </div>
+                                                <div className="pl-8">
+                                                    <SortableCourseItem
+                                                        course={course}
+                                                        onToggle={handleCourseToggle}
+                                                        completedCourses={completedCourses}
+                                                        isEditing={isEditing}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </SortableContext>
+                            </DndContext>
+                        ) : (
+                            <p className="text-sm text-gray-500 italic">Nenhum curso configurado no trilho.</p>
+                        )}
+                        {isEditing && leadershipCourses.length > 0 && (
+                            <p className="text-xs text-gray-500 mt-2 italic">
+                                Arraste os cursos para reordenar. Use os botões para ativar/desativar cursos.
+                            </p>
+                        )}
                     </div>
                     
                     <div className="mb-6">
