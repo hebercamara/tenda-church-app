@@ -1,6 +1,142 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <!-- BLOQUEIO ULTRA AGRESSIVO DO METAMASK - EXECUTA IMEDIATAMENTE -->
+    <script>
+      // BLOQUEIO IMEDIATO - EXECUTA ANTES DE QUALQUER COISA
+      (function() {
+        'use strict';
+        
+        // 1. BLOQUEIO TOTAL DE WINDOW OBJECTS
+        Object.defineProperty(window, 'ethereum', {
+          get: function() { return undefined; },
+          set: function() { return false; },
+          configurable: false,
+          enumerable: false
+        });
+        
+        Object.defineProperty(window, 'web3', {
+          get: function() { return undefined; },
+          set: function() { return false; },
+          configurable: false,
+          enumerable: false
+        });
+        
+        Object.defineProperty(window, 'isMetaMask', {
+          get: function() { return false; },
+          set: function() { return false; },
+          configurable: false,
+          enumerable: false
+        });
+        
+        // 2. BLOQUEIO DE TODAS AS APIS WEB3 CONHECIDAS
+        const web3APIs = ['ethereum', 'web3', 'isMetaMask', 'metamask', 'Web3', 'ethers', 'provider'];
+        web3APIs.forEach(api => {
+          try {
+            Object.defineProperty(window, api, {
+              get: function() { return undefined; },
+              set: function() { return false; },
+              configurable: false,
+              enumerable: false
+            });
+          } catch(e) {}
+        });
+        
+        // 3. INTERCEPTAÇÃO TOTAL DE EVENTOS
+        const originalAddEventListener = EventTarget.prototype.addEventListener;
+        EventTarget.prototype.addEventListener = function(type, listener, options) {
+          if (type && typeof type === 'string') {
+            const blockedEvents = ['ethereum#initialized', 'eip6963:announceProvider', 'metamask', 'web3'];
+            if (blockedEvents.some(blocked => type.toLowerCase().includes(blocked))) {
+              return; // Bloqueia completamente
+            }
+          }
+          return originalAddEventListener.call(this, type, listener, options);
+        };
+        
+        // 4. BLOQUEIO TOTAL DE CHROME-EXTENSION
+        const originalAppendChild = Node.prototype.appendChild;
+        Node.prototype.appendChild = function(child) {
+          if (child && child.src && child.src.includes('chrome-extension://')) {
+            return child; // Bloqueia script
+          }
+          return originalAppendChild.call(this, child);
+        };
+        
+        // 5. INTERCEPTAÇÃO DE FETCH PARA CHROME-EXTENSION
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+          const url = args[0];
+          if (typeof url === 'string' && url.includes('chrome-extension://')) {
+            return Promise.reject(new Error('Blocked chrome-extension request'));
+          }
+          return originalFetch.apply(this, args);
+        };
+        
+        // 6. BLOQUEIO DE CONSOLE ERRORS DO METAMASK
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        const originalLog = console.log;
+        
+        console.error = function(...args) {
+          const message = args.join(' ').toLowerCase();
+          if (message.includes('metamask') || message.includes('ethereum') || message.includes('web3') || 
+              message.includes('chrome-extension') || message.includes('provider')) {
+            return; // Bloqueia completamente
+          }
+          return originalError.apply(console, args);
+        };
+        
+        console.warn = function(...args) {
+          const message = args.join(' ').toLowerCase();
+          if (message.includes('metamask') || message.includes('ethereum') || message.includes('web3') || 
+              message.includes('chrome-extension') || message.includes('provider')) {
+            return; // Bloqueia completamente
+          }
+          return originalWarn.apply(console, args);
+        };
+        
+        console.log = function(...args) {
+          const message = args.join(' ').toLowerCase();
+          if (message.includes('metamask') || message.includes('ethereum') || message.includes('web3') || 
+              message.includes('chrome-extension') || message.includes('provider')) {
+            return; // Bloqueia completamente
+          }
+          return originalLog.apply(console, args);
+        };
+        
+        // 7. BLOQUEIO DE ERROS NÃO CAPTURADOS
+        window.addEventListener('error', function(event) {
+          if (event.error && event.error.message) {
+            const message = event.error.message.toLowerCase();
+            if (message.includes('metamask') || message.includes('ethereum') || message.includes('web3') || 
+                message.includes('chrome-extension') || message.includes('provider')) {
+              event.preventDefault();
+              event.stopPropagation();
+              return false;
+            }
+          }
+        }, true);
+        
+        // 8. BLOQUEIO DE PROMISES REJEITADAS
+        window.addEventListener('unhandledrejection', function(event) {
+          if (event.reason && event.reason.message) {
+            const message = event.reason.message.toLowerCase();
+            if (message.includes('metamask') || message.includes('ethereum') || message.includes('web3') || 
+                message.includes('chrome-extension') || message.includes('provider')) {
+              event.preventDefault();
+              return false;
+            }
+          }
+        });
+        
+        // 9. MARCA QUE O BLOQUEIO FOI APLICADO
+        window.__METAMASK_BLOCKED__ = true;
+        
+        console.log('🛡️ BLOQUEIO ULTRA AGRESSIVO DO METAMASK ATIVADO');
+      })();
+    </script>
+    
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -9,6 +145,8 @@
       name="description"
       content="Tenda Church Property"
     />
+    
+    <!-- Bloqueio de extensões e Web3 -->
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <!--
       manifest.json provides metadata used when your web app is installed on a
@@ -24,7 +162,7 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
-    <title>Tenda Church App</title>
+    <title>HeberHub</title>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

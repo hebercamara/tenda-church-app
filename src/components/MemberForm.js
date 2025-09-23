@@ -10,7 +10,7 @@ import { convertBrazilianDateToISO, convertISOToBrazilianDate } from '../utils/d
 const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, onCheckDuplicate }) => {
     // NOVO: Buscando o status de admin diretamente do store
     const { isAdmin } = useAuthStore();
-    const { isLoading, setLoading } = useLoadingState();
+    const { isLoading, setLoading, setIdle } = useLoadingState();
 
     const [formData, setFormData] = useState({
         name: '',
@@ -111,24 +111,17 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
                 }
                 break;
             case 'street':
-                if (!value || value.trim() === '') {
-                    errors.street = 'Endereço é obrigatório';
-                }
+                // Endereço não é mais obrigatório
                 break;
             case 'neighborhood':
-                if (!value || value.trim() === '') {
-                    errors.neighborhood = 'Bairro é obrigatório';
-                }
+                // Bairro não é mais obrigatório
                 break;
             case 'city':
-                if (!value || value.trim() === '') {
-                    errors.city = 'Município é obrigatório';
-                }
+                // Município não é mais obrigatório
                 break;
             case 'zipCode':
-                if (!value || value.trim() === '') {
-                    errors.zipCode = 'CEP é obrigatório';
-                } else if (!/^\d{5}-?\d{3}$/.test(value.replace(/\D/g, ''))) {
+                // CEP não é mais obrigatório, mas se preenchido deve ter formato válido
+                if (value && value.trim() !== '' && !/^\d{5}-?\d{3}$/.test(value.replace(/\D/g, ''))) {
                     errors.zipCode = 'CEP deve ter 8 dígitos';
                 }
                 break;
@@ -235,7 +228,7 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
             if (!formData.dob) allErrors.dob = 'Data de nascimento é obrigatória';
             if (!formData.phone?.trim()) allErrors.phone = 'Telefone é obrigatório';
             if (!formData.gender) allErrors.gender = 'Sexo é obrigatório';
-            if (!formData.email?.trim()) allErrors.email = 'E-mail é obrigatório';
+            // E-mail não é mais obrigatório
             
             // Validação do Connect para não-admins
             if (!isAdmin && (!formData.connectId || formData.connectId.trim() === '') && leaderConnects && leaderConnects.length > 0) {
@@ -246,6 +239,7 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
             
             if (Object.keys(allErrors).length > 0) {
                 setError('Por favor, corrija os erros nos campos destacados.');
+                setIdle(); // Restaura o botão de salvar
                 return;
             }
 
@@ -274,14 +268,14 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
             if (!editingMember) {
                 await onCheckDuplicate(finalData);
                 // Reset loading state após verificação de duplicata
-                setLoading(false);
+                setIdle();
             } else {
                 onSave(finalData, editingMember);
-                setLoading(false);
+                setIdle();
             }
         } catch (error) {
             setError('Erro ao salvar membro. Tente novamente.');
-            setLoading(false);
+            setIdle();
         }
     };
 

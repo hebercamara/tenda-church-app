@@ -21,6 +21,41 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
     const [currentDateIndex, setCurrentDateIndex] = useState(0);
     const [visibleDatesCount, setVisibleDatesCount] = useState(3);
 
+    // Função para obter o nome conhecido do professor
+    const getTeacherKnownName = () => {
+        const teacher = members.find(m => m.id === course.teacherId);
+        if (!teacher) return course.teacherName || 'Professor não encontrado';
+        
+        // Se knownBy estiver vazio, usa o primeiro nome
+        return teacher.knownBy || teacher.name?.split(' ')[0] || teacher.name || 'Professor';
+    };
+
+    // Função para obter o nome conhecido dos alunos com lógica de sobrenome para duplicatas
+    const getStudentKnownName = (student) => {
+        const member = members.find(m => m.id === student.id);
+        if (!member) return student.name || 'Aluno não encontrado';
+        
+        // Obter o nome conhecido ou primeiro nome como fallback
+        const knownName = member.knownBy || member.name?.split(' ')[0] || member.name || 'Aluno';
+        
+        // Verificar se há duplicatas do mesmo nome conhecido entre os alunos inscritos
+        const studentsWithSameName = draftEnrolledStudents.filter(s => {
+            const otherMember = members.find(m => m.id === s.id);
+            if (!otherMember || s.id === student.id) return false;
+            const otherKnownName = otherMember.knownBy || otherMember.name?.split(' ')[0] || otherMember.name || 'Aluno';
+            return otherKnownName === knownName;
+        });
+        
+        // Se há duplicatas, adicionar o último sobrenome
+        if (studentsWithSameName.length > 0) {
+            const nameParts = member.name?.split(' ') || [];
+            const lastName = nameParts[nameParts.length - 1];
+            return lastName && lastName !== knownName ? `${knownName} ${lastName}` : knownName;
+        }
+        
+        return knownName;
+    };
+
     // Funções de cálculo
     const calculateFinalGrade = useCallback((student) => {
         const scores = student.scores;
@@ -77,6 +112,18 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
         
         return () => window.removeEventListener('resize', updateVisibleDatesCount);
     }, []);
+
+    // Salvamento automático quando há mudanças
+    useEffect(() => {
+        if (hasUnsavedChanges && draftEnrolledStudents.length > 0) {
+            const timeoutId = setTimeout(() => {
+                onSaveStudents(course.id, draftEnrolledStudents);
+                setHasUnsavedChanges(false);
+            }, 1000); // Salva após 1 segundo de inatividade
+
+            return () => clearTimeout(timeoutId);
+        }
+    }, [hasUnsavedChanges, draftEnrolledStudents, course.id, onSaveStudents]);
 
     useEffect(() => {
         if (course && isOpen) {
@@ -197,11 +244,7 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
         onSaveAttendance(course.id, selectedDate, newStatuses);
     };
 
-    const handleSaveChanges = () => {
-        onSaveStudents(course.id, draftEnrolledStudents);
-        setHasUnsavedChanges(false);
-        alert("Alunos e notas salvos com sucesso!");
-    };
+
 
     if (!isOpen) return null;
 
@@ -215,8 +258,8 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
                 <div className="flex-shrink-0">
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <h2 className="text-2xl font-bold text-gray-900">Gerir Curso: {course.name}</h2>
-                            <p className="text-gray-600 mt-1">Professor: {course.teacherName}</p>
+                            <h2 className="text-xl font-bold text-gray-900">{course.name}</h2>
+                            <p className="text-gray-600 mt-1">Professor: {getTeacherKnownName()}</p>
                         </div>
                         <button
                             onClick={onClose}
@@ -256,7 +299,7 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
                                 <div className="space-y-2 overflow-y-auto h-full pr-2">
                                     {draftEnrolledStudents.map(student => (
                                         <div key={student.id} className="flex justify-between items-center bg-blue-50 p-3 rounded-md space-x-2">
-                                            <span className="flex-1 font-medium">{student.name}</span>
+                                            <span className="flex-1 font-medium">{getStudentKnownName(student)}</span>
                                             <button 
                                                 onClick={() => handleUnenroll(student.id)} 
                                                 className="text-sm bg-red-500 hover:bg-red-600 text-white p-2 rounded-md transition-colors"
@@ -315,7 +358,7 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
                                 <h3 className="text-lg font-semibold text-gray-800 mb-3 flex-shrink-0">Registo de Presença - {selectedDate && formatDateToBrazilian(new Date(attendanceRecords.find(r=>r.id===selectedDate).date.seconds*1000))}</h3>
                                 <div className="space-y-2 overflow-y-auto flex-grow pr-2">{draftEnrolledStudents.map(student => (
                                     <div key={student.id} className="flex justify-between items-center bg-gray-50 p-2 rounded-md">
-                                        <span>{student.name}</span>
+                                        <span>{getStudentKnownName(student)}</span>
                                         <div className="flex space-x-1">
                                             <button onClick={()=>handleAttendanceChange(student.id, 'presente')} className={`p-1 rounded ${currentAttendance[student.id] === 'presente' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500 hover:bg-green-400'}`}><Check size={16}/></button>
                                             <button onClick={()=>handleAttendanceChange(student.id, 'ausente')} className={`p-1 rounded ${currentAttendance[student.id] === 'ausente' ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-500 hover:bg-red-400'}`}><X size={16}/></button>
@@ -345,7 +388,7 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
                                         const status = getStudentStatus(student);
                                         return (
                                         <tr key={student.id} className="border-b">
-                                            <td className="p-2 font-medium">{student.name}</td>
+                                            <td className="p-2 font-medium">{getStudentKnownName(student)}</td>
                                             {Array.from({ length: assessment?.tests?.count || 0 }).map((_, i) => <td key={`t-grade-${i}`} className="p-1 text-center"><input type="number" value={student.scores.tests?.[i] || ''} onChange={(e) => handleScoreChange(student.id, 'tests', i, e.target.value)} className="w-16 text-center bg-gray-50 rounded border border-gray-300"/></td>)}
                                             {Array.from({ length: assessment?.assignments?.count || 0 }).map((_, i) => <td key={`a-grade-${i}`} className="p-1 text-center"><input type="number" value={student.scores.assignments?.[i] || ''} onChange={(e) => handleScoreChange(student.id, 'assignments', i, e.target.value)} className="w-16 text-center bg-gray-50 rounded border border-gray-300"/></td>)}
                                             {Array.from({ length: assessment?.activities?.count || 0 }).map((_, i) => <td key={`ac-grade-${i}`} className="p-1 text-center"><input type="checkbox" checked={student.scores.activities?.[i] || false} onChange={(e) => handleScoreChange(student.id, 'activities', i, e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-red-600 focus:ring-red-500"/></td>)}
@@ -360,15 +403,7 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
                     )}
                 </div>
 
-                <div className="flex-shrink-0 flex justify-between items-center pt-6 mt-4 border-t">
-                    {hasUnsavedChanges ? (
-                        <button onClick={handleSaveChanges} className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700">
-                            <Save size={18}/>
-                            <span>Salvar Alterações de Alunos/Notas</span>
-                        </button>
-                    ) : <div/>}
-                    <button type="button" onClick={onClose} className="px-6 py-2 rounded-md bg-gray-600 text-white hover:bg-gray-700 transition-all">Fechar</button>
-                </div>
+
             </div>
         </Modal>
     );

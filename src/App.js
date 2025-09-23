@@ -368,9 +368,12 @@ export default function App() {
                         }
                     }
 
+                    // Obter nome conhecido do membro
+                    const knownName = member.knownBy || member.name?.split(' ')[0] || member.name || 'Membro';
+                    
                     alerts.push({
                         memberId: member.id,
-                        memberName: member.name,
+                        memberName: knownName,
                         connectId: connectId,
                         absences: totalConsecutiveAbsences,
                         status: totalConsecutiveAbsences >= 6 ? 'inactive' : 'alert'

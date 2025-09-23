@@ -130,6 +130,30 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
     const [offering, setOffering] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
+    // Função para obter o nome conhecido dos membros com lógica de sobrenome para duplicatas
+    const getMemberKnownName = (member, allConnectMembers) => {
+        if (!member) return 'Membro não encontrado';
+        
+        // Obter o nome conhecido ou primeiro nome como fallback
+        const knownName = member.knownBy || member.name?.split(' ')[0] || member.name || 'Membro';
+        
+        // Verificar se há duplicatas do mesmo nome conhecido entre os membros do Connect
+        const membersWithSameName = allConnectMembers.filter(m => {
+            if (!m || m.id === member.id) return false;
+            const otherKnownName = m.knownBy || m.name?.split(' ')[0] || m.name || 'Membro';
+            return otherKnownName === knownName;
+        });
+        
+        // Se há duplicatas, adicionar o último sobrenome
+        if (membersWithSameName.length > 0) {
+            const nameParts = member.name?.split(' ') || [];
+            const lastName = nameParts[nameParts.length - 1];
+            return lastName && lastName !== knownName ? `${knownName} ${lastName}` : knownName;
+        }
+        
+        return knownName;
+    };
+
     const connectMembers = useMemo(() => {
         if (!connect || !selectedDate) return [];
         
@@ -298,7 +322,7 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
                                 <div className="space-y-2">
                                     {connectMembers.map(member => (
                                         <div key={member.id} className="flex justify-between items-center bg-gray-50 p-2 rounded-md">
-                                            <span>{member.name}</span>
+                                            <span>{getMemberKnownName(member, connectMembers)}</span>
                                             <div className="flex space-x-2">
                                                 <button onClick={() => handleAttendanceChange(member.id, 'presente')} className={`px-3 py-1 text-sm rounded-md ${attendance[member.id] === 'presente' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-green-200'}`}>Presente</button>
                                                 <button onClick={() => handleAttendanceChange(member.id, 'ausente')} className={`px-3 py-1 text-sm rounded-md ${attendance[member.id] === 'ausente' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-red-200'}`}>Ausente</button>

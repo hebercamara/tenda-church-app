@@ -5,6 +5,30 @@ import { formatDateToBrazilian } from '../utils/dateUtils';
 
 const ConnectFullReportModal = ({ isOpen, onClose, connect, allMembers, allReports }) => {
 
+    // Função para obter o nome conhecido dos membros com lógica de sobrenome para duplicatas
+    const getMemberKnownName = (member, allConnectMembers) => {
+        if (!member) return 'Membro não encontrado';
+        
+        // Obter o nome conhecido ou primeiro nome como fallback
+        const knownName = member.knownBy || member.name?.split(' ')[0] || member.name || 'Membro';
+        
+        // Verificar se há duplicatas do mesmo nome conhecido entre os membros do Connect
+        const membersWithSameName = allConnectMembers.filter(m => {
+            if (!m || m.id === member.id) return false;
+            const otherKnownName = m.knownBy || m.name?.split(' ')[0] || m.name || 'Membro';
+            return otherKnownName === knownName;
+        });
+        
+        // Se há duplicatas, adicionar o último sobrenome
+        if (membersWithSameName.length > 0) {
+            const nameParts = member.name?.split(' ') || [];
+            const lastName = nameParts[nameParts.length - 1];
+            return lastName && lastName !== knownName ? `${knownName} ${lastName}` : knownName;
+        }
+        
+        return knownName;
+    };
+
     const reportData = useMemo(() => {
         if (!connect) return null;
 
@@ -105,7 +129,7 @@ const ConnectFullReportModal = ({ isOpen, onClose, connect, allMembers, allRepor
                     <div className="mb-6">
                         <h3 className="text-lg font-semibold mb-2">Membros ({connectMembers.length})</h3>
                         <ul className="space-y-1 text-sm list-disc list-inside">
-                            {connectMembers.map(member => <li key={member.id}>{member.name}</li>)}
+                            {connectMembers.map(member => <li key={member.id}>{getMemberKnownName(member, connectMembers)}</li>)}
                         </ul>
                     </div>
                     
