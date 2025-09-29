@@ -65,7 +65,11 @@ const ConnectFullReportModal = ({ isOpen, onClose, connect, allMembers, allRepor
         };
 
         // Membros atualmente no Connect
-        const connectMembers = getMembersAtDate(new Date()).sort((a,b) => a.name.localeCompare(b.name));
+        const connectMembers = getMembersAtDate(new Date()).sort((a, b) => {
+            const knownNameA = getMemberKnownName(a, connectMembers);
+            const knownNameB = getMemberKnownName(b, connectMembers);
+            return knownNameA.localeCompare(knownNameB);
+        });
         
         const connectReports = allReports.filter(r => r && r.reportDate && r.connectId === connect.id).sort((a, b) => {
             const dateA = a.reportDate.toDate ? a.reportDate.toDate() : a.reportDate;

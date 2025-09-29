@@ -4,9 +4,10 @@ import { formatFullAddress, hasAddressData } from '../utils/addressUtils';
 // NOVO: Importando o store para buscar o status de admin
 import { useAuthStore } from '../store/authStore';
 
+
 // ALTERADO: O componente não recebe mais `isAdmin`
 const ConnectsPage = ({
-  connects,
+  connects = [],
   onAddConnect,
   onEditConnect,
   onDeleteConnect,
@@ -33,7 +34,14 @@ const ConnectsPage = ({
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-gray-800">Gerenciar Connects</h2>
+        <div>
+          <h2 className="text-3xl font-bold text-gray-800">Gerenciar Connects</h2>
+          {!isAdmin && (
+            <p className="text-sm text-gray-600 mt-1">
+              Apenas administradores podem adicionar novos Connects
+            </p>
+          )}
+        </div>
         {isAdmin && (
           <button
             onClick={() => onAddConnect()}
@@ -46,7 +54,7 @@ const ConnectsPage = ({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {connects.sort((a, b) => a.number - b.number).map(c => (
+        {Array.isArray(connects) && connects.sort((a, b) => a.number - b.number).map(c => (
           <div 
             key={c.id} 
             className="bg-white rounded-lg p-4 shadow-md cursor-pointer hover:shadow-lg hover:bg-gray-50 transition-all duration-200"

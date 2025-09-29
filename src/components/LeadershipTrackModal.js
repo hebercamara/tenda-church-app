@@ -47,7 +47,7 @@ const SortableCourseItem = ({ course, onToggle, completedCourses, isEditing }) =
       ref={setNodeRef}
       style={style}
       className={`flex items-center justify-between p-3 border rounded-lg transition-all ${
-        course.isSelected ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 opacity-50'
+        course.isSelected ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200 opacity-50'
       } ${isDragging ? 'shadow-lg' : ''}`}
     >
       <div className="flex items-center space-x-3">
@@ -64,7 +64,7 @@ const SortableCourseItem = ({ course, onToggle, completedCourses, isEditing }) =
           {isCompleted ? (
             <CheckCircle2 className="text-green-500" size={16} />
           ) : (
-            <Circle className={course.isSelected ? "text-blue-500" : "text-gray-300"} size={16} />
+            <Circle className={course.isSelected ? "text-red-500" : "text-gray-300"} size={16} />
           )}
           <div>
             <span className={`${isCompleted ? "text-gray-800 font-medium" : course.isSelected ? "text-gray-700" : "text-gray-400"}`}>
@@ -247,7 +247,7 @@ const LeadershipTrackModal = ({ isOpen, onClose, member, allConnects, onSave, co
                         <h3 className="text-lg font-semibold mb-3">Marcos Principais</h3>
                         <div className="space-y-3">
                             {milestones.map(milestone => (
-                                <div key={milestone.id} className={`flex items-center p-3 rounded-md transition-all ${isEditing && !milestone.isAutomatic ? 'bg-blue-50' : 'bg-gray-50'}`} title={milestone.data?.completed ? (milestone.id === 'connectLeader' ? milestone.data.date : `Concluído em: ${formatDate(milestone.data.date)}`) : 'Pendente'}>
+                                <div key={milestone.id} className={`flex items-center p-3 rounded-md transition-all ${isEditing && !milestone.isAutomatic ? 'bg-red-50' : 'bg-gray-50'}`} title={milestone.data?.completed ? (milestone.id === 'connectLeader' ? milestone.data.date : `Concluído em: ${formatDate(milestone.data.date)}`) : 'Pendente'}>
                                     {milestone.data?.completed || (milestone.data?.date && isEditing) ? <CheckCircle2 size={20} className="text-green-500 mr-3 flex-shrink-0" /> : <Circle size={20} className="text-gray-300 mr-3 flex-shrink-0" />}
                                     <div className="flex-grow">
                                         <span className={milestone.data?.completed ? "text-gray-800" : "text-gray-500"}>{milestone.label}</span>
@@ -315,7 +315,7 @@ const LeadershipTrackModal = ({ isOpen, onClose, member, allConnects, onSave, co
                             {completedCourses && completedCourses.length > 0 ? (
                                 completedCourses.sort((a,b) => b.completionDate.toDate() - a.completionDate.toDate()).map(course => (
                                     <div key={course.id} className="flex items-start p-3 bg-gray-50 rounded-md">
-                                        <GraduationCap className="text-blue-500 mr-3 mt-1 flex-shrink-0" size={20} />
+                                        <GraduationCap className="text-red-500 mr-3 mt-1 flex-shrink-0" size={20} />
                                         <div>
                                             <p className="font-semibold text-gray-800">{course.courseName}</p>
                                             <p className="text-xs text-gray-500">Concluído em: {formatDate(course.completionDate)} | Nota Final: {course.finalGrade}</p>

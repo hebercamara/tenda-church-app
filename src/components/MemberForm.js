@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { TrendingUp } from 'lucide-react';
 
 // NOVO: Importando o store
 import { useAuthStore } from '../store/authStore';
@@ -7,7 +8,7 @@ import LoadingButton from './LoadingButton';
 import { convertBrazilianDateToISO, convertISOToBrazilianDate } from '../utils/dateUtils';
 
 // ALTERADO: O componente não recebe mais `isAdmin`
-const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, onCheckDuplicate }) => {
+const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, onCheckDuplicate, onOpenLeadershipTrack }) => {
     // NOVO: Buscando o status de admin diretamente do store
     const { isAdmin } = useAuthStore();
     const { isLoading, setLoading, setIdle } = useLoadingState();
@@ -183,30 +184,7 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
         setFieldErrors(prev => ({ ...prev, ...fieldError, [fieldName]: fieldError[fieldName] || null }));
     };
 
-    const handleMilestoneChange = (milestone, value) => {
-        // Remove caracteres não numéricos
-        const cleanValue = value.replace(/\D/g, '');
-        
-        // Aplica máscara dd/mm/aaaa
-        let formattedValue = cleanValue;
-        if (cleanValue.length >= 2) {
-            formattedValue = cleanValue.slice(0, 2) + '/' + cleanValue.slice(2);
-        }
-        if (cleanValue.length >= 4) {
-            formattedValue = cleanValue.slice(0, 2) + '/' + cleanValue.slice(2, 4) + '/' + cleanValue.slice(4, 8);
-        }
-        
-        setFormData(prev => ({
-            ...prev,
-            milestones: {
-                ...prev.milestones,
-                [milestone]: {
-                    ...prev.milestones[milestone],
-                    date: formattedValue
-                }
-            }
-        }));
-    };
+
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -282,7 +260,7 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
     const availableConnects = isAdmin ? connects : leaderConnects;
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4 max-h-[85vh] overflow-y-auto pr-2">
+        <form onSubmit={handleSubmit} className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">{editingMember ? 'Editar Membro' : 'Novo Membro'}</h2>
             {error && <p className="text-red-600 bg-red-100 p-2 rounded-md">{error}</p>}
             
@@ -522,41 +500,29 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
                 </div>
             </fieldset>
 
-            <fieldset className="border p-4 rounded-md">
-                <legend className="px-2 font-semibold">Trilho de Liderança</legend>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label htmlFor="salvation" className="block text-sm font-medium text-gray-700 mb-1">1. Aceitou a Jesus</label>
-                        <input type="text" name="salvation" id="salvation" value={formData.milestones.salvation.date || ''} onChange={(e) => handleMilestoneChange('salvation', e.target.value)} placeholder="dd/mm/aaaa" maxLength="10" className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent"/>
-                    </div>
-                     <div>
-                        <label htmlFor="initialDiscipleship" className="block text-sm font-medium text-gray-700 mb-1">2. Discipulado Inicial</label>
-                        <input type="text" name="initialDiscipleship" id="initialDiscipleship" value={formData.milestones.initialDiscipleship.date || ''} onChange={(e) => handleMilestoneChange('initialDiscipleship', e.target.value)} placeholder="dd/mm/aaaa" maxLength="10" className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent"/>
-                    </div>
-                    <div>
-                        <label htmlFor="baptism" className="block text-sm font-medium text-gray-700 mb-1">3. Batismo</label>
-                        <input type="text" name="baptism" id="baptism" value={formData.milestones.baptism.date || ''} onChange={(e) => handleMilestoneChange('baptism', e.target.value)} placeholder="dd/mm/aaaa" maxLength="10" className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent"/>
-                    </div>
-                    <div>
-                        <label htmlFor="membership" className="block text-sm font-medium text-gray-700 mb-1">4. Membresia</label>
-                        <input type="text" name="membership" id="membership" value={formData.milestones.membership.date || ''} onChange={(e) => handleMilestoneChange('membership', e.target.value)} placeholder="dd/mm/aaaa" maxLength="10" className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent"/>
-                    </div>
-                     <div>
-                        <label htmlFor="connectTraining" className="block text-sm font-medium text-gray-700 mb-1">5. Treinamento no Connect</label>
-                        <input type="text" name="connectTraining" id="connectTraining" value={formData.milestones.connectTraining.date || ''} onChange={(e) => handleMilestoneChange('connectTraining', e.target.value)} placeholder="dd/mm/aaaa" maxLength="10" className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent"/>
-                    </div>
+            <div className={`flex items-center pt-4 ${editingMember ? 'justify-between' : 'justify-end'}`}>
+                {editingMember && (
+                    <button 
+                        type="button"
+                        onClick={() => onOpenLeadershipTrack && onOpenLeadershipTrack(editingMember)}
+                        className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors text-sm"
+                        title="Abrir Trilho de Liderança"
+                    >
+                        <TrendingUp size={16} />
+                        Trilho de Liderança
+                    </button>
+                )}
+                
+                <div className="flex space-x-3">
+                    <button type="button" onClick={onClose} className="px-4 py-2 rounded-md bg-gray-200 text-gray-800 hover:bg-gray-300 transition-all" disabled={isLoading}>Cancelar</button>
+                    <LoadingButton
+                        type="submit"
+                        isLoading={isLoading}
+                        className="px-4 py-2 rounded-md bg-[#DC2626] text-white font-semibold hover:bg-[#991B1B] transition-all"
+                    >
+                        {editingMember ? 'Salvar Alterações' : 'Adicionar Membro'}
+                    </LoadingButton>
                 </div>
-            </fieldset>
-
-            <div className="flex justify-end space-x-3 pt-4">
-                <button type="button" onClick={onClose} className="px-4 py-2 rounded-md bg-gray-200 text-gray-800 hover:bg-gray-300 transition-all" disabled={isLoading}>Cancelar</button>
-                <LoadingButton
-                    type="submit"
-                    isLoading={isLoading}
-                    className="px-4 py-2 rounded-md bg-[#DC2626] text-white font-semibold hover:bg-[#991B1B] transition-all"
-                >
-                    {editingMember ? 'Salvar Alterações' : 'Adicionar Membro'}
-                </LoadingButton>
             </div>
         </form>
     );

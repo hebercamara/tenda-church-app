@@ -30,6 +30,31 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
         return teacher.knownBy || teacher.name?.split(' ')[0] || teacher.name || 'Professor';
     };
 
+    // Função para verificar se há professor substituto ativo
+    const getActiveSubstitute = () => {
+        if (!course.substituteTeacher || !course.substituteTeacher.teacherId) return null;
+        
+        const today = new Date();
+        const startDate = new Date(course.substituteTeacher.startDate);
+        
+        // Verificar se está no período ativo
+        let isActive = false;
+        if (course.substituteTeacher.isIndefinite) {
+            isActive = today >= startDate;
+        } else {
+            const endDate = new Date(course.substituteTeacher.endDate);
+            isActive = today >= startDate && today <= endDate;
+        }
+        
+        if (!isActive) return null;
+        
+        const substituteTeacher = members.find(m => m.id === course.substituteTeacher.teacherId);
+        return {
+            ...course.substituteTeacher,
+            teacherName: substituteTeacher?.knownBy || substituteTeacher?.name?.split(' ')[0] || substituteTeacher?.name || 'Professor Substituto'
+        };
+    };
+
     // Função para obter o nome conhecido dos alunos com lógica de sobrenome para duplicatas
     const getStudentKnownName = (student) => {
         const member = members.find(m => m.id === student.id);
@@ -85,7 +110,7 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
         const finalGrade = calculateFinalGrade(student);
         const attendance = calculateAttendancePercentage(student.id);
         const { passingCriteria } = course;
-        if (!passingCriteria) return { text: 'Cursando', color: 'bg-blue-500' };
+        if (!passingCriteria) return { text: 'Cursando', color: 'bg-red-500' };
 
         const isFinished = new Date(course.endDate + 'T00:00:00') < new Date();
         
@@ -95,7 +120,7 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
             return { text: 'Aprovado', color: 'bg-green-500' };
         }
         
-        return { text: 'Cursando', color: 'bg-blue-500' };
+        return { text: 'Cursando', color: 'bg-red-500' };
     }, [calculateFinalGrade, calculateAttendancePercentage, course]);
 
     // Hook para detectar tamanho da tela e ajustar quantidade de datas
@@ -260,6 +285,17 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
                         <div>
                             <h2 className="text-xl font-bold text-gray-900">{course.name}</h2>
                             <p className="text-gray-600 mt-1">Professor: {getTeacherKnownName()}</p>
+                            {getActiveSubstitute() && (
+                                <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-md">
+                                    <p className="text-sm text-yellow-800">
+                                        <strong>Professor Substituto Ativo:</strong> {getActiveSubstitute().teacherName}
+                                    </p>
+                                    <p className="text-xs text-yellow-700 mt-1">
+                                        Desde: {formatDateToBrazilian(getActiveSubstitute().startDate)}
+                                        {getActiveSubstitute().isIndefinite ? ' (indefinido)' : ` até ${formatDateToBrazilian(getActiveSubstitute().endDate)}`}
+                                    </p>
+                                </div>
+                            )}
                         </div>
                         <button
                             onClick={onClose}
@@ -297,8 +333,12 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
                             <div className="flex-grow min-h-0">
                                 <h3 className="text-lg font-semibold text-gray-800 mb-3">Alunos Inscritos</h3>
                                 <div className="space-y-2 overflow-y-auto h-full pr-2">
-                                    {draftEnrolledStudents.map(student => (
-                                        <div key={student.id} className="flex justify-between items-center bg-blue-50 p-3 rounded-md space-x-2">
+                                    {draftEnrolledStudents.sort((a, b) => {
+                                        const knownNameA = getStudentKnownName(a);
+                                        const knownNameB = getStudentKnownName(b);
+                                        return knownNameA.localeCompare(knownNameB);
+                                    }).map(student => (
+                                        <div key={student.id} className="flex justify-between items-center bg-red-50 p-3 rounded-md space-x-2">
                                             <span className="flex-1 font-medium">{getStudentKnownName(student)}</span>
                                             <button 
                                                 onClick={() => handleUnenroll(student.id)} 
@@ -356,7 +396,11 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
                             </div>
                             <div className="flex flex-col min-h-0 flex-grow">
                                 <h3 className="text-lg font-semibold text-gray-800 mb-3 flex-shrink-0">Registo de Presença - {selectedDate && formatDateToBrazilian(new Date(attendanceRecords.find(r=>r.id===selectedDate).date.seconds*1000))}</h3>
-                                <div className="space-y-2 overflow-y-auto flex-grow pr-2">{draftEnrolledStudents.map(student => (
+                                <div className="space-y-2 overflow-y-auto flex-grow pr-2">{draftEnrolledStudents.sort((a, b) => {
+                                    const knownNameA = getStudentKnownName(a);
+                                    const knownNameB = getStudentKnownName(b);
+                                    return knownNameA.localeCompare(knownNameB);
+                                }).map(student => (
                                     <div key={student.id} className="flex justify-between items-center bg-gray-50 p-2 rounded-md">
                                         <span>{getStudentKnownName(student)}</span>
                                         <div className="flex space-x-1">
@@ -384,7 +428,11 @@ const ManageCourseModal = ({ course, members, isOpen, onClose, onSaveStudents, o
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {draftEnrolledStudents.map(student => {
+                                    {draftEnrolledStudents.sort((a, b) => {
+                                        const knownNameA = getStudentKnownName(a);
+                                        const knownNameB = getStudentKnownName(b);
+                                        return knownNameA.localeCompare(knownNameB);
+                                    }).map(student => {
                                         const status = getStudentStatus(student);
                                         return (
                                         <tr key={student.id} className="border-b">

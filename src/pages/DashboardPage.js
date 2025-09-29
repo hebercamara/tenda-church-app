@@ -15,9 +15,11 @@ const getSundayOfWeek = (date) => {
     return new Date(dateObj.setUTCDate(diff));
 };
 
-const DashboardPage = ({ members, connects, reports, courses, attendanceAlerts, getConnectName }) => {
+const DashboardPage = ({ members = [], connects = [], reports = [], courses = [], attendanceAlerts = [], getConnectName = () => 'N/A' }) => {
     const [chartType, setChartType] = useState('connectAttendance');
-    const [selectedCourse, setSelectedCourse] = useState(courses[0]?.id || '');
+    const [selectedCourse, setSelectedCourse] = useState(() => {
+        return Array.isArray(courses) && courses.length > 0 ? courses[0]?.id || '' : '';
+    });
 
     const dashboardMetrics = useMemo(() => {
         const validReports = reports.filter(r => r && r.reportDate && typeof r.attendance === 'object');
@@ -94,7 +96,7 @@ const DashboardPage = ({ members, connects, reports, courses, attendanceAlerts, 
                                 className="w-full sm:w-auto p-2 border rounded-md bg-gray-50 text-sm"
                             >
                                 <option value="">Selecione um curso</option>
-                                {courses.map(course => (
+                                {Array.isArray(courses) && courses.map(course => (
                                     <option key={course.id} value={course.id}>{course.name}</option>
                                 ))}
                             </select>
@@ -103,7 +105,7 @@ const DashboardPage = ({ members, connects, reports, courses, attendanceAlerts, 
                     
                     <div className="overflow-x-auto">
                         {chartType === 'connectAttendance' && <ConnectAttendanceChart reports={reports} allMembers={members} connectId={null} />}
-                        {chartType === 'courseAttendance' && <CourseAttendanceChart courseId={selectedCourse} courseName={courses.find(c=>c.id===selectedCourse)?.name} />}
+                        {chartType === 'courseAttendance' && <CourseAttendanceChart courseId={selectedCourse} courseName={Array.isArray(courses) ? courses.find(c=>c.id===selectedCourse)?.name : ''} />}
                     </div>
 
                 </div>

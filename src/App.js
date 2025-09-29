@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { BrowserRouter, useNavigate } from 'react-router-dom';
 import damerau from 'damerau-levenshtein';
 import { useAuthStore } from './store/authStore';
 import { useMultipleLoadingStates } from './hooks/useLoadingState';
@@ -9,21 +10,23 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, onSnapshot, addDoc, doc, setDoc, getDocs, deleteDoc, updateDoc, query, writeBatch, where, getDoc } from 'firebase/firestore';
 import { db, auth, appId } from './firebaseConfig';
 
-// (O resto das importações continua igual...)
+// Dados de exemplo para desenvolvimento
+import { 
+  sampleMembers, 
+  sampleConnects, 
+  sampleCourses, 
+  sampleConnectReports, 
+  sampleCourseTemplates
+} from './data/sampleData';
+
+// Componentes
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import LoginPage from './pages/LoginPage';
 import LoadingSpinner from './components/LoadingSpinner';
+import AppRouter from './AppRouter';
 
-import DashboardPage from './pages/DashboardPage';
-import MembersPage from './pages/MembersPage';
-import ConnectsPage from './pages/ConnectsPage';
-import CoursesPage from './pages/CoursesPage';
-import ConnectTrackPage from './pages/ConnectTrackPage';
-import LeadershipHierarchyPage from './pages/LeadershipHierarchyPage';
-import BulkImportPage from './pages/BulkImportPage';
-import MyStudentsPage from './pages/MyStudentsPage';
-import PersonalPortalPage from './pages/PersonalPortalPage';
+
 import Modal from './components/Modal';
 import ConfirmationModal from './components/ConfirmationModal';
 import MemberForm from './components/MemberForm';
@@ -33,8 +36,9 @@ import CourseTemplateForm from './components/CourseTemplateForm';
 import ManageCourseModal from './components/ManageCourseModal';
 import ConnectReportModal from './components/ConnectReportModal';
 import ConnectFullReportModal from './components/ConnectFullReportModal';
-import LeadershipTrackModal from './components/LeadershipTrackModal';
+import IndividualTrackModal from './components/IndividualTrackModal';
 import DuplicateMemberModal from './components/DuplicateMemberModal';
+import ConnectTrackPage from './pages/ConnectTrackPage';
 
 const ADMIN_EMAIL = "tendachurchgbi@batistavida.com.br";
 
@@ -104,16 +108,17 @@ const areNamesSimilar = (nameA, nameB, threshold) => {
     return false;
 };
 
-export default function App() {
+function AppContent() {
     const { user, isAdmin, currentUserData, setAuthData, clearAuthData } = useAuthStore();
     const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-    const [activePage, setActivePage] = useState('dashboard');
+    const navigate = useNavigate();
+
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [allMembers, setAllMembers] = useState([]);
-    const [allConnects, setAllConnects] = useState([]);
-    const [allCourses, setAllCourses] = useState([]);
-    const [allCourseTemplates, setAllCourseTemplates] = useState([]);
-    const [allConnectReports, setAllConnectReports] = useState([]);
+    const [allMembers, setAllMembers] = useState(sampleMembers);
+    const [allConnects, setAllConnects] = useState(sampleConnects);
+    const [allCourses, setAllCourses] = useState(sampleCourses);
+    const [allCourseTemplates, setAllCourseTemplates] = useState(sampleCourseTemplates);
+    const [allConnectReports, setAllConnectReports] = useState(sampleConnectReports);
     const [loadingData, setLoadingData] = useState(true);
     const [connectionError, setConnectionError] = useState(null);
     const [operationStatus, setOperationStatus] = useState({ type: null, message: null });
@@ -133,6 +138,7 @@ export default function App() {
     const [isConfirmModalOpen, setConfirmModalOpen] = useState(false);
     const [isConnectFullReportModalOpen, setConnectFullReportModalOpen] = useState(false);
     const [isLeadershipTrackModalOpen, setLeadershipTrackModalOpen] = useState(false);
+
     const [isDuplicateModalOpen, setDuplicateModalOpen] = useState(false);
     const [existingMemberForCheck, setExistingMemberForCheck] = useState(null);
     const [newMemberForCheck, setNewMemberForCheck] = useState(null);
@@ -144,7 +150,7 @@ export default function App() {
     const [reportingConnect, setReportingConnect] = useState(null);
     const [generatingReportForConnect, setGeneratingReportForConnect] = useState(null);
     const [viewingMember, setViewingMember] = useState(null);
-    const [viewingConnectTrack, setViewingConnectTrack] = useState(null);
+
     const [membersWithCourses, setMembersWithCourses] = useState([]);
     const [completedCourses, setCompletedCourses] = useState([]);
     const [deleteAction, setDeleteAction] = useState(null);
@@ -168,17 +174,20 @@ export default function App() {
     // CORRIGIDO: useEffect 2 - Para buscar todos os membros e encontrar o dado do usuário logado
     useEffect(() => {
         if (!user) {
-            setAllMembers([]); // Limpa a lista de membros se não houver usuário
+            setAllMembers(sampleMembers); // Usa dados de exemplo se não houver usuário
             return;
         }
         const membersUnsub = onSnapshot(
             collection(db, `artifacts/${appId}/public/data/members`), 
             (snapshot) => {
                 const membersList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                setAllMembers(membersList);
+                
+                // Se não há dados no Firebase, usa dados de exemplo
+                const finalMembersList = membersList.length > 0 ? membersList : sampleMembers;
+                setAllMembers(finalMembersList);
                 
                 // Encontra e atualiza os dados do usuário logado no store
-                const memberData = membersList.find(m => m.email?.toLowerCase() === user.email?.toLowerCase());
+                const memberData = finalMembersList.find(m => m.email?.toLowerCase() === user.email?.toLowerCase());
                 
                 // Determina se é admin: email fixo OU campo isAdmin do membro
                 const userIsAdmin = user.email === ADMIN_EMAIL || (memberData?.isAdmin === true);
@@ -187,8 +196,8 @@ export default function App() {
             },
             (error) => {
                 console.error('Erro ao carregar membros:', error);
-                setConnectionError('Erro de conexão: Não foi possível carregar os dados dos membros.');
-                setAllMembers([]);
+                setConnectionError('Erro de conexão: Não foi possível carregar os dados dos membros. Usando dados de exemplo.');
+                setAllMembers(sampleMembers); // Usa dados de exemplo em caso de erro
                 // Em caso de erro, mantém apenas o admin principal
                 const userIsAdmin = user.email === ADMIN_EMAIL;
                 setAuthData({ user, isAdmin: userIsAdmin, currentUserData: null });
@@ -201,49 +210,66 @@ export default function App() {
     useEffect(() => {
         if (!user) {
             setLoadingData(false);
-            // Limpa os dados se o usuário fizer logout
-            setAllConnects([]);
-            setAllCourses([]);
-            setAllCourseTemplates([]);
-            setAllConnectReports([]);
+            // Mantém dados de exemplo se o usuário fizer logout
+            setAllConnects(sampleConnects);
+            setAllCourses(sampleCourses);
+            setAllCourseTemplates(sampleCourseTemplates);
+            setAllConnectReports(sampleConnectReports);
             return;
         }
         setLoadingData(true);
         const unsubs = [
             onSnapshot(
                 collection(db, `artifacts/${appId}/public/data/connects`), 
-                (s) => setAllConnects(s.docs.map(d => ({ id: d.id, ...d.data() }))),
+                (s) => {
+                    const connectsList = s.docs.map(d => ({ id: d.id, ...d.data() }));
+                    // Se não há dados no Firebase, usa dados de exemplo
+                    const finalConnectsList = connectsList.length > 0 ? connectsList : sampleConnects;
+                    setAllConnects(finalConnectsList);
+                },
                 (error) => {
                     console.error('Erro ao carregar connects:', error);
-                    setConnectionError('Erro de conexão: Não foi possível carregar os dados dos connects.');
-                    setAllConnects([]);
+                    setConnectionError('Erro de conexão: Não foi possível carregar os dados dos connects. Usando dados de exemplo.');
+                    setAllConnects(sampleConnects); // Usa dados de exemplo em caso de erro
                 }
             ),
             onSnapshot(
                 collection(db, `artifacts/${appId}/public/data/courses`), 
-                (s) => setAllCourses(s.docs.map(d => ({ id: d.id, ...d.data() }))),
+                (s) => {
+                    const coursesList = s.docs.map(d => ({ id: d.id, ...d.data() }));
+                    const finalCoursesList = coursesList.length > 0 ? coursesList : sampleCourses;
+                    setAllCourses(finalCoursesList);
+                },
                 (error) => {
                     console.error('Erro ao carregar cursos:', error);
-                    setConnectionError('Erro de conexão: Não foi possível carregar os dados dos cursos.');
-                    setAllCourses([]);
+                    setConnectionError('Erro de conexão: Não foi possível carregar os dados dos cursos. Usando dados de exemplo.');
+                    setAllCourses(sampleCourses);
                 }
             ),
             onSnapshot(
                 collection(db, `artifacts/${appId}/public/data/courseTemplates`), 
-                (s) => setAllCourseTemplates(s.docs.map(d => ({ id: d.id, ...d.data() }))),
+                (s) => {
+                    const templatesList = s.docs.map(d => ({ id: d.id, ...d.data() }));
+                    const finalTemplatesList = templatesList.length > 0 ? templatesList : sampleCourseTemplates;
+                    setAllCourseTemplates(finalTemplatesList);
+                },
                 (error) => {
                     console.error('Erro ao carregar templates de curso:', error);
-                    setConnectionError('Erro de conexão: Não foi possível carregar os templates de curso.');
-                    setAllCourseTemplates([]);
+                    setConnectionError('Erro de conexão: Não foi possível carregar os templates de curso. Usando dados de exemplo.');
+                    setAllCourseTemplates(sampleCourseTemplates);
                 }
             ),
             onSnapshot(
                 collection(db, `artifacts/${appId}/public/data/connect_reports`), 
-                (s) => setAllConnectReports(s.docs.map(d => ({ id: d.id, ...d.data() }))),
+                (s) => {
+                    const reportsList = s.docs.map(d => ({ id: d.id, ...d.data() }));
+                    const finalReportsList = reportsList.length > 0 ? reportsList : sampleConnectReports;
+                    setAllConnectReports(finalReportsList);
+                },
                 (error) => {
                     console.error('Erro ao carregar relatórios:', error);
-                    setConnectionError('Erro de conexão: Não foi possível carregar os relatórios.');
-                    setAllConnectReports([]);
+                    setConnectionError('Erro de conexão: Não foi possível carregar os relatórios. Usando dados de exemplo.');
+                    setAllConnectReports(sampleConnectReports);
                 }
             )
         ];
@@ -264,7 +290,30 @@ export default function App() {
         const userEmail = currentUserData.email?.toLowerCase();
         const supervisedConnects = allConnects.filter(c => c.supervisorEmail?.toLowerCase() === userEmail);
         const ledConnects = allConnects.filter(c => c.leaderEmail?.toLowerCase() === userEmail);
-        const taughtCourses = allCourses.filter(c => c.teacherEmail?.toLowerCase() === userEmail);
+        
+        // Função para verificar se o usuário é professor substituto ativo
+        const isActiveSubstitute = (course) => {
+            if (!course.substituteTeacher || !course.substituteTeacher.teacherId) return false;
+            
+            const substituteTeacher = allMembers.find(m => m.id === course.substituteTeacher.teacherId);
+            if (!substituteTeacher || substituteTeacher.email?.toLowerCase() !== userEmail) return false;
+            
+            const today = new Date();
+            const startDate = new Date(course.substituteTeacher.startDate);
+            
+            // Se é indefinido, verifica apenas se já começou
+            if (course.substituteTeacher.isIndefinite) {
+                return today >= startDate;
+            }
+            
+            // Se tem data de fim, verifica se está no período
+            const endDate = new Date(course.substituteTeacher.endDate);
+            return today >= startDate && today <= endDate;
+        };
+        
+        const taughtCourses = allCourses.filter(c => 
+            c.teacherEmail?.toLowerCase() === userEmail || isActiveSubstitute(c)
+        );
 
         const visibleConnectsSet = new Set([...supervisedConnects, ...ledConnects]);
         const visibleConnects = Array.from(visibleConnectsSet);
@@ -398,6 +447,7 @@ export default function App() {
     const closeReportModal = () => setReportModalOpen(false);
     const openConnectFullReportModal = (connect) => { setGeneratingReportForConnect(connect); setConnectFullReportModalOpen(true); };
     const closeConnectFullReportModal = () => setConnectFullReportModalOpen(false);
+
     
     const openLeadershipTrackModal = async (member) => {
         if (!member) return;
@@ -461,24 +511,9 @@ export default function App() {
 
     const openConnectTrackPage = async (connect) => {
         if (!connect) return;
-        setViewingConnectTrack(connect);
         
-        const connectMembers = allMembers.filter(m => m.connectId === connect.id);
-        const membersWithCoursesPromises = connectMembers.map(async (member) => {
-            const coursesRef = collection(db, `artifacts/${appId}/public/data/members/${member.id}/completedCourses`);
-            const querySnapshot = await getDocs(coursesRef);
-            const completedCourses = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            return { ...member, completedCourses };
-        });
-
-        const membersWithData = await Promise.all(membersWithCoursesPromises);
-        setMembersWithCourses(membersWithData);
-        setActivePage('connectTrack');
-    };
-    const closeConnectTrackPage = () => {
-        setViewingConnectTrack(null);
-        setMembersWithCourses([]);
-        setActivePage('connects');
+        // Navegar para a página do trilho de Connect
+        navigate(`/connect-track/${connect.id}`);
     };
     const triggerDelete = (type, id) => {
         let message = "Tem certeza que deseja excluir este item? Esta ação não pode ser desfeita.";
@@ -489,7 +524,7 @@ export default function App() {
         setConfirmModalOpen(true);
     };
 
-    const handleLogout = async () => { await signOut(auth); clearAuthData(); setActivePage('dashboard'); };
+    const handleLogout = async () => { await signOut(auth); clearAuthData(); };
     
     const handleSaveMember = async (memberData, originalMember = null) => {
         const collectionPath = `artifacts/${appId}/public/data/members`;
@@ -579,13 +614,46 @@ export default function App() {
         setDuplicateModalOpen(false);
     };
 
+    // Função de retry para operações do Firestore
+    const retryFirestoreOperation = async (operation, maxRetries = 3, delay = 1000) => {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`🔄 Tentativa ${attempt}/${maxRetries} da operação Firestore`);
+                return await operation();
+            } catch (error) {
+                console.error(`❌ Erro na tentativa ${attempt}:`, error);
+                
+                if (attempt === maxRetries) {
+                    throw error;
+                }
+                
+                // Aguardar antes da próxima tentativa
+                await new Promise(resolve => setTimeout(resolve, delay * attempt));
+            }
+        }
+    };
+
     const handleSaveConnect = async (connectData) => {
         const collectionPath = `artifacts/${appId}/public/data/connects`;
         
+        console.log('🔄 Iniciando salvamento do Connect:', connectData);
         loadingStates.setLoading('saveConnect', 'Salvando connect...');
         
         try {
             let connectId = editingConnect?.id;
+            console.log('📝 Connect ID:', connectId, 'Editando:', !!editingConnect);
+            
+            // Validações básicas
+            if (!connectData.leaderId) {
+                throw new Error('Líder é obrigatório');
+            }
+            
+            const leader = allMembers.find(m => m.id === connectData.leaderId);
+            if (!leader) {
+                throw new Error('Líder selecionado não encontrado');
+            }
+            
+            console.log('👤 Líder encontrado:', leader.name);
             
             // Buscar membros atuais do Connect (se editando)
             let currentMemberIds = [];
@@ -593,32 +661,51 @@ export default function App() {
                 currentMemberIds = allMembers
                     .filter(m => m.connectId === editingConnect.id)
                     .map(m => m.id);
+                console.log('👥 Membros atuais do Connect:', currentMemberIds.length);
             }
             
             // Salvar o Connect
+            console.log('💾 Salvando dados do Connect...');
             if (editingConnect) {
-                await setDoc(doc(db, collectionPath, connectId), connectData);
+                await retryFirestoreOperation(async () => {
+                    await setDoc(doc(db, collectionPath, connectId), connectData);
+                });
+                console.log('✅ Connect atualizado com sucesso');
             } else {
-                const q = query(collection(db, collectionPath), where("number", "==", connectData.number));
-                const querySnapshot = await getDocs(q);
+                // Verificar se já existe um Connect com este número
+                console.log('🔍 Verificando duplicação de número...');
+                const querySnapshot = await retryFirestoreOperation(async () => {
+                    const q = query(collection(db, collectionPath), where("number", "==", connectData.number));
+                    return await getDocs(q);
+                });
+                
                 if (!querySnapshot.empty) {
+                    console.log('❌ Connect com número duplicado encontrado');
                     loadingStates.setError('saveConnect', 'Já existe um Connect com este número.');
                     return;
                 }
-                const newDocRef = await addDoc(collection(db, collectionPath), connectData);
+                console.log('✅ Número do Connect disponível');
+                
+                const newDocRef = await retryFirestoreOperation(async () => {
+                    return await addDoc(collection(db, collectionPath), connectData);
+                });
                 connectId = newDocRef.id;
+                console.log('✅ Novo Connect criado com ID:', connectId);
             }
             
             // Usar batch para sincronizar membros
+            console.log('🔄 Iniciando sincronização de membros...');
             const batch = writeBatch(db);
             
             // Remover connectId dos membros que não estão mais no Connect
             const membersToRemove = currentMemberIds.filter(id => !connectData.memberIds.includes(id));
             const today = new Date();
             
+            console.log('➖ Membros a remover:', membersToRemove.length);
             membersToRemove.forEach(memberId => {
                 const member = allMembers.find(m => m.id === memberId);
                 if (member) {
+                    console.log('🔄 Removendo membro:', member.name);
                     const history = member.connectHistory || [];
                     const lastEntry = history.find(entry => !entry.endDate);
                     
@@ -636,9 +723,12 @@ export default function App() {
             
             // Adicionar connectId aos novos membros do Connect
             const membersToAdd = connectData.memberIds.filter(id => !currentMemberIds.includes(id));
+            console.log('➕ Membros a adicionar:', membersToAdd.length);
+            
             membersToAdd.forEach(memberId => {
                 const member = allMembers.find(m => m.id === memberId);
                 if (member) {
+                    console.log('🔄 Adicionando membro:', member.name);
                     const history = member.connectHistory || [];
                     const lastEntry = history.find(entry => !entry.endDate);
                     
@@ -663,16 +753,22 @@ export default function App() {
             });
             
             // Garantir que o líder tenha o connectId correto
+            console.log('👤 Atualizando Connect do líder...');
             const leaderRef = doc(db, `artifacts/${appId}/public/data/members`, connectData.leaderId);
             batch.update(leaderRef, { connectId: connectId });
             
             // Executar todas as atualizações em lote
-            await batch.commit();
+            console.log('💾 Executando batch de atualizações...');
+            await retryFirestoreOperation(async () => {
+                await batch.commit();
+            });
+            console.log('✅ Batch executado com sucesso');
             
             loadingStates.setSuccess('saveConnect', 'Connect salvo com sucesso!');
             closeConnectModal();
         } catch (error) {
-            console.error("Erro ao salvar connect:", error);
+            console.error("❌ Erro ao salvar connect:", error);
+            console.error("📊 Stack trace:", error.stack);
             loadingStates.setError('saveConnect', `Erro ao salvar connect: ${error.message}`);
         }
     };
@@ -846,99 +942,7 @@ export default function App() {
     };
     const getConnectName = useCallback((connectId) => { if (!connectId) return 'Sem Connect'; const connect = allConnects.find(c => c.id === connectId); return connect ? `${connect.number} - ${connect.name}` : '...'; }, [allConnects]);
 
-    const renderActivePage = () => {
-        if (loadingData) return <LoadingSpinner />;
-        
-        if (activePage === 'connectTrack' && viewingConnectTrack) {
-            return <ConnectTrackPage 
-                        connect={viewingConnectTrack} 
-                        membersInConnect={membersWithCourses}
-                        allCourses={allCourses}
-                        allConnects={allConnects} 
-                        onBack={closeConnectTrackPage}
-                        attendanceAlerts={attendanceAlerts}
-                        onReactivateMember={handleReactivateMember}
-                    />;
-        }
 
-        switch (activePage) {
-            case 'dashboard':
-                return <DashboardPage 
-                            members={visibleMembers} 
-                            connects={visibleConnects} 
-                            reports={visibleReports} 
-                            courses={visibleCourses}
-                            attendanceAlerts={attendanceAlerts.filter(a => visibleConnects.some(c => c.id === a.connectId))}
-                            getConnectName={getConnectName}
-                        />;
-            case 'members':
-                return <MembersPage 
-                            onAddMember={openMemberModal} 
-                            onEditMember={openMemberModal} 
-                            onDeleteMember={triggerDelete} 
-                            onViewTrack={openLeadershipTrackModal}
-                            onBulkImport={() => setActivePage('bulk-import')}
-                            getConnectName={getConnectName}
-                            isAdmin={isAdmin}
-                            currentUserData={currentUserData}
-                            allConnects={allConnects}
-                        />;
-            case 'connects':
-                return <ConnectsPage 
-                            connects={visibleConnects} 
-                            onAddConnect={openConnectModal} 
-                            onEditConnect={openConnectModal} 
-                            onDeleteConnect={triggerDelete} 
-                            onReport={openReportModal} 
-                            onGenerateReport={openConnectFullReportModal}
-                            onViewTrack={openConnectTrackPage}
-                            isAdmin={isAdmin} 
-                        />;
-            case 'courses':
-                return <CoursesPage 
-                            courses={visibleCourses} 
-                            courseTemplates={allCourseTemplates}
-                            onAddCourse={openCourseModal}
-                            onAddCourseTemplate={openCourseTemplateModal}
-                            onEditCourse={openCourseModal} 
-                            onEditCourseTemplate={openCourseTemplateModal}
-                            onDelete={triggerDelete}
-                            onManageCourse={openManageCourseModal} 
-                            onFinalizeCourse={handleFinalizeCourse}
-                            onReopenCourse={handleReopenCourse}
-                            isAdmin={isAdmin} 
-                        />;
-            case 'hierarchy':
-                return <LeadershipHierarchyPage 
-                            connects={allConnects}
-                            allMembers={allMembers}
-                            isAdmin={isAdmin}
-                        />;
-            case 'my-students':
-                return <MyStudentsPage 
-                            allCourses={allCourses}
-                            allMembers={allMembers}
-                            allConnects={allConnects}
-                        />;
-            case 'personal-portal':
-                return <PersonalPortalPage 
-                            allCourses={allCourses}
-                            allMembers={allMembers}
-                            allConnects={allConnects}
-                        />;
-            case 'bulk-import':
-                return <BulkImportPage />;
-            default:
-                return <DashboardPage 
-                            members={visibleMembers} 
-                            connects={visibleConnects} 
-                            reports={visibleReports} 
-                            courses={visibleCourses}
-                            attendanceAlerts={attendanceAlerts.filter(a => visibleConnects.some(c => c.id === a.connectId))}
-                            getConnectName={getConnectName}
-                        />;
-        }
-    };
 
     if (isLoadingAuth) return <LoadingSpinner />;
     if (!user) return <LoginPage />;
@@ -978,70 +982,116 @@ export default function App() {
     }
 
     return (
-        <div className={`flex h-screen ${activePage === 'personal-portal' ? 'bg-stone-900' : 'bg-gray-100'}`}>
-            <Sidebar 
-                activePage={activePage} 
-                setActivePage={setActivePage}
-                isOpen={isSidebarOpen}
-                setIsOpen={setIsSidebarOpen}
-                allConnects={allConnects}
-                allCourses={allCourses}
-            />
-            <div className="flex-1 flex flex-col overflow-hidden">
-                <Header 
-                    onLogout={handleLogout} 
-                    onMenuClick={() => setIsSidebarOpen(true)}
+        <div className="flex h-screen bg-gray-100">
+                <Sidebar 
+                    isOpen={isSidebarOpen}
+                    setIsOpen={setIsSidebarOpen}
+                    allConnects={allConnects}
+                    allCourses={allCourses}
+                    allMembers={allMembers}
                 />
-                {/* Mensagens de loading states */}
-                <div className="mx-4 md:mx-8 mt-4 space-y-2">
-                    {Object.entries(loadingStates.states).map(([operation, state]) => (
-                        <LoadingMessage
-                            key={operation}
-                            state={state.status}
-                            message={state.message}
-                        />
-                    ))}
-                </div>
-                
-                {/* Mensagem de status de operação (legacy) */}
-                {operationStatus.message && (
-                    <div className={`mx-4 md:mx-8 mt-4 p-3 rounded-md ${
-                        operationStatus.type === 'success' 
-                            ? 'bg-green-100 border border-green-400 text-green-700' 
-                            : 'bg-red-100 border border-red-400 text-red-700'
-                    }`}>
-                        <div className="flex items-center">
-                            <div className="flex-shrink-0">
-                                {operationStatus.type === 'success' ? (
-                                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                    </svg>
-                                ) : (
-                                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                                    </svg>
-                                )}
-                            </div>
-                            <div className="ml-3">
-                                <p className="text-sm font-medium">{operationStatus.message}</p>
-                            </div>
-                            <div className="ml-auto pl-3">
-                                <button
-                                    onClick={() => setOperationStatus({ type: null, message: null })}
-                                    className="inline-flex text-sm font-medium hover:opacity-75"
-                                >
-                                    ×
-                                </button>
+                <div className="flex-1 flex flex-col overflow-hidden">
+                    <Header 
+                        onLogout={handleLogout} 
+                        onMenuClick={() => setIsSidebarOpen(true)}
+                    />
+                    {/* Mensagens de loading states */}
+                    <div className="mx-4 md:mx-8 mt-4 space-y-2">
+                        {Object.entries(loadingStates.states).map(([operation, state]) => (
+                            <LoadingMessage
+                                key={operation}
+                                state={state.status}
+                                message={state.message}
+                            />
+                        ))}
+                    </div>
+                    
+                    {/* Mensagem de status de operação (legacy) */}
+                    {operationStatus.message && (
+                        <div className={`mx-4 md:mx-8 mt-4 p-3 rounded-md ${
+                            operationStatus.type === 'success' 
+                                ? 'bg-green-100 border border-green-400 text-green-700' 
+                                : 'bg-red-100 border border-red-400 text-red-700'
+                        }`}>
+                            <div className="flex items-center">
+                                <div className="flex-shrink-0">
+                                    {operationStatus.type === 'success' ? (
+                                        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                        </svg>
+                                    ) : (
+                                        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                        </svg>
+                                    )}
+                                </div>
+                                <div className="ml-3">
+                                    <p className="text-sm font-medium">{operationStatus.message}</p>
+                                </div>
+                                <div className="ml-auto pl-3">
+                                    <button
+                                        onClick={() => setOperationStatus({ type: null, message: null })}
+                                        className="inline-flex text-sm font-medium hover:opacity-75"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
-                <main className={`flex-1 overflow-y-auto p-4 md:p-8 ${activePage === 'personal-portal' ? 'bg-stone-900' : ''}`}>
-                    {renderActivePage()}
-                </main>
-            </div>
+                    )}
+                    <main className="flex-1 overflow-y-auto p-4 md:p-8">
+                        <AppRouter 
+                            // Props para dados
+                            allMembers={allMembers}
+                            allConnects={allConnects}
+                            allCourses={allCourses}
+                            allCourseTemplates={allCourseTemplates}
+                            allConnectReports={allConnectReports}
+                            visibleMembers={visibleMembers}
+                            visibleConnects={visibleConnects}
+                            visibleCourses={visibleCourses}
+                            visibleReports={visibleReports}
+                            attendanceAlerts={attendanceAlerts}
+                            membersWithCourses={membersWithCourses}
+                            completedCourses={completedCourses}
+                            memberConnectHistoryDetails={memberConnectHistoryDetails}
+                            loadingStates={loadingStates}
+                            operationStatus={operationStatus}
+                            setOperationStatus={setOperationStatus}
+                            
+                            // Handlers para modais
+                            handleAddMember={openMemberModal}
+                            handleEditMember={openMemberModal}
+                            handleDeleteMember={triggerDelete}
+                            handleReactivateMember={handleReactivateMember}
+                            handleAddConnect={openConnectModal}
+                            handleEditConnect={openConnectModal}
+                            handleDeleteConnect={triggerDelete}
+                            handleAddCourse={openCourseModal}
+                            handleEditCourse={openCourseModal}
+                            handleDeleteCourse={triggerDelete}
+                            handleManageCourse={openManageCourseModal}
+                            handleAddCourseTemplate={openCourseTemplateModal}
+                            handleEditCourseTemplate={openCourseTemplateModal}
+                            handleDeleteCourseTemplate={triggerDelete}
+                            handleGenerateReport={openReportModal}
+                            handleGenerateFullReport={openConnectFullReportModal}
+                            handleViewMember={openLeadershipTrackModal}
+                            handleViewConnectTrack={openConnectTrackPage}
+                            handleLeadershipTrack={openLeadershipTrackModal}
+                            handleFinalizeCourse={handleFinalizeCourse}
+                            handleReopenCourse={handleReopenCourse}
+                            
+                            // Funções de utilidade
+                            calculateFinalGradeForStudent={calculateFinalGradeForStudent}
+                            getStudentStatusInfo={getStudentStatusInfo}
+                            areNamesSimilar={areNamesSimilar}
+                            getConnectName={getConnectName}
+                        />
+                    </main>
+                </div>
 
-            <Modal isOpen={isMemberModalOpen} onClose={closeMemberModal}>
+                <Modal isOpen={isMemberModalOpen} onClose={closeMemberModal} size="2xl">
                 <MemberForm 
                     onClose={closeMemberModal} 
                     onSave={handleSaveMember} 
@@ -1050,6 +1100,7 @@ export default function App() {
                     isAdmin={isAdmin} 
                     leaderConnects={visibleConnects} 
                     onCheckDuplicate={handleCheckDuplicate}
+                    onOpenLeadershipTrack={openLeadershipTrackModal}
                 />
             </Modal>
             <Modal isOpen={isConnectModalOpen} onClose={closeConnectModal}><ConnectForm onClose={closeConnectModal} onSave={handleSaveConnect} members={allMembers} editingConnect={editingConnect} connects={allConnects} /></Modal>
@@ -1074,16 +1125,16 @@ export default function App() {
             <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={handleConfirmDelete} title="Confirmar Exclusão" message={deleteAction?.message} />
             {generatingReportForConnect && <ConnectFullReportModal isOpen={isConnectFullReportModalOpen} onClose={closeConnectFullReportModal} connect={generatingReportForConnect} allMembers={allMembers} allReports={allConnectReports} />}
             
-            {viewingMember && <LeadershipTrackModal 
-                isOpen={isLeadershipTrackModalOpen} 
-                onClose={closeLeadershipTrackModal} 
-                member={viewingMember} 
-                allConnects={allConnects} 
-                onSave={handleSaveMilestones} 
-                completedCourses={completedCourses}
-                memberConnectHistoryDetails={memberConnectHistoryDetails}
-                courseTemplates={allCourseTemplates}
-            />}
+            {viewingMember && <Modal isOpen={isLeadershipTrackModalOpen} onClose={closeLeadershipTrackModal} size="md" title="Trilho de Liderança">
+                <IndividualTrackModal
+                    member={viewingMember}
+                    completedCourses={completedCourses}
+                    memberConnectHistoryDetails={memberConnectHistoryDetails}
+                    onBack={closeLeadershipTrackModal}
+                />
+            </Modal>}
+
+
 
             <DuplicateMemberModal
                 isOpen={isDuplicateModalOpen}
@@ -1094,5 +1145,13 @@ export default function App() {
                 onReject={handleRejectDuplicate}
             />
         </div>
+    );
+}
+
+export default function App() {
+    return (
+        <BrowserRouter>
+            <AppContent />
+        </BrowserRouter>
     );
 }

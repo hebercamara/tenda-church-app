@@ -187,7 +187,11 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
             }
             
             return false;
-        }).sort((a, b) => a.name.localeCompare(b.name));
+        }).sort((a, b) => {
+            const knownNameA = getMemberKnownName(a, members);
+            const knownNameB = getMemberKnownName(b, members);
+            return knownNameA.localeCompare(knownNameB);
+        });
     }, [members, connect, selectedDate]);
 
     // Lógica de seleção de data baseada no papel do usuário (isAdmin)

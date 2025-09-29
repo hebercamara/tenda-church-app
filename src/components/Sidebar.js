@@ -1,14 +1,41 @@
 import React from 'react';
-import { LayoutDashboard, Users, Home, BookOpen, UserCog, X, Network, Upload, GraduationCap, User } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { LayoutDashboard, Users, Home, BookOpen, X, Network, GraduationCap, User } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
-const Sidebar = ({ activePage, setActivePage, isOpen, setIsOpen, allConnects = [], allCourses = [] }) => {
+const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMembers = [] }) => {
   const { isAdmin, currentUserData } = useAuthStore();
+  const location = useLocation();
   
   // Determinar perfis do usuário
   const isLeader = currentUserData && allConnects.some(c => c.leaderId === currentUserData.id);
   const isSupervisor = currentUserData && allConnects.some(c => c.supervisorEmail === currentUserData.email);
-  const isTeacher = currentUserData && allCourses.some(c => c.teacherEmail === currentUserData.email);
+  
+  // Verificar se é professor (titular ou substituto ativo)
+  const isTeacher = currentUserData && allCourses.some(course => {
+    const userEmail = currentUserData.email?.toLowerCase();
+    
+    // Verificar se é professor titular
+    if (course.teacherEmail?.toLowerCase() === userEmail) return true;
+    
+    // Verificar se é professor substituto ativo
+    if (!course.substituteTeacher || !course.substituteTeacher.teacherId) return false;
+    
+    const substituteTeacher = allMembers.find(m => m.id === course.substituteTeacher.teacherId);
+    if (!substituteTeacher || substituteTeacher.email?.toLowerCase() !== userEmail) return false;
+    
+    const today = new Date();
+    const startDate = new Date(course.substituteTeacher.startDate);
+    
+    // Se é indefinido, verifica apenas se já começou
+    if (course.substituteTeacher.isIndefinite) {
+      return today >= startDate;
+    }
+    
+    // Se tem data de fim, verifica se está no período
+    const endDate = new Date(course.substituteTeacher.endDate);
+    return today >= startDate && today <= endDate;
+  });
   
   // Determinar se é membro comum (não tem nenhum perfil especial)
   const isCommonMember = !isAdmin && !isLeader && !isSupervisor && !isTeacher;
@@ -17,27 +44,27 @@ const Sidebar = ({ activePage, setActivePage, isOpen, setIsOpen, allConnects = [
     // Para membros comuns, mostrar apenas itens básicos
     // Para outros perfis, mostrar todos os itens específicos
     ...(isCommonMember ? [] : [
-      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { id: 'members', label: 'Membros', icon: Users },
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/' },
+      { id: 'members', label: 'Membros', icon: Users, path: '/membros' },
       
       // Connects - Visível para Admins, Líderes e Supervisores (não para Professores apenas)
       ...((isAdmin || isLeader || isSupervisor) && !(!isAdmin && !isLeader && !isSupervisor && isTeacher) ? 
-        [{ id: 'connects', label: 'Connects', icon: Home }] : []),
+        [{ id: 'connects', label: 'Connects', icon: Home, path: '/connects' }] : []),
       
       // Cursos - Visível para Admins e Professores (não para Líderes apenas)
       ...((isAdmin || isTeacher) && !(!isAdmin && !isTeacher && (isLeader || isSupervisor)) ? 
-        [{ id: 'courses', label: 'Cursos', icon: BookOpen }] : []),
+        [{ id: 'courses', label: 'Cursos', icon: BookOpen, path: '/cursos' }] : []),
       
       // Meus Alunos - Visível apenas para Professores
-      ...(isTeacher && !isAdmin ? [{ id: 'my-students', label: 'Meus Alunos', icon: GraduationCap }] : []),
+      ...(isTeacher && !isAdmin ? [{ id: 'my-students', label: 'Meus Alunos', icon: GraduationCap, path: '/meus-alunos' }] : []),
       
       // Hierarquia - Visível para Admins, Líderes e Supervisores
-      ...((isAdmin || isLeader || isSupervisor) ? [{ id: 'hierarchy', label: 'Hierarquia', icon: Network }] : []),
+      ...((isAdmin || isLeader || isSupervisor) ? [{ id: 'hierarchy', label: 'Hierarquia', icon: Network, path: '/hierarquia-lideranca' }] : []),
     ]),
   ].filter(Boolean);
 
   // Item separado para Minha Área - sempre visível para todos os usuários
-  const personalAreaItem = { id: 'personal-portal', label: 'Minha Área', icon: User };
+  const personalAreaItem = { id: 'personal-portal', label: 'Minha Área', icon: User, path: '/minha-area' };
 
   return (
     <>
@@ -73,38 +100,35 @@ const Sidebar = ({ activePage, setActivePage, isOpen, setIsOpen, allConnects = [
           <div className="flex-1">
             {navItems.map((item) => {
               const Icon = item.icon;
+              const isActive = location.pathname === item.path;
               return (
-                <button
+                <Link
                   key={item.id}
-                  onClick={() => {
-                    setActivePage(item.id);
-                    setIsOpen(false); // Fecha o sidebar no mobile após selecionar
-                  }}
+                  to={item.path}
+                  onClick={() => setIsOpen(false)} // Fecha o sidebar no mobile após selecionar
                   className={`w-full flex items-center space-x-3 px-3 sm:px-4 py-2.5 sm:py-3 text-left hover:bg-gray-100 transition-colors ${
-                    activePage === item.id ? 'bg-[#991B1B] text-white hover:bg-[#991B1B]' : 'text-gray-700'
+                    isActive ? 'bg-[#991B1B] text-white hover:bg-[#991B1B]' : 'text-gray-700'
                   }`}
                 >
                   <Icon size={18} className="sm:w-5 sm:h-5" />
                   <span className="font-medium text-sm sm:text-base">{item.label}</span>
-                </button>
+                </Link>
               );
             })}
           </div>
 
           {/* Separador e item "Minha Área" no final */}
           <div className="border-t border-gray-200 mt-4 pt-4 mb-4">
-            <button
-              onClick={() => {
-                setActivePage(personalAreaItem.id);
-                setIsOpen(false);
-              }}
+            <Link
+              to={personalAreaItem.path}
+              onClick={() => setIsOpen(false)}
               className={`w-full flex items-center space-x-3 px-3 sm:px-4 py-2.5 sm:py-3 text-left hover:bg-gray-100 transition-colors ${
-                activePage === personalAreaItem.id ? 'bg-[#991B1B] text-white hover:bg-[#991B1B]' : 'text-gray-700'
+                location.pathname === personalAreaItem.path ? 'bg-[#991B1B] text-white hover:bg-[#991B1B]' : 'text-gray-700'
               }`}
             >
               <personalAreaItem.icon size={18} className="sm:w-5 sm:h-5" />
               <span className="font-medium text-sm sm:text-base">{personalAreaItem.label}</span>
-            </button>
+            </Link>
           </div>
         </nav>
       </div>

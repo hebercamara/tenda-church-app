@@ -7,11 +7,36 @@ const MyStudentsPage = ({ allCourses, allMembers, allConnects }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCourse, setSelectedCourse] = useState('');
 
-  // Filtrar cursos do professor atual
+  // Filtrar cursos do professor atual (incluindo como substituto)
   const myCourses = useMemo(() => {
-    if (!currentUserData || !allCourses) return [];
-    return allCourses.filter(course => course.teacherEmail === currentUserData.email);
-  }, [allCourses, currentUserData]);
+    if (!currentUserData || !allCourses || !allMembers) return [];
+    
+    const userEmail = currentUserData.email?.toLowerCase();
+    
+    // Função para verificar se o usuário é professor substituto ativo
+    const isActiveSubstitute = (course) => {
+      if (!course.substituteTeacher || !course.substituteTeacher.teacherId) return false;
+      
+      const substituteTeacher = allMembers.find(m => m.id === course.substituteTeacher.teacherId);
+      if (!substituteTeacher || substituteTeacher.email?.toLowerCase() !== userEmail) return false;
+      
+      const today = new Date();
+      const startDate = new Date(course.substituteTeacher.startDate);
+      
+      // Se é indefinido, verifica apenas se já começou
+      if (course.substituteTeacher.isIndefinite) {
+        return today >= startDate;
+      }
+      
+      // Se tem data de fim, verifica se está no período
+      const endDate = new Date(course.substituteTeacher.endDate);
+      return today >= startDate && today <= endDate;
+    };
+    
+    return allCourses.filter(course => 
+      course.teacherEmail?.toLowerCase() === userEmail || isActiveSubstitute(course)
+    );
+  }, [allCourses, currentUserData, allMembers]);
 
   // Obter todos os alunos dos cursos do professor
   const myStudents = useMemo(() => {

@@ -3,7 +3,9 @@ import { useAuthStore } from '../store/authStore';
 import { useLoadingState } from '../hooks/useLoadingState';
 import LoadingButton from './LoadingButton';
 import PersonAutocomplete from './PersonAutocomplete';
+import SubstituteTeacherModal from './SubstituteTeacherModal';
 import { formatDateForInput, formatDateToBrazilian, convertBrazilianDateToISO } from '../utils/dateUtils';
+import { User, Plus, Edit, Trash2, Calendar, Clock } from 'lucide-react';
 
 const weekDaysMap = { "Domingo": 0, "Segunda-feira": 1, "Terça-feira": 2, "Quarta-feira": 3, "Quinta-feira": 4, "Sexta-feira": 5, "Sábado": 6 };
 
@@ -16,12 +18,15 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
         assessment: { tests: { count: 0, value: 0 }, activities: { count: 0, value: 0 }, assignments: { count: 0, value: 0 } },
         passingCriteria: { minGrade: 7, minAttendance: 75 },
         templateId: '', isExtra: false,
+        substituteTeacher: null, // Novo campo para professor substituto
     };
 
     const [formData, setFormData] = useState(initialFormData);
     const [error, setError] = useState('');
     const [fieldErrors, setFieldErrors] = useState({});
     const [selectedTemplateName, setSelectedTemplateName] = useState('');
+    const [showSubstituteModal, setShowSubstituteModal] = useState(false);
+    const [substituteLoading, setSubstituteLoading] = useState(false);
 
     useEffect(() => {
         if (editingCourse) {
@@ -171,9 +176,40 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
         }
     };
 
+    const handleSubstituteSave = async (substituteData) => {
+        setSubstituteLoading(true);
+        try {
+            setFormData(prev => ({ ...prev, substituteTeacher: substituteData }));
+            setShowSubstituteModal(false);
+        } catch (error) {
+            console.error('Erro ao salvar professor substituto:', error);
+        } finally {
+            setSubstituteLoading(false);
+        }
+    };
+
+    const handleRemoveSubstitute = () => {
+        setFormData(prev => ({ ...prev, substituteTeacher: null }));
+    };
+
+    const isSubstituteActive = () => {
+        if (!formData.substituteTeacher) return false;
+        
+        const today = new Date();
+        const startDate = new Date(formData.substituteTeacher.startDate);
+        const endDate = formData.substituteTeacher.endDate ? new Date(formData.substituteTeacher.endDate) : null;
+        
+        if (formData.substituteTeacher.isIndefinite) {
+            return today >= startDate;
+        }
+        
+        return today >= startDate && (!endDate || today <= endDate);
+    };
+
     const weekDays = Object.keys(weekDaysMap);
 
     return (
+        <>
         <form onSubmit={handleSubmit} className="flex flex-col max-h-[85vh]">
             <div className="flex-shrink-0">
                 <h2 className="text-2xl font-bold text-gray-900 mb-4">{editingCourse ? 'Editar Turma' : 'Nova Turma'}</h2>
@@ -224,6 +260,85 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                                 className={fieldErrors.teacherId ? 'border-red-500' : ''}
                             />
                             {fieldErrors.teacherId && <p className="text-red-600 text-sm mt-1">{fieldErrors.teacherId}</p>}
+                        </div>
+                        {/* Campo de Professor Substituto */}
+                        <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                            <div className="flex items-center justify-between mb-3">
+                                <h4 className="font-semibold text-red-800 flex items-center">
+                                    <User className="mr-2" size={18} />
+                                    Professor Substituto
+                                </h4>
+                                {!formData.substituteTeacher && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowSubstituteModal(true)}
+                                        className="flex items-center px-3 py-1 bg-[#DC2626] text-white rounded-md hover:bg-[#991B1B] transition-all text-sm"
+                                    >
+                                        <Plus size={16} className="mr-1" />
+                                        Adicionar
+                                    </button>
+                                )}
+                            </div>
+                            
+                            {formData.substituteTeacher ? (
+                                <div className="bg-white rounded-md p-3 border">
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex-1">
+                                            <div className="flex items-center mb-2">
+                                                <span className="font-medium text-gray-800">
+                                                    {formData.substituteTeacher.teacherName}
+                                                </span>
+                                                {isSubstituteActive() && (
+                                                    <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                                                        Ativo
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-sm text-gray-600 space-y-1">
+                                                <div className="flex items-center">
+                                                    <Calendar size={14} className="mr-1" />
+                                                    <span>
+                                                        Início: {formatDateToBrazilian(formData.substituteTeacher.startDate)}
+                                                        {formData.substituteTeacher.isIndefinite ? (
+                                                            <span className="ml-2 flex items-center">
+                                                                <Clock size={14} className="mr-1" />
+                                                                Prazo indeterminado
+                                                            </span>
+                                                        ) : (
+                                                            ` - Fim: ${formatDateToBrazilian(formData.substituteTeacher.endDate)}`
+                                                        )}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <strong>Motivo:</strong> {formData.substituteTeacher.reason}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex space-x-2 ml-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowSubstituteModal(true)}
+                                                className="p-1 text-[#DC2626] hover:text-[#991B1B] transition-colors"
+                                                title="Editar substituto"
+                                            >
+                                                <Edit size={16} />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleRemoveSubstitute}
+                                                className="p-1 text-red-600 hover:text-red-800 transition-colors"
+                                                title="Remover substituto"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-red-700 text-sm">
+                                    Nenhum professor substituto configurado. Clique em "Adicionar" para definir um substituto temporário.
+                                </p>
+                            )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
@@ -339,6 +454,17 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                 </LoadingButton>
             </div>
         </form>
+
+        {/* Modal de Professor Substituto */}
+        <SubstituteTeacherModal
+            isOpen={showSubstituteModal}
+            onClose={() => setShowSubstituteModal(false)}
+            onSave={handleSubstituteSave}
+            members={members}
+            currentSubstitute={formData.substituteTeacher}
+            isLoading={substituteLoading}
+        />
+        </>
     );
 };
 

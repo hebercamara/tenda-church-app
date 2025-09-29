@@ -44,8 +44,8 @@ import { formatDateToBrazilian } from '../utils/dateUtils';
                         datasets: [{
                             label: `Frequência do Curso (%)`,
                             data: dataPoints,
-                            borderColor: '#2563EB',
-                            backgroundColor: 'rgba(37, 99, 235, 0.2)',
+                            borderColor: '#DC2626',
+                            backgroundColor: 'rgba(220, 38, 38, 0.2)',
                             fill: true,
                         }],
                     });

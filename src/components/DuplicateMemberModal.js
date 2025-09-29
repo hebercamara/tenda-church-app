@@ -13,7 +13,7 @@ const DuplicateMemberModal = React.memo(({ isOpen, onClose, onConfirm, onReject,
                     {existingValue || <span className="italic text-gray-400">Não informado</span>}
                 </p>
                 {existingValue !== newValue && newValue && (
-                    <p className="text-blue-600 font-bold">Novo: {newValue}</p>
+                    <p className="text-red-600 font-bold">Novo: {newValue}</p>
                 )}
             </div>
         </div>
@@ -40,8 +40,8 @@ const DuplicateMemberModal = React.memo(({ isOpen, onClose, onConfirm, onReject,
                             {renderField(<Calendar size={16} />, "Nascimento", existingMember.dob)}
                         </div>
                     </div>
-                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                        <h4 className="font-bold text-lg text-blue-800 mb-3">Novo Cadastro</h4>
+                    <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                        <h4 className="font-bold text-lg text-red-800 mb-3">Novo Cadastro</h4>
                         <div className="space-y-2">
                             {renderField(<User size={16} />, "Nome", existingMember.name, newMemberData.name)}
                             {renderField(<Mail size={16} />, "E-mail", existingMember.email, newMemberData.email)}

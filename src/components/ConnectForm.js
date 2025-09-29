@@ -133,9 +133,12 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect, connects }) => 
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        console.log('🚀 Iniciando submissão do formulário Connect');
+        console.log('📋 Dados do formulário:', formData);
         setLoading(true);
         
         try {
+            console.log('✅ Iniciando validação completa...');
             // Validação completa
             const allErrors = {};
             Object.keys(formData).forEach(field => {
@@ -148,41 +151,55 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect, connects }) => 
                     Object.assign(allErrors, fieldError);
                 }
             });
+            console.log('🔍 Erros de validação encontrados:', allErrors);
             
             // Validação específica do líder
+            console.log('👤 Validando líder...');
             const leader = members.find(m => m.id === formData.leaderId);
             if (formData.leaderId && !leader) {
+                console.log('❌ Líder não encontrado:', formData.leaderId);
                 allErrors.leaderId = 'Líder selecionado não encontrado';
             } else if (formData.leaderId && !leader?.email) {
+                console.log('❌ Líder sem email:', leader);
                 allErrors.leaderId = 'O líder selecionado precisa ter um e-mail cadastrado';
+            } else if (leader) {
+                console.log('✅ Líder válido:', leader.name);
             }
             
             // Validação: cada membro pode pertencer a apenas 1 Connect
+            console.log('👥 Validando membros do Connect...');
             const membersInOtherConnects = [];
             formData.memberIds.forEach(memberId => {
                 const member = members.find(m => m.id === memberId);
                 if (member && member.connectId && member.connectId !== editingConnect?.id) {
                     const existingConnect = connects.find(c => c.id === member.connectId);
+                    console.log('⚠️ Membro já em outro Connect:', member.name, 'Connect:', existingConnect?.number);
                     membersInOtherConnects.push(`${member.name} já pertence ao Connect ${existingConnect?.number || 'desconhecido'}`);
                 }
             });
             
             if (membersInOtherConnects.length > 0) {
+                console.log('❌ Membros em conflito:', membersInOtherConnects);
                 allErrors.memberIds = `Os seguintes membros já pertencem a outros Connects: ${membersInOtherConnects.join(', ')}`;
             }
             
             if (Object.keys(allErrors).length > 0) {
+                console.log('❌ Formulário com erros, não enviando:', allErrors);
                 setFieldErrors(allErrors);
                 setError('Por favor, corrija os erros nos campos destacados.');
                 return;
             }
             
+            console.log('✅ Validação concluída, preparando dados para salvar...');
             setError('');
             setFieldErrors({});
             
             // Buscar dados do supervisor e pastor
             const supervisor = formData.supervisorEmail ? members.find(m => m.id === formData.supervisorEmail) : null;
             const pastor = formData.pastorEmail ? members.find(m => m.id === formData.pastorEmail) : null;
+            
+            console.log('👥 Supervisor encontrado:', supervisor?.name || 'Nenhum');
+            console.log('👥 Pastor encontrado:', pastor?.name || 'Nenhum');
             
             const saveData = {
                 ...formData,
@@ -195,11 +212,17 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect, connects }) => 
                 memberIds: formData.memberIds || []
             };
             
+            console.log('💾 Dados finais para salvar:', saveData);
+            console.log('🚀 Chamando função onSave...');
             await onSave(saveData);
+            console.log('✅ onSave concluído, fechando modal...');
             onClose();
         } catch (error) {
+            console.error('❌ Erro no ConnectForm:', error);
+            console.error('📊 Stack trace:', error.stack);
             setError('Erro ao salvar connect. Tente novamente.');
         } finally {
+            console.log('🔄 Finalizando loading...');
             setLoading(false);
         }
     };

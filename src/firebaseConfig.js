@@ -20,6 +20,23 @@ const app = initializeApp(firebaseConfig);
 // Crie e EXPORTE as instâncias do Firestore e do Auth
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+
+// Configurações para melhorar a conectividade
+if (typeof window !== 'undefined') {
+  // Configurar timeout e retry para o Firestore
+  const settings = {
+    experimentalForceLongPolling: true, // Força long polling em vez de WebSocket
+  };
+  
+  try {
+    // Aplicar configurações apenas se ainda não foram aplicadas
+    if (!db._delegate._databaseId) {
+      db._delegate._settings = settings;
+    }
+  } catch (error) {
+    console.warn('Não foi possível aplicar configurações do Firestore:', error);
+  }
+}
 export const appId = firebaseConfig.projectId; // Exportando o ID também, pois você usa
 
 // Opcional: exportar o app também pode ser útil

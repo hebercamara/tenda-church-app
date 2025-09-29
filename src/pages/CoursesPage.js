@@ -144,7 +144,7 @@ const CourseCard = React.memo(({ course, isAdmin, onEditCourse, onDelete, onMana
 
 // ALTERADO: O componente não recebe mais `isAdmin`
 const CoursesPage = ({
-  courses, courseTemplates, onAddCourse, onAddCourseTemplate, onEditCourse, onEditCourseTemplate,
+  courses = [], courseTemplates = [], onAddCourse, onAddCourseTemplate, onEditCourse, onEditCourseTemplate,
   onDelete, onManageCourse, onFinalizeCourse, onReopenCourse,
 }) => {
   // NOVO: Buscando o status de admin diretamente do store
@@ -157,6 +157,8 @@ const CoursesPage = ({
   const [showArchived, setShowArchived] = useState(false);
 
   const processedCourses = useMemo(() => {
+    if (!Array.isArray(courses)) return { open: [], recentlyClosed: [], archived: [] };
+    
     let filtered = [...courses];
     if (selectedTemplate) filtered = filtered.filter(c => c.templateId === selectedTemplate);
     if (selectedProfessor) filtered = filtered.filter(c => c.teacherId === selectedProfessor);
@@ -189,7 +191,10 @@ const CoursesPage = ({
     return { open, recentlyClosed, archived };
   }, [courses, searchTerm, selectedTemplate, selectedProfessor]);
 
-  const uniqueProfessors = useMemo(() => [...new Map(courses.map(c => [c.teacherId, { id: c.teacherId, name: c.teacherName }])).values()], [courses]);
+  const uniqueProfessors = useMemo(() => {
+    if (!Array.isArray(courses)) return [];
+    return [...new Map(courses.map(c => [c.teacherId, { id: c.teacherId, name: c.teacherName }])).values()];
+  }, [courses]);
 
   return (
     <div>

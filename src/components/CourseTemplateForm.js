@@ -85,7 +85,7 @@ const CourseTemplateForm = ({ onClose, onSave, editingTemplate }) => {
             </div>
             <div className="flex-shrink-0 flex justify-end space-x-3 pt-4 border-t mt-4">
                 <button type="button" onClick={onClose} className="px-4 py-2 rounded-md bg-gray-200 text-gray-800 hover:bg-gray-300 transition-all">Cancelar</button>
-                <button type="submit" className="px-4 py-2 rounded-md bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-all">Salvar Modelo</button>
+                <button type="submit" className="px-4 py-2 rounded-md bg-red-600 text-white font-semibold hover:bg-red-700 transition-all">Salvar Modelo</button>
             </div>
         </form>
     );

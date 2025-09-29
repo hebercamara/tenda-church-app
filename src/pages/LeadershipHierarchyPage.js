@@ -163,6 +163,8 @@ const nodeTypes = {
 
 const LeadershipHierarchyPage = ({ connects, allMembers }) => {
   const { isAdmin } = useAuthStore();
+  
+
   const [viewMode, setViewMode] = useState('flow'); // 'list' ou 'flow'
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all'); // 'all', 'pastor', 'supervisor', 'leader', 'connect'
@@ -196,17 +198,15 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
     };
   }, []);
 
-  // Debug logs
-  console.log('LeadershipHierarchyPage - Props received:', {
-    connects: connects?.length || 0,
-    allMembers: allMembers?.length || 0,
-    connectsData: connects?.slice(0, 3),
-    membersData: allMembers?.slice(0, 3)
-  });
+
+
+
 
   // Processar dados para criar hierarquia
   const hierarchyData = useMemo(() => {
-    if (!connects || !allMembers) return { pastors: [], supervisors: [], leadersWithoutSupervisor: [], orphanConnects: [] };
+    if (!connects || !allMembers) {
+      return { pastors: [], supervisors: [], leadersWithoutSupervisor: [], orphanConnects: [] };
+    }
 
     // Agrupar connects por pastor, supervisor e líder
     const connectsByPastor = {};
@@ -334,42 +334,111 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
       };
     });
 
-    console.log('Hierarchy data processed:', { pastors: pastors.length, supervisors: supervisorsWithoutPastor.length, leadersWithoutSupervisor: leadersWithoutSupervisor.length, orphanConnects: orphanConnects.length });
     return { pastors, supervisors: supervisorsWithoutPastor, leadersWithoutSupervisor, orphanConnects };
   }, [connects, allMembers]);
 
+  // Filtrar dados baseado na busca e filtro (usado tanto para ReactFlow quanto para visualização em lista)
+  const filteredData = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase();
+    
+    // Função auxiliar para verificar se um item corresponde à busca
+    const matchesSearch = (item, type) => {
+      if (!searchTerm) return true;
+      
+      switch (type) {
+        case 'supervisor':
+        case 'leader':
+          return item.member?.name?.toLowerCase().includes(searchLower) || 
+                 item.email?.toLowerCase().includes(searchLower);
+        case 'connect':
+          return item.name?.toLowerCase().includes(searchLower) ||
+                 item.number?.toString().includes(searchTerm);
+        default:
+          return true;
+      }
+    };
+
+    return {
+      pastors: hierarchyData.pastors.filter(pastor => {
+        if (filterType !== 'all' && filterType !== 'pastor') return false;
+        return matchesSearch(pastor, 'supervisor');
+      }),
+      supervisors: hierarchyData.supervisors.filter(supervisor => {
+        if (filterType !== 'all' && filterType !== 'supervisor') return false;
+        
+        // Se está buscando, incluir supervisor se ele ou seus líderes/connects correspondem
+        if (searchTerm) {
+          const supervisorMatches = matchesSearch(supervisor, 'supervisor');
+          const hasMatchingLeader = supervisor.leaders?.some(leader => 
+            matchesSearch(leader, 'leader') || 
+            leader.connects?.some(connect => matchesSearch(connect, 'connect'))
+          );
+          return supervisorMatches || hasMatchingLeader;
+        }
+        
+        return true;
+      }).map(supervisor => {
+        // Filtrar líderes do supervisor se necessário
+        if (searchTerm || filterType === 'leader' || filterType === 'connect') {
+          return {
+            ...supervisor,
+            leaders: supervisor.leaders?.filter(leader => {
+              if (filterType === 'connect') return false; // Se filtrando só connects, não mostrar líderes
+              if (filterType === 'leader' || filterType === 'all') {
+                if (searchTerm) {
+                  const leaderMatches = matchesSearch(leader, 'leader');
+                  const hasMatchingConnect = leader.connects?.some(connect => matchesSearch(connect, 'connect'));
+                  return leaderMatches || hasMatchingConnect;
+                }
+                return true;
+              }
+              return false;
+            }).map(leader => ({
+              ...leader,
+              connects: leader.connects?.filter(connect => {
+                if (filterType === 'connect' || filterType === 'all') {
+                  return matchesSearch(connect, 'connect');
+                }
+                return searchTerm ? matchesSearch(connect, 'connect') : true;
+              })
+            }))
+          };
+        }
+        return supervisor;
+      }),
+      leadersWithoutSupervisor: hierarchyData.leadersWithoutSupervisor.filter(leader => {
+        if (filterType !== 'all' && filterType !== 'leader') return false;
+        
+        if (searchTerm) {
+          const leaderMatches = matchesSearch(leader, 'leader');
+          const hasMatchingConnect = leader.connects?.some(connect => matchesSearch(connect, 'connect'));
+          return leaderMatches || hasMatchingConnect;
+        }
+        
+        return true;
+      }).map(leader => ({
+        ...leader,
+        connects: leader.connects?.filter(connect => {
+          if (filterType === 'connect' || filterType === 'all') {
+            return matchesSearch(connect, 'connect');
+          }
+          return searchTerm ? matchesSearch(connect, 'connect') : true;
+        })
+      })),
+      orphanConnects: hierarchyData.orphanConnects.filter(connect => {
+        if (filterType !== 'all' && filterType !== 'connect') return false;
+        return matchesSearch(connect, 'connect');
+      })
+    };
+  }, [hierarchyData, searchTerm, filterType]);
+
   // Converter dados hierárquicos em nós e arestas do React Flow
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
-    console.log('Creating nodes and edges from hierarchy data:', hierarchyData);
     const nodes = [];
     const edges = [];
     let yPosition = 0;
     const levelHeight = 200;
     const nodeSpacing = 300;
-
-    // Filtrar dados baseado na busca e filtro
-    const filteredData = {
-      pastors: hierarchyData.pastors.filter(pastor => {
-        if (filterType !== 'all' && filterType !== 'pastor') return false;
-        if (searchTerm && !pastor.member?.name?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-        return true;
-      }),
-      supervisors: hierarchyData.supervisors.filter(supervisor => {
-        if (filterType !== 'all' && filterType !== 'supervisor') return false;
-        if (searchTerm && !supervisor.member?.name?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-        return true;
-      }),
-      leadersWithoutSupervisor: hierarchyData.leadersWithoutSupervisor.filter(leader => {
-        if (filterType !== 'all' && filterType !== 'leader') return false;
-        if (searchTerm && !leader.member?.name?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-        return true;
-      }),
-      orphanConnects: hierarchyData.orphanConnects.filter(connect => {
-        if (filterType !== 'all' && filterType !== 'connect') return false;
-        if (searchTerm && !connect.name?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-        return true;
-      })
-    };
 
     // Adicionar nós de pastores
     filteredData.pastors.forEach((pastor, pastorIndex) => {
@@ -663,11 +732,8 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
       });
     });
 
-    console.log('Final nodes and edges created:', { nodes: nodes.length, edges: edges.length });
-    console.log('Nodes:', nodes);
-    console.log('Edges:', edges);
     return { nodes, edges };
-  }, [hierarchyData, searchTerm, filterType]);
+  }, [filteredData, hierarchyData]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -679,8 +745,6 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
 
   // Atualizar nós quando os dados mudarem
   React.useEffect(() => {
-    console.log('Updating nodes and edges:', { nodes: initialNodes.length, edges: initialEdges.length });
-    console.log('Edges:', initialEdges);
     setNodes(initialNodes);
     setEdges(initialEdges);
   }, [initialNodes, initialEdges, setNodes, setEdges]);
@@ -993,28 +1057,33 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
           </ReactFlow>
         </div>
       ) : (
-        hierarchyData.supervisors.length === 0 && hierarchyData.leadersWithoutSupervisor.length === 0 && hierarchyData.orphanConnects.length === 0 ? (
+        filteredData.supervisors.length === 0 && filteredData.leadersWithoutSupervisor.length === 0 && filteredData.orphanConnects.length === 0 ? (
           <div className="bg-gray-50 border border-gray-200 p-6 rounded-lg text-center">
             <Users size={48} className="mx-auto text-gray-400 mb-4" />
             <h3 className="text-lg font-semibold text-gray-600 mb-2">Nenhuma hierarquia encontrada</h3>
-            <p className="text-gray-500">Não há connects com líderes ou supervisores cadastrados.</p>
+            <p className="text-gray-500">
+              {searchTerm || filterType !== 'all' 
+                ? 'Nenhum resultado encontrado para os filtros aplicados.' 
+                : 'Não há connects com líderes ou supervisores cadastrados.'
+              }
+            </p>
           </div>
         ) : (
           <div className="space-y-6">
-            {hierarchyData.supervisors.map((supervisor) => (
+            {filteredData.supervisors.map((supervisor) => (
               <SupervisorCard key={supervisor.email} supervisor={supervisor} />
             ))}
-            {hierarchyData.leadersWithoutSupervisor.map((leader) => (
+            {filteredData.leadersWithoutSupervisor.map((leader) => (
               <LeaderCard key={leader.email} leader={leader} />
             ))}
-            {hierarchyData.orphanConnects.length > 0 && (
+            {filteredData.orphanConnects.length > 0 && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-yellow-800 mb-3 flex items-center">
                   <Users size={20} className="mr-2" />
                   Connects sem Líder/Supervisor
                 </h3>
                 <div className="space-y-2">
-                  {hierarchyData.orphanConnects.map(connect => (
+                  {filteredData.orphanConnects.map(connect => (
                     <ConnectCard key={connect.id} connect={connect} />
                   ))}
                 </div>

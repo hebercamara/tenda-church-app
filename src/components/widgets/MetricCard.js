@@ -1,7 +1,7 @@
 import React from 'react';
 
 const MetricCard = ({ icon: Icon, title, value, unit, color }) => {
-  const textColor = color || '#3B82F6'; // Cor padrão azul
+  const textColor = color || '#DC2626'; // Cor padrão vermelha
 
   return (
     <div className="bg-white p-3 sm:p-4 rounded-xl shadow-md flex items-center space-x-2 sm:space-x-4">
