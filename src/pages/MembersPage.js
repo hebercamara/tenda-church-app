@@ -1,8 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Edit, Trash2, Plus, Route, Filter, ChevronLeft, ChevronRight, Upload } from 'lucide-react';
-// NOVO: Importações do Firebase e do Spinner de Carregamento
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { db, appId } from '../firebaseConfig';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 // ALTERADO: O componente agora recebe props de usuário para fazer sua própria filtragem
@@ -15,83 +12,34 @@ const MembersPage = ({
   getConnectName,
   isAdmin,
   currentUserData,
-  allConnects // Ainda precisamos disso para a lógica de filtro do líder
+  allConnects, // Ainda precisamos disso para a lógica de filtro do líder
+  allMembers
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedConnect, setSelectedConnect] = useState(''); // NOVO: Filtro por Connect
   const [currentPage, setCurrentPage] = useState(1); // NOVO: Página atual
   const [itemsPerPage, setItemsPerPage] = useState(20); // NOVO: Itens por página
   // NOVO: Estados locais para gerenciar os membros e o carregamento
-  const [members, setMembers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // NOVO: Em vez de buscar do Firestore, usamos os dados já carregados e filtramos por perfil
+  const userEmail = (currentUserData?.email || '').toLowerCase();
+  const leaderConnectIds = Array.isArray(allConnects) ? allConnects
+    .filter(c => {
+      const isLeader = c.leaderId === currentUserData?.id || (c.leaderEmail || '').toLowerCase() === userEmail;
+      const isSupervisor = (c.supervisorEmail || '').toLowerCase() === userEmail;
+      const isAux = (
+        Array.isArray(c.auxLeaders) && c.auxLeaders.some(l => l.id === currentUserData?.id || (l.email || '').toLowerCase() === userEmail)
+      ) || c.auxLeaderId === currentUserData?.id || (c.auxLeaderEmail || '').toLowerCase() === userEmail;
+      return isLeader || isSupervisor || isAux;
+    })
+    .map(c => c.id) : [];
 
-  // NOVO: Efeito que busca os membros do Firebase quando o componente é montado
-  useEffect(() => {
-    // Check both possible collection paths for members
-    const fetchMembers = async () => {
-      console.log('🔍 DEBUG: Starting fetchMembers - checking for existing data');
-      console.log('🔍 DEBUG: appId:', appId);
-      
-      setLoading(true);
-      try {
-        let membersList = [];
-        
-        // Try the import path first (where bulk import saves)
-        try {
-          const importCollection = collection(db, `artifacts/${appId}/public/data/members`);
-          console.log('🔍 DEBUG: Checking import path:', `artifacts/${appId}/public/data/members`);
-          
-          const importSnapshot = await getDocs(importCollection);
-          console.log('🔍 DEBUG: Import collection size:', importSnapshot.size);
-          
-          if (importSnapshot.size > 0) {
-            membersList = importSnapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data()
-            }));
-            console.log('🔍 DEBUG: Found members in import path:', membersList.length);
-          }
-        } catch (importError) {
-          console.error('🔍 DEBUG: Error checking import path:', importError);
-        }
-        
-        // If no members found in import path, try the app path
-        if (membersList.length === 0) {
-          try {
-            const appCollection = collection(db, `apps/${appId}/members`);
-            console.log('🔍 DEBUG: Checking app path:', `apps/${appId}/members`);
-            
-            const appSnapshot = await getDocs(appCollection);
-            console.log('🔍 DEBUG: App collection size:', appSnapshot.size);
-            
-            if (appSnapshot.size > 0) {
-              membersList = appSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-              }));
-              console.log('🔍 DEBUG: Found members in app path:', membersList.length);
-            }
-          } catch (appError) {
-            console.error('🔍 DEBUG: Error checking app path:', appError);
-          }
-        }
-        
-        console.log('🔍 DEBUG: Total members found:', membersList.length);
-        setMembers(membersList);
-        
-      } catch (error) {
-        console.error("Erro ao buscar membros:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchMembers();
-  }, []); // Removendo dependências temporariamente para debug
+  const members = Array.isArray(allMembers)
+    ? (isAdmin ? allMembers : allMembers.filter(m => leaderConnectIds.includes(m.connectId)))
+    : [];
 
   // NOVO: Filtros combinados (busca por nome e Connect)
   const filteredMembers = members.filter(member => {
-    const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (member.name || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesConnect = selectedConnect === '' || member.connectId === selectedConnect;
     return matchesSearch && matchesConnect;
   });
@@ -118,15 +66,11 @@ const MembersPage = ({
 
   // NOVO: Obter lista única de Connects para o filtro
   const availableConnects = [...new Set(members.map(member => member.connectId))]
-    .filter(connectId => connectId) // Remove valores vazios
-    .map(connectId => ({
-      id: connectId,
-      name: getConnectName(connectId)
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter(Boolean)
+    .map(connectId => ({ id: connectId, name: getConnectName(connectId) }));
 
-  // NOVO: Renderiza um spinner enquanto os dados são carregados
-  if (loading) {
+  // NOVO: Renderiza um spinner enquanto os dados são carregados via props
+  if (!Array.isArray(allMembers)) {
     return <LoadingSpinner />;
   }
 
@@ -161,7 +105,7 @@ const MembersPage = ({
             <Filter size={20} />
             <span className="font-medium">Filtros:</span>
           </div>
-          
+
           <div className="flex flex-col sm:flex-row gap-4 flex-1">
             <input
               type="text"
@@ -170,7 +114,7 @@ const MembersPage = ({
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-1 bg-white text-gray-900 rounded-md p-3 border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
             />
-            
+
             <select
               value={selectedConnect}
               onChange={(e) => setSelectedConnect(e.target.value)}
@@ -185,14 +129,14 @@ const MembersPage = ({
             </select>
           </div>
         </div>
-        
+
         {/* NOVO: Informações de resultados e paginação */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mt-4 pt-4 border-t border-gray-200 gap-4">
           <div className="text-gray-600 font-medium">
-            Total: {members.length} membros | Filtrados: {filteredMembers.length} | 
+            Total: {members.length} membros | Filtrados: {filteredMembers.length} |
             Exibindo: {Math.min(startIndex + 1, filteredMembers.length)}-{Math.min(endIndex, filteredMembers.length)}
           </div>
-          
+
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-600">Itens por página:</span>
@@ -239,8 +183,8 @@ const MembersPage = ({
                 </tr>
               ) : (
                 currentMembers.map(member => (
-                  <tr 
-                    key={member.id} 
+                  <tr
+                    key={member.id}
                     className="hover:bg-gray-50 transition-colors cursor-pointer"
                     onClick={(e) => handleRowClick(member, e)}
                     title="Clique para editar este membro"
@@ -253,26 +197,28 @@ const MembersPage = ({
                     <td className="p-3 text-gray-600 hidden lg:table-cell">{getConnectName(member.connectId)}</td>
                     <td className="p-3">
                       <div className="flex items-center space-x-3">
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             onViewTrack(member);
-                          }} 
-                          className="text-gray-500 hover:text-blue-600 transition-colors" 
+                          }}
+                          className="text-gray-500 hover:text-blue-600 transition-colors"
                           title="Ver Trilho de Liderança"
                         >
                           <Route size={18} />
                         </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteMember('member', member.id);
-                          }} 
-                          className="text-gray-500 hover:text-red-600 transition-colors" 
-                          title="Excluir Membro"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                        {(isAdmin || leaderConnectIds.includes(member.connectId)) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteMember('member', member.id);
+                            }}
+                            className="text-gray-500 hover:text-red-600 transition-colors"
+                            title="Excluir Membro"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -281,7 +227,7 @@ const MembersPage = ({
             </tbody>
           </table>
         </div>
-        
+
         {/* NOVO: Controles de paginação */}
         {totalPages > 1 && (
           <div className="bg-gray-50 px-4 py-3 border-t border-gray-200">
@@ -289,7 +235,7 @@ const MembersPage = ({
               <div className="text-sm text-gray-600">
                 Página {currentPage} de {totalPages}
               </div>
-              
+
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
@@ -299,7 +245,7 @@ const MembersPage = ({
                   <ChevronLeft size={16} className="mr-1" />
                   Anterior
                 </button>
-                
+
                 <div className="flex items-center space-x-1">
                   {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                     let pageNum;
@@ -312,23 +258,22 @@ const MembersPage = ({
                     } else {
                       pageNum = currentPage - 2 + i;
                     }
-                    
+
                     return (
                       <button
                         key={pageNum}
                         onClick={() => setCurrentPage(pageNum)}
-                        className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                          currentPage === pageNum
+                        className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${currentPage === pageNum
                             ? 'bg-[#DC2626] text-white'
                             : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'
-                        }`}
+                          }`}
                       >
                         {pageNum}
                       </button>
                     );
                   })}
                 </div>
-                
+
                 <button
                   onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                   disabled={currentPage === totalPages}

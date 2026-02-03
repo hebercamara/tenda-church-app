@@ -10,7 +10,7 @@ const weekDaysMap = { "Domingo": 0, "Segunda-feira": 1, "Terça-feira": 2, "Quar
 const BrazilianDatePicker = ({ value, onChange, className }) => {
     const hiddenInputRef = useRef(null);
     const [displayValue, setDisplayValue] = useState('');
-    
+
     // Atualiza o valor de exibição quando o valor ISO muda
     useEffect(() => {
         if (value) {
@@ -20,7 +20,7 @@ const BrazilianDatePicker = ({ value, onChange, className }) => {
             setDisplayValue('');
         }
     }, [value]);
-    
+
     const handleDisplayClick = () => {
         if (hiddenInputRef.current) {
             // Tenta usar showPicker primeiro, se não funcionar, foca no input
@@ -38,15 +38,15 @@ const BrazilianDatePicker = ({ value, onChange, className }) => {
             }
         }
     };
-    
+
     const handleDateChange = (e) => {
         onChange(e.target.value);
     };
-    
+
     const handleDisplayChange = (e) => {
         const inputValue = e.target.value;
         setDisplayValue(inputValue);
-        
+
         // Tenta converter a data digitada para formato ISO
         if (inputValue.length === 10) { // dd/mm/aaaa
             const parts = inputValue.split('/');
@@ -54,15 +54,15 @@ const BrazilianDatePicker = ({ value, onChange, className }) => {
                 const day = parts[0].padStart(2, '0');
                 const month = parts[1].padStart(2, '0');
                 const year = parts[2];
-                
+
                 if (day.length === 2 && month.length === 2 && year.length === 4) {
                     const isoDate = `${year}-${month}-${day}`;
                     const testDate = new Date(isoDate + 'T12:00:00');
-                    
+
                     // Verifica se a data é válida
-                    if (!isNaN(testDate.getTime()) && 
-                        testDate.getDate() == day && 
-                        testDate.getMonth() + 1 == month && 
+                    if (!isNaN(testDate.getTime()) &&
+                        testDate.getDate() == day &&
+                        testDate.getMonth() + 1 == month &&
                         testDate.getFullYear() == year) {
                         onChange(isoDate);
                     }
@@ -70,14 +70,14 @@ const BrazilianDatePicker = ({ value, onChange, className }) => {
             }
         }
     };
-    
+
     const handleDisplayKeyDown = (e) => {
         // Permite apenas números, barras e teclas de navegação
         const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'];
         if (!allowedKeys.includes(e.key) && !/[0-9\/]/.test(e.key)) {
             e.preventDefault();
         }
-        
+
         // Auto-adiciona barras
         if (/[0-9]/.test(e.key)) {
             const currentValue = e.target.value;
@@ -88,7 +88,7 @@ const BrazilianDatePicker = ({ value, onChange, className }) => {
             }
         }
     };
-    
+
     return (
         <div className="relative">
             <div className="relative">
@@ -122,7 +122,7 @@ const BrazilianDatePicker = ({ value, onChange, className }) => {
     );
 };
 
-const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin }) => {
+const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin, onViewMember }) => {
     const [reportDates, setReportDates] = useState([]);
     const [selectedDate, setSelectedDate] = useState('');
     const [attendance, setAttendance] = useState({});
@@ -133,59 +133,72 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
     // Função para obter o nome conhecido dos membros com lógica de sobrenome para duplicatas
     const getMemberKnownName = (member, allConnectMembers) => {
         if (!member) return 'Membro não encontrado';
-        
+
         // Obter o nome conhecido ou primeiro nome como fallback
         const knownName = member.knownBy || member.name?.split(' ')[0] || member.name || 'Membro';
-        
+
         // Verificar se há duplicatas do mesmo nome conhecido entre os membros do Connect
         const membersWithSameName = allConnectMembers.filter(m => {
             if (!m || m.id === member.id) return false;
             const otherKnownName = m.knownBy || m.name?.split(' ')[0] || m.name || 'Membro';
             return otherKnownName === knownName;
         });
-        
+
         // Se há duplicatas, adicionar o último sobrenome
         if (membersWithSameName.length > 0) {
             const nameParts = member.name?.split(' ') || [];
             const lastName = nameParts[nameParts.length - 1];
             return lastName && lastName !== knownName ? `${knownName} ${lastName}` : knownName;
         }
-        
+
         return knownName;
     };
 
     const connectMembers = useMemo(() => {
         if (!connect || !selectedDate) return [];
-        
-        const reportDate = new Date(selectedDate + 'T12:00:00Z');
-        
+
+        // Normaliza a data do relatório para 00:00:00
+        const reportDateObj = new Date(selectedDate + 'T12:00:00Z');
+        const reportDateNormalized = new Date(reportDateObj);
+        reportDateNormalized.setHours(0, 0, 0, 0);
+
         // Filtra membros que estavam no Connect na data do relatório
         return members.filter(member => {
+            // Função auxiliar para normalizar data (ignorar hora)
+            const getNormalizedDate = (dateInfo) => {
+                if (!dateInfo) return null;
+                const d = dateInfo.toDate ? dateInfo.toDate() : new Date(dateInfo);
+                d.setHours(0, 0, 0, 0);
+                return d;
+            };
+
             // Se o membro está atualmente no Connect
             if (member.connectId === connect.id) {
                 // Verifica se já estava no Connect na data do relatório
                 if (member.connectHistory && member.connectHistory.length > 0) {
                     const currentEntry = member.connectHistory.find(entry => !entry.endDate);
                     if (currentEntry) {
-                        const startDate = currentEntry.startDate.toDate ? currentEntry.startDate.toDate() : new Date(currentEntry.startDate);
-                        return reportDate >= startDate;
+                        const startDateNormalized = getNormalizedDate(currentEntry.startDate);
+                        // Compara apenas as datas (>=)
+                        return reportDateNormalized >= startDateNormalized;
                     }
                 }
                 return true; // Se não tem histórico, considera que sempre esteve
             }
-            
+
             // Se o membro não está atualmente no Connect, verifica o histórico
             if (member.connectHistory && member.connectHistory.length > 0) {
                 return member.connectHistory.some(entry => {
                     if (entry.connectId !== connect.id) return false;
-                    
-                    const startDate = entry.startDate.toDate ? entry.startDate.toDate() : new Date(entry.startDate);
-                    const endDate = entry.endDate ? (entry.endDate.toDate ? entry.endDate.toDate() : new Date(entry.endDate)) : null;
-                    
-                    return reportDate >= startDate && (!endDate || reportDate <= endDate);
+
+                    const startDateNormalized = getNormalizedDate(entry.startDate);
+                    const endDateNormalized = entry.endDate ? getNormalizedDate(entry.endDate) : null;
+
+                    // Verifica se a data do relatório está dentro do intervalo [start, end]
+                    return reportDateNormalized >= startDateNormalized && (!endDateNormalized || reportDateNormalized <= endDateNormalized);
                 });
             }
-            
+
             return false;
         }).sort((a, b) => {
             const knownNameA = getMemberKnownName(a, members);
@@ -213,7 +226,7 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
 
             const today = new Date();
             const todayWeekday = today.getDay();
-            
+
             let daysToSubtract = todayWeekday - connectWeekday;
             if (daysToSubtract < 0) {
                 daysToSubtract += 7;
@@ -222,11 +235,11 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
             const currentWeekMeeting = new Date(today);
             currentWeekMeeting.setDate(today.getDate() - daysToSubtract);
             const currentWeekDateString = currentWeekMeeting.toISOString().split('T')[0];
-            
+
             const previousWeekMeeting = new Date(currentWeekMeeting);
             previousWeekMeeting.setDate(currentWeekMeeting.getDate() - 7);
             const previousWeekDateString = previousWeekMeeting.toISOString().split('T')[0];
-            
+
             const dates = [
                 { label: `Semana Atual (${formatDateToBrazilian(currentWeekMeeting)})`, value: currentWeekDateString },
                 { label: `Semana Anterior (${formatDateToBrazilian(previousWeekMeeting)})`, value: previousWeekDateString }
@@ -235,7 +248,7 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
             setReportDates(dates);
             setSelectedDate(currentWeekDateString);
         };
-        
+
         getReportDatesForLeader();
     }, [connect, isAdmin]);
 
@@ -266,7 +279,7 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
 
         fetchReport();
     }, [selectedDate, connect, connectMembers]);
-    
+
     const handleAttendanceChange = (memberId, status) => {
         setAttendance(prev => ({ ...prev, [memberId]: status }));
     };
@@ -293,10 +306,9 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
     if (!isOpen) return null;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} size="2xl">
-            <div className="flex flex-col max-h-[85vh]">
+        <Modal isOpen={isOpen} onClose={onClose} size="2xl" title={`Relatório do Connect ${connect.number}`}>
+            <div className="flex flex-col">
                 <div className="flex-shrink-0">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Relatório do Connect {connect.number}</h2>
                     <p className="text-gray-600 mb-4">{connect.name}</p>
 
                     {/* Renderização condicional do seletor de data */}
@@ -320,13 +332,20 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
                 </div>
                 {isLoading ? <div className="text-center p-8">Carregando relatório...</div> : (
                     <>
-                        <div className="flex-grow overflow-y-auto space-y-4 pr-2 mt-4">
+                        <div className="flex-grow space-y-4 pr-2 mt-4">
                             <fieldset className="border p-4 rounded-md">
                                 <legend className="px-2 font-semibold">Presença dos Membros</legend>
                                 <div className="space-y-2">
                                     {connectMembers.map(member => (
                                         <div key={member.id} className="flex justify-between items-center bg-gray-50 p-2 rounded-md">
-                                            <span>{getMemberKnownName(member, connectMembers)}</span>
+                                            <button
+                                                type="button"
+                                                className="text-left hover:underline text-gray-800"
+                                                title="Ver cadastro"
+                                                onClick={() => onViewMember && onViewMember(member)}
+                                            >
+                                                {getMemberKnownName(member, connectMembers)}
+                                            </button>
                                             <div className="flex space-x-2">
                                                 <button onClick={() => handleAttendanceChange(member.id, 'presente')} className={`px-3 py-1 text-sm rounded-md ${attendance[member.id] === 'presente' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-green-200'}`}>Presente</button>
                                                 <button onClick={() => handleAttendanceChange(member.id, 'ausente')} className={`px-3 py-1 text-sm rounded-md ${attendance[member.id] === 'ausente' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-red-200'}`}>Ausente</button>
@@ -345,12 +364,12 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
                                     </div>
                                     <div>
                                         <label htmlFor="offering" className="block text-sm font-medium text-gray-700 mb-1">Valor da Oferta (R$)</label>
-                                        <input type="number" id="offering" value={offering} onChange={e => setOffering(e.target.value)} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626]" placeholder="0.00" step="0.01"/>
+                                        <input type="number" id="offering" value={offering} onChange={e => setOffering(e.target.value)} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626]" placeholder="0.00" step="0.01" />
                                     </div>
                                 </div>
                             </fieldset>
                         </div>
-                         <div className="flex-shrink-0 flex justify-end space-x-3 pt-4 border-t mt-4">
+                        <div className="flex-shrink-0 flex justify-end space-x-3 pt-4 border-t mt-4">
                             <button type="button" onClick={onClose} className="px-4 py-2 rounded-md bg-gray-200 text-gray-800 hover:bg-gray-300 transition-all">Cancelar</button>
                             <button type="button" onClick={handleSave} className="px-4 py-2 rounded-md bg-[#DC2626] text-white font-semibold hover:bg-[#991B1B] transition-all">Salvar Relatório</button>
                         </div>

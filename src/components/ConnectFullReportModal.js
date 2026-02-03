@@ -112,10 +112,9 @@ const ConnectFullReportModal = ({ isOpen, onClose, connect, allMembers, allRepor
     const { connectMembers, connectReports, totalMeetings, avgGuests, avgAttendance } = reportData;
     
     return (
-        <Modal isOpen={isOpen} onClose={onClose} size="4xl">
+        <Modal isOpen={isOpen} onClose={onClose} size="4xl" title={`Relatório Completo do Connect ${connect.number}`}>
             <div className="flex flex-col max-h-[85vh]">
-                <div className="flex-shrink-0 pb-4 border-b">
-                    <h2 className="text-2xl font-bold text-gray-900">Relatório Completo do Connect {connect.number}</h2>
+                <div className="flex-shrink-0">
                     <p className="text-lg text-gray-600">{connect.name}</p>
                     <p className="text-sm text-gray-500">Líder: {connect.leaderName}</p>
                 </div>

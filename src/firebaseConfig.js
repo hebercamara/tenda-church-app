@@ -1,6 +1,6 @@
 // src/firebaseConfig.js
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 // Sua configuração, que já está correta.
@@ -17,27 +17,18 @@ export const firebaseConfig = {
 // Inicialize o Firebase
 const app = initializeApp(firebaseConfig);
 
-// Crie e EXPORTE as instâncias do Firestore e do Auth
-export const db = getFirestore(app);
+// Firestore com cache persistente em IndexedDB e suporte multi-aba
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+});
+
+// Auth
 export const auth = getAuth(app);
 
-// Configurações para melhorar a conectividade
-if (typeof window !== 'undefined') {
-  // Configurar timeout e retry para o Firestore
-  const settings = {
-    experimentalForceLongPolling: true, // Força long polling em vez de WebSocket
-  };
-  
-  try {
-    // Aplicar configurações apenas se ainda não foram aplicadas
-    if (!db._delegate._databaseId) {
-      db._delegate._settings = settings;
-    }
-  } catch (error) {
-    console.warn('Não foi possível aplicar configurações do Firestore:', error);
-  }
-}
-export const appId = firebaseConfig.projectId; // Exportando o ID também, pois você usa
+// Exportar o ID do app (usa-se como namespace nos paths do Firestore)
+export const appId = firebaseConfig.projectId;
 
 // Opcional: exportar o app também pode ser útil
 export default app;

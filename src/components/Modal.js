@@ -1,7 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 
-const Modal = React.memo(({ isOpen, onClose, title, children, hideHeader = false, size = "2xl" }) => {
+const Modal = React.memo(({ isOpen, onClose, title, children, hideHeader = false, size = "2xl", fullHeight = false, bodyClassName = "" }) => {
   if (!isOpen) return null;
 
   const sizeClasses = {
@@ -10,16 +10,16 @@ const Modal = React.memo(({ isOpen, onClose, title, children, hideHeader = false
     "lg": "max-w-lg",
     "xl": "max-w-xl",
     "2xl": "max-w-2xl",
-    "4xl": "max-w-4xl", 
+    "4xl": "max-w-4xl",
     "6xl": "max-w-6xl",
     "7xl": "max-w-7xl"
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-2 sm:p-4">
-      <div className={`bg-white rounded-2xl shadow-2xl w-full ${sizeClasses[size]} max-h-[95vh] ${hideHeader ? '' : 'overflow-y-auto'} transform transition-all scale-95 hover:scale-100 duration-300`}>
+      <div className={`bg-white rounded-2xl shadow-2xl w-full ${sizeClasses[size]} ${fullHeight ? 'h-[85vh] flex flex-col overflow-hidden' : 'max-h-[85vh] overflow-y-auto'} transform transition-all scale-95 hover:scale-100 duration-300`}>
         {!hideHeader && (
-          <header className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+          <header className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200 sticky top-0 bg-white z-10 flex-shrink-0">
             <h2 className="text-lg sm:text-xl font-bold text-gray-800 truncate pr-2">{title}</h2>
             <button
               onClick={onClose}
@@ -29,7 +29,7 @@ const Modal = React.memo(({ isOpen, onClose, title, children, hideHeader = false
             </button>
           </header>
         )}
-        <main className={hideHeader ? "h-full" : "p-3 sm:p-6"}>
+        <main className={`${hideHeader ? "h-full" : (bodyClassName || "p-3 sm:p-6")} ${fullHeight ? 'flex-1 overflow-hidden flex flex-col' : ''}`}>
           {children}
         </main>
       </div>

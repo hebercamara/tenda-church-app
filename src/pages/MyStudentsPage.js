@@ -47,12 +47,12 @@ const MyStudentsPage = ({ allCourses, allMembers, allConnects }) => {
 
     myCourses.forEach(course => {
       if (course.students && course.students.length > 0) {
-        course.students.forEach(studentId => {
+        course.students.forEach(s => {
+          const studentId = typeof s === 'string' ? s : s.id;
           const student = allMembers.find(m => m.id === studentId);
           if (student) {
             studentIds.add(studentId);
             
-            // Encontrar o Connect do aluno
             const studentConnect = allConnects?.find(c => c.id === student.connectId);
             
             studentsWithCourses.push({

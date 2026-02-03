@@ -2,17 +2,24 @@ import React, { useState } from 'react';
 import { collection, writeBatch, doc, getDocs } from 'firebase/firestore';
 import { db, appId } from '../firebaseConfig';
 import { useAuthStore } from '../store/authStore';
-import { Upload, Download, Users, AlertCircle, CheckCircle, X, FileText, Plus, Eye, Trash2 } from 'lucide-react';
+import { Upload, Download, Users, AlertCircle, CheckCircle, FileText, Plus, Eye, Trash2, X } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Modal from '../components/Modal';
 import { convertBrazilianDateToISO } from '../utils/dateUtils';
 import * as XLSX from 'xlsx';
 
-const BulkImportPage = () => {
+import DuplicateMemberModal from '../components/DuplicateMemberModal';
+
+const BulkImportPage = ({ allMembers = [], allConnects = [], areNamesSimilar }) => {
   const { user, isAdmin } = useAuthStore();
   const [importMethod, setImportMethod] = useState('manual'); // 'manual', 'csv' ou 'file'
   const [csvData, setCsvData] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
+
+  // Seleção global de Connect para a importação
+  const [defaultConnectId, setDefaultConnectId] = useState('');
+  // Quando marcado, aplica o Connect selecionado a TODOS os registros
+  const [applyConnectToAll, setApplyConnectToAll] = useState(false);
 
   const [manualMembers, setManualMembers] = useState([{
     nome: '',
@@ -40,6 +47,14 @@ const BulkImportPage = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [importResults, setImportResults] = useState(null);
   const [errors, setErrors] = useState([]);
+  // Overrides de Connect por linha (index original -> connectId)
+  const [rowConnectOverrides, setRowConnectOverrides] = useState({});
+
+  // Estado para verificação de duplicatas antes da importação
+  const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
+  const [duplicatesQueue, setDuplicatesQueue] = useState([]); // [{ existingMember, newMemberData, index }]
+  const [currentDuplicateIdx, setCurrentDuplicateIdx] = useState(0);
+  const [indicesToSkip, setIndicesToSkip] = useState(new Set());
 
 
 
@@ -195,6 +210,14 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
           const fieldMap = {
             'nome': 'nome',
             'name': 'nome',
+            'first name': 'firstNameTemp',
+            'firstname': 'firstNameTemp',
+            'guest first name': 'firstNameTemp',
+            'guest_first_name': 'firstNameTemp',
+            'last name': 'lastNameTemp',
+            'lastname': 'lastNameTemp',
+            'guest last name': 'lastNameTemp',
+            'guest_last_name': 'lastNameTemp',
             'conhecidopor': 'conhecidoPor',
             'conhecido_por': 'conhecidoPor',
             'conhecido por': 'conhecidoPor',
@@ -203,6 +226,7 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
             'email': 'email',
             'telefone': 'telefone',
             'phone': 'telefone',
+            'phone number': 'telefone',
             'endereco': 'endereco',
             'endereço': 'endereco',
             'address': 'endereco',
@@ -228,6 +252,7 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
             'estado civil': 'estadoCivil',
             'marital_status': 'estadoCivil',
             'connect': 'connect',
+            'faz parte de qual connect?': 'connect',
             'supervisor': 'supervisor',
             'lider': 'lider',
             'líder': 'lider',
@@ -282,6 +307,16 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
                 }
               });
               
+              // Após mapear valores, combinar primeiro/sobrenome se necessário
+              if (!member.nome) {
+                const first = member.firstNameTemp || '';
+                const last = member.lastNameTemp || '';
+                const full = `${first} ${last}`.trim();
+                if (full) member.nome = full;
+              }
+              delete member.firstNameTemp;
+              delete member.lastNameTemp;
+              
               // Criar objeto milestonesData a partir dos campos temporários
               member.milestonesData = {
                 acceptedJesus: member.aceitouJesus ? { completed: true, date: member.aceitouJesus } : { completed: false, date: null },
@@ -326,118 +361,154 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
     });
   };
 
-  // Parser para CSV
+  // Helpers para CSV/TSV: normalização de cabeçalhos, detecção de delimitador e split respeitando aspas
+  const normalizeHeader = (h) => (
+    h
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // remove acentos
+      .replace(/\?/g, '')
+      .replace(/[^a-z0-9]+/g, '_') // substitui espaços/pontuação por _
+  );
+
+  const detectDelimiter = (line) => {
+    const counts = {
+      '\t': (line.match(/\t/g) || []).length,
+      ';': (line.match(/;/g) || []).length,
+      ',': (line.match(/,/g) || []).length,
+    };
+    const delim = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || ',';
+    return counts[delim] > 0 ? delim : ',';
+  };
+
+  const smartSplit = (line, delimiter) => {
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++; // pula a aspas de escape
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (ch === delimiter && !inQuotes) {
+        values.push(current.trim().replace(/^"|"$/g, ''));
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    values.push(current.trim().replace(/^"|"$/g, ''));
+    return values;
+  };
+
+  // Parser para CSV/TSV com cabeçalhos variados
   const parseCsvData = (csvText) => {
-    const lines = csvText.trim().split('\n');
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const normalizedText = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = normalizedText.trim().split('\n').filter(l => l.trim().length > 0);
+    if (lines.length === 0) return { members: [], errors: ['Arquivo vazio'] };
+
+    const delimiter = detectDelimiter(lines[0]);
+    const headersRaw = smartSplit(lines[0], delimiter);
+    const headers = headersRaw.map(h => normalizeHeader(h));
+
     const members = [];
     const errors = [];
 
-    // Mapear headers para campos esperados
     const fieldMap = {
       'nome': 'nome',
       'name': 'nome',
-      'conhecidopor': 'conhecidoPor',
-      'conhecido_por': 'conhecidoPor',
-      'conhecido por': 'conhecidoPor',
-      'known_by': 'conhecidoPor',
-      'knownby': 'conhecidoPor',
+      'first_name': 'firstName',
+      'last_name': 'lastName',
+      'guest_first_name': 'firstName',
+      'guest_last_name': 'lastName',
       'email': 'email',
+      'e_mail': 'email',
       'telefone': 'telefone',
       'phone': 'telefone',
-      'endereco': 'endereco',
-      'endereço': 'endereco',
+      'phone_number': 'telefone',
       'address': 'endereco',
-      'bairro': 'bairro',
-      'neighborhood': 'bairro',
-      'municipio': 'municipio',
-      'município': 'municipio',
-      'city': 'municipio',
-      'cidade': 'municipio',
-      'cep': 'cep',
-      'zipcode': 'cep',
-      'zip_code': 'cep',
-      'postal_code': 'cep',
-      'datanascimento': 'dataNascimento',
+      'endereco': 'endereco',
+      'endereco_1': 'endereco',
+      'endereco_2': 'endereco',
       'data_nascimento': 'dataNascimento',
+      'data_de_nascimento': 'dataNascimento',
       'birthdate': 'dataNascimento',
-      'genero': 'genero',
-      'gênero': 'genero',
-      'gender': 'genero',
-      'estadocivil': 'estadoCivil',
-      'estado_civil': 'estadoCivil',
-      'marital_status': 'estadoCivil',
       'connect': 'connect',
-      'supervisor': 'supervisor',
-      'lider': 'lider',
-      'líder': 'lider',
-      'leader': 'lider',
-      'aceitoujesus': 'aceitouJesus',
-      'aceitou_jesus': 'aceitouJesus',
-      'aceitou jesus': 'aceitouJesus',
-      'accepted_jesus': 'aceitouJesus',
-      'discipuladoinicial': 'discipuladoInicial',
-      'discipulado_inicial': 'discipuladoInicial',
-      'discipulado inicial': 'discipuladoInicial',
-      'initial_discipleship': 'discipuladoInicial',
-      'batismo': 'batismo',
-      'baptism': 'batismo',
-      'membresia': 'membresia',
-      'membership': 'membresia',
-      'treinamentoconnect': 'treinamentoConnect',
-      'treinamento_connect': 'treinamentoConnect',
-      'treinamento connect': 'treinamentoConnect',
-      'connect_training': 'treinamentoConnect'
+      'faz_parte_de_qual_connect': 'connect',
+      'connect_name': 'connect',
     };
 
     for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line) {
-        const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-        const member = {
-          dataRegistro: new Date(),
-          registradoPor: user?.email || 'Sistema'
-        };
+      const line = lines[i];
+      if (!line || line.trim().length === 0) continue;
+      const values = smartSplit(line, delimiter).map(v => v.trim());
 
-        headers.forEach((header, index) => {
-          const field = fieldMap[header];
-          if (field && values[index]) {
-            // Converter datas para formato ISO se necessário
-            if (field === 'dataNascimento' || field === 'aceitouJesus' || field === 'discipuladoInicial' || field === 'batismo' || field === 'membresia' || field === 'treinamentoConnect') {
-              member[field] = convertBrazilianDateToISO(values[index]);
-            } else {
-              member[field] = values[index];
-            }
+      const member = {
+        dataRegistro: new Date(),
+        registradoPor: user?.email || 'Sistema'
+      };
+
+      headers.forEach((header, index) => {
+        const field = fieldMap[header];
+        const raw = values[index];
+        if (!field || raw === undefined) return;
+
+        if (field === 'telefone') {
+          member.telefone = (raw || '').replace(/[^0-9+]/g, '');
+        } else if (field === 'dataNascimento') {
+          const v = raw || '';
+          let iso = v;
+          if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
+            iso = convertBrazilianDateToISO(v);
+          } else if (/^\d{4}-\d{2}-\d{2}/.test(v)) {
+            iso = v;
           }
-        });
-        
-        // Criar objeto milestonesData a partir dos campos temporários
-        member.milestonesData = {
-          acceptedJesus: member.aceitouJesus ? { completed: true, date: member.aceitouJesus } : { completed: false, date: null },
-          initialDiscipleship: member.discipuladoInicial ? { completed: true, date: member.discipuladoInicial } : { completed: false, date: null },
-          baptism: member.batismo ? { completed: true, date: member.batismo } : { completed: false, date: null },
-          membership: member.membresia ? { completed: true, date: member.membresia } : { completed: false, date: null },
-          connectTraining: member.treinamentoConnect ? { completed: true, date: member.treinamentoConnect } : { completed: false, date: null }
-        };
-        
-        // Definir knownBy com fallback para primeiro nome
-        const conhecidoPor = member.conhecidoPor || (member.nome ? member.nome.split(' ')[0] : '');
-        member.knownBy = conhecidoPor;
-        
-        // Remover campos temporários
-        delete member.aceitouJesus;
-        delete member.discipuladoInicial;
-        delete member.batismo;
-        delete member.membresia;
-        delete member.treinamentoConnect;
-        delete member.conhecidoPor;
-
-        // Validação básica - apenas nome é obrigatório
-        if (!member.nome || member.nome.trim() === '') {
-          errors.push(`Linha ${i + 1}: Nome é obrigatório`);
+          member.dataNascimento = iso;
+        } else if (field === 'firstName') {
+          member.firstName = raw;
+        } else if (field === 'lastName') {
+          member.lastName = raw;
         } else {
-          members.push(member);
+          member[field] = raw;
         }
+      });
+
+      if (!member.nome) {
+        const fn = member.firstName || '';
+        const ln = member.lastName || '';
+        const combined = `${fn} ${ln}`.trim();
+        if (combined.length > 0) member.nome = combined;
+      }
+
+      member.milestonesData = {
+        acceptedJesus: member.aceitouJesus ? { completed: true, date: member.aceitouJesus } : { completed: false, date: null },
+        initialDiscipleship: member.discipuladoInicial ? { completed: true, date: member.discipuladoInicial } : { completed: false, date: null },
+        baptism: member.batismo ? { completed: true, date: member.batismo } : { completed: false, date: null },
+        membership: member.membresia ? { completed: true, date: member.membresia } : { completed: false, date: null },
+        connectTraining: member.treinamentoConnect ? { completed: true, date: member.treinamentoConnect } : { completed: false, date: null },
+      };
+
+      const conhecidoPor = member.conhecidoPor || (member.nome ? member.nome.split(' ')[0] : '');
+      member.knownBy = conhecidoPor;
+
+      delete member.aceitouJesus;
+      delete member.discipuladoInicial;
+      delete member.batismo;
+      delete member.membresia;
+      delete member.treinamentoConnect;
+      delete member.conhecidoPor;
+      delete member.firstName;
+      delete member.lastName;
+
+      if (!member.nome || member.nome.trim() === '') {
+        errors.push(`Linha ${i + 1}: Nome é obrigatório`);
+      } else {
+        members.push(member);
       }
     }
 
@@ -448,19 +519,32 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
   const processData = async () => {
     setErrors([]);
     setIsLoading(true);
-    
-    try {
+
+  try {
       let result;
 
       if (importMethod === 'csv') {
         result = parseCsvData(csvData);
       } else if (importMethod === 'file' && selectedFile) {
-        result = await parseExcelFile(selectedFile);
+        const ext = (selectedFile.name.split('.').pop() || '').toLowerCase();
+        if (ext === 'csv') {
+          const text = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('Erro ao ler o arquivo CSV'));
+            reader.readAsText(selectedFile, 'utf-8');
+          });
+          result = parseCsvData(text);
+        } else {
+          result = await parseExcelFile(selectedFile);
+        }
       } else {
         result = parseManualData();
       }
 
-      setParsedMembers(result.members);
+      // Guardar o índice original para permitir override e controle de duplicatas
+      const withOriginalIndex = result.members.map((m, i) => ({ ...m, _originalIndex: i }));
+      setParsedMembers(withOriginalIndex);
       setErrors(result.errors);
       setShowPreview(true);
     } catch (error) {
@@ -511,18 +595,64 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
   };
 
   // Importar membros para o Firestore
-  const importMembers = async () => {
-    if (parsedMembers.length === 0) return;
+  const importMembers = async (membersToImport = null) => {
+    const effectiveMembers = Array.isArray(membersToImport) ? membersToImport : parsedMembers;
+    if (!effectiveMembers || effectiveMembers.length === 0) return;
 
     setIsLoading(true);
     const batch = writeBatch(db);
     const results = { success: 0, errors: [] };
 
     try {
-      for (let i = 0; i < parsedMembers.length; i++) {
-        const member = parsedMembers[i];
+      for (let i = 0; i < effectiveMembers.length; i++) {
+        const member = effectiveMembers[i];
         try {
           // Converter campos de endereço para o formato do Firebase
+          // Resolve o connectId final do membro de acordo com a seleção global e tentativa de correspondência por nome
+          const resolveConnectIdForMember = (m) => {
+            const originalIndex = typeof m._originalIndex === 'number' ? m._originalIndex : null;
+            // 0) Se houver override por linha, usar
+            if (originalIndex !== null && rowConnectOverrides[originalIndex]) {
+              return rowConnectOverrides[originalIndex];
+            }
+            // 1) Se usuário escolheu aplicar a todos e existe um Connect selecionado
+            if (applyConnectToAll && defaultConnectId) return defaultConnectId;
+
+            // 2) Se o registro já possui connectId definido
+            if (m.connectId) return m.connectId;
+
+            // 3) Se veio um campo "connect" (nome ou número), tentar mapear para um Connect existente
+            if (m.connect && Array.isArray(allConnects) && allConnects.length > 0) {
+              const raw = String(m.connect).trim();
+              // Tentar igualdade direta por id, nome ou número
+              const direct = allConnects.find(c => c.id === raw || c.name === raw || String(c.number) === raw);
+              if (direct) return direct.id;
+
+              // Tentar por similaridade de nome (se disponível) e por inclusão do número no texto
+              let candidate = null;
+              let threshold = 0.85;
+              if (typeof areNamesSimilar === 'function') {
+                for (const c of allConnects) {
+                  try {
+                    if (areNamesSimilar(raw, c.name, threshold)) { candidate = c; break; }
+                  } catch (_) { /* noop */ }
+                }
+              }
+              if (!candidate) {
+                const byNumber = allConnects.find(c => raw.toLowerCase().includes(String(c.number).toLowerCase()));
+                if (byNumber) candidate = byNumber;
+              }
+              return candidate ? candidate.id : '';
+            }
+
+            // 4) Se existe um Connect padrão e modo "preencher em branco" (checkbox desmarcado)
+            if (!applyConnectToAll && defaultConnectId) return defaultConnectId;
+
+            return '';
+          };
+
+          const finalConnectId = resolveConnectIdForMember(member);
+
           const memberData = {
             ...member,
             name: member.nome,
@@ -534,7 +664,7 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
             dob: member.dataNascimento || '',
             gender: member.genero || '',
             maritalStatus: member.estadoCivil || '',
-            connectId: member.connect || '',
+            connectId: finalConnectId,
             milestones: member.milestonesData || {}
           };
           
@@ -578,6 +708,128 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Handler para alterar o Connect de uma linha no preview
+  const handleRowConnectChange = (originalIndex, connectId) => {
+    setRowConnectOverrides(prev => ({ ...prev, [originalIndex]: connectId }));
+  };
+
+  // Sugerir ConnectId para preview quando não há override
+  const suggestConnectIdForMember = (m) => {
+    if (applyConnectToAll && defaultConnectId) return defaultConnectId;
+    // reaproveitar lógica de resolução sem considerar overrides
+    const temp = resolveConnectIdForMemberNoOverrides(m);
+    return temp;
+  };
+
+  // Versão sem overrides (utilitário para preview)
+  const resolveConnectIdForMemberNoOverrides = (m) => {
+    // 1) já possui connectId
+    if (m.connectId) return m.connectId;
+    // 2) tentar mapear a partir do campo connect
+    if (m.connect && Array.isArray(allConnects) && allConnects.length > 0) {
+      const raw = String(m.connect).trim();
+      const direct = allConnects.find(c => c.id === raw || c.name === raw || String(c.number) === raw);
+      if (direct) return direct.id;
+      let candidate = null;
+      let threshold = 0.85;
+      if (typeof areNamesSimilar === 'function') {
+        for (const c of allConnects) {
+          try {
+            if (areNamesSimilar(raw, c.name, threshold)) { candidate = c; break; }
+          } catch (_) { /* noop */ }
+        }
+      }
+      if (!candidate) {
+        const byNumber = allConnects.find(c => raw.toLowerCase().includes(String(c.number).toLowerCase()));
+        if (byNumber) candidate = byNumber;
+      }
+      return candidate ? candidate.id : '';
+    }
+    // 3) usar default quando disponível (preencher em branco)
+    if (defaultConnectId) return defaultConnectId;
+    return '';
+  };
+
+  // Encontrar possível duplicata para um membro usando a mesma lógica do cadastro individual
+  const findPotentialDuplicate = (member) => {
+    try {
+      const SIMILARITY_THRESHOLD = 0.8;
+      const newMemberData = {
+        name: (member?.nome || '').trim(),
+        email: (member?.email || '').toLowerCase().trim(),
+        phone: (member?.telefone || '').replace(/\D/g, ''),
+        dob: member?.dataNascimento || ''
+      };
+      let potentialDuplicate = null;
+      for (const existingMember of allMembers || []) {
+        if (!existingMember?.name) continue;
+        const existingEmail = existingMember.email?.toLowerCase().trim();
+        const existingPhone = existingMember.phone?.replace(/\D/g, '');
+        const existingDob = existingMember.dob;
+        const isEmailMatch = newMemberData.email && newMemberData.email === existingEmail;
+        const isPhoneMatch = newMemberData.phone && newMemberData.phone === existingPhone;
+        const isDobMatch = newMemberData.dob && newMemberData.dob === existingDob;
+        if (isEmailMatch || isPhoneMatch || isDobMatch) {
+          const similar = typeof areNamesSimilar === 'function' ? areNamesSimilar(newMemberData.name, existingMember.name, SIMILARITY_THRESHOLD) : false;
+          if (similar) {
+            potentialDuplicate = existingMember;
+            break;
+          }
+        }
+      }
+      return potentialDuplicate ? { existingMember: potentialDuplicate, newMemberData } : null;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  // Preparar importação verificando duplicatas e abrindo fluxo de confirmação
+  const prepareImportWithDuplicateCheck = () => {
+    if (parsedMembers.length === 0) return;
+    const queue = [];
+    parsedMembers.forEach((m, idx) => {
+      const dup = findPotentialDuplicate(m);
+      if (dup) queue.push({ ...dup, index: idx });
+    });
+    if (queue.length > 0) {
+      setDuplicatesQueue(queue);
+      setCurrentDuplicateIdx(0);
+      setDuplicateModalOpen(true);
+    } else {
+      importMembers(parsedMembers);
+    }
+  };
+
+  const handleConfirmDuplicate = () => {
+    // Usuário confirmou que É a mesma pessoa -> pular este índice na importação
+    const current = duplicatesQueue[currentDuplicateIdx];
+    const newSet = new Set(indicesToSkip);
+    newSet.add(current.index);
+    setIndicesToSkip(newSet);
+    advanceDuplicateFlow();
+  };
+
+  const handleRejectDuplicate = () => {
+    // Usuário rejeitou duplicata -> importar normalmente este índice
+    advanceDuplicateFlow();
+  };
+
+  const advanceDuplicateFlow = () => {
+    const nextIdx = currentDuplicateIdx + 1;
+    if (nextIdx < duplicatesQueue.length) {
+      setCurrentDuplicateIdx(nextIdx);
+    } else {
+      setDuplicateModalOpen(false);
+      // Filtrar membros que NÃO estão marcados para pular
+      const membersToImport = parsedMembers.filter((_, idx) => !indicesToSkip.has(idx));
+      importMembers(membersToImport);
+      // Reset state
+      setIndicesToSkip(new Set());
+      setDuplicatesQueue([]);
+      setCurrentDuplicateIdx(0);
     }
   };
 
@@ -1101,6 +1353,38 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
             </div>
           )}
 
+          {/* Configuração de Connect padrão */}
+          <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+            <h3 className="text-lg font-medium text-gray-900 mb-3">Connect padrão para esta importação</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Selecionar Connect</label>
+                <select
+                  value={defaultConnectId}
+                  onChange={(e) => setDefaultConnectId(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                >
+                  <option value="">Nenhum (manter conforme CSV)</option>
+                  {Array.isArray(allConnects) && allConnects.map((c) => (
+                    <option key={c.id} value={c.id}>{`${c.number ? c.number + ' - ' : ''}${c.name}`}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center mt-2 md:mt-6">
+                <input
+                  id="applyConnectToAll"
+                  type="checkbox"
+                  checked={applyConnectToAll}
+                  onChange={(e) => setApplyConnectToAll(e.target.checked)}
+                  className="h-4 w-4 text-red-600 border-gray-300 rounded"
+                />
+                <label htmlFor="applyConnectToAll" className="ml-2 text-sm text-gray-700">
+                  Aplicar o Connect selecionado a todos os registros (se desmarcado, será usado apenas quando o CSV não trouxer Connect)
+                </label>
+              </div>
+            </div>
+          </div>
+
           {/* Botão Processar */}
           <div className="mt-6">
             <button
@@ -1178,19 +1462,8 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
 
       {/* Modal de Preview */}
       {showPreview && (
-        <Modal isOpen={showPreview} onClose={() => setShowPreview(false)}>
+        <Modal isOpen={showPreview} onClose={() => setShowPreview(false)} title="Preview da Importação">
           <div className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">
-                Preview da Importação
-              </h2>
-              <button
-                onClick={() => setShowPreview(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
 
             <p className="text-gray-600 mb-4">
               {parsedMembers.length} membros serão importados:
@@ -1215,8 +1488,8 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {parsedMembers.map((member, index) => (
-                    <tr key={index}>
+                  {parsedMembers.map((member) => (
+                    <tr key={member._originalIndex}>
                       <td className="px-4 py-2 text-sm text-gray-900">
                         {member.nome}
                       </td>
@@ -1227,7 +1500,19 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
                         {member.telefone}
                       </td>
                       <td className="px-4 py-2 text-sm text-gray-900">
-                        {member.connect}
+                        <select
+                          value={
+                            rowConnectOverrides[member._originalIndex] ||
+                            suggestConnectIdForMember(member) || ''
+                          }
+                          onChange={(e) => handleRowConnectChange(member._originalIndex, e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                        >
+                          <option value="">Selecionar...</option>
+                          {Array.isArray(allConnects) && allConnects.map((c) => (
+                            <option key={c.id} value={c.id}>{`${c.number ? c.number + ' - ' : ''}${c.name}`}</option>
+                          ))}
+                        </select>
                       </td>
                     </tr>
                   ))}
@@ -1243,7 +1528,7 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
                 Cancelar
               </button>
               <button
-                onClick={importMembers}
+                onClick={prepareImportWithDuplicateCheck}
                 disabled={isLoading}
                 className="flex items-center px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 transition-colors"
               >
@@ -1257,6 +1542,16 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
             </div>
           </div>
         </Modal>
+      )}
+      {duplicateModalOpen && duplicatesQueue[currentDuplicateIdx] && (
+        <DuplicateMemberModal
+          isOpen={duplicateModalOpen}
+          onClose={() => setDuplicateModalOpen(false)}
+          existingMember={duplicatesQueue[currentDuplicateIdx].existingMember}
+          newMemberData={duplicatesQueue[currentDuplicateIdx].newMemberData}
+          onConfirm={handleConfirmDuplicate}
+          onReject={handleRejectDuplicate}
+        />
       )}
     </div>
   );

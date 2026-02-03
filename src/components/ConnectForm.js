@@ -18,6 +18,7 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect, connects }) => 
         city: '',
         zipCode: '',
         leaderId: '',
+        auxLeaderId: '',
         supervisorEmail: '',
         pastorEmail: '',
         memberIds: [],
@@ -46,6 +47,7 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect, connects }) => 
                 city: editingConnect.city || '',
                 zipCode: editingConnect.zipCode || '',
                 leaderId: editingConnect.leaderId || '',
+                auxLeaderId: editingConnect.auxLeaderId || '',
                 supervisorEmail: supervisorMember?.id || editingConnect.supervisorEmail || '',
                 pastorEmail: pastorMember?.id || editingConnect.pastorEmail || '',
                 memberIds: connectMembers,
@@ -62,6 +64,7 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect, connects }) => 
                 city: '',
                 zipCode: '',
                 leaderId: '',
+                auxLeaderId: '',
                 supervisorEmail: '',
                 pastorEmail: '',
                 memberIds: [],
@@ -105,6 +108,9 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect, connects }) => 
                 break;
             case 'leaderId':
                 if (!value) errors.leaderId = 'Líder é obrigatório';
+                break;
+            case 'auxLeaderId':
+                // opcional, sem validação obrigatória
                 break;
             case 'supervisorEmail':
                 // supervisorEmail agora é um ID, não precisa validar formato de email
@@ -197,14 +203,22 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect, connects }) => 
             // Buscar dados do supervisor e pastor
             const supervisor = formData.supervisorEmail ? members.find(m => m.id === formData.supervisorEmail) : null;
             const pastor = formData.pastorEmail ? members.find(m => m.id === formData.pastorEmail) : null;
+            const auxLeader = formData.auxLeaderId ? members.find(m => m.id === formData.auxLeaderId) : null;
             
             console.log('👥 Supervisor encontrado:', supervisor?.name || 'Nenhum');
             console.log('👥 Pastor encontrado:', pastor?.name || 'Nenhum');
+            console.log('👥 Líder Auxiliar encontrado:', auxLeader?.name || 'Nenhum');
             
             const saveData = {
                 ...formData,
                 leaderName: leader?.name || 'Não encontrado',
                 leaderEmail: leader?.email,
+                // Novo: gravação no array de auxiliares (múltiplos)
+                auxLeaders: auxLeader ? [{ id: auxLeader.id, email: auxLeader.email, name: auxLeader.name }] : [],
+                // Legado: mantém campos antigos para compatibilidade
+                auxLeaderId: auxLeader?.id || '',
+                auxLeaderEmail: auxLeader?.email || '',
+                auxLeaderName: auxLeader?.name || '',
                 supervisorEmail: supervisor?.email || '',
                 supervisorName: supervisor?.name || '',
                 pastorEmail: pastor?.email || '',
@@ -231,7 +245,6 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect, connects }) => 
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">{editingConnect ? 'Editar Connect' : 'Novo Connect'}</h2>
             {error && <p className="text-red-600 bg-red-100 p-2 rounded-md">{error}</p>}
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -281,6 +294,19 @@ const ConnectForm = ({ onClose, onSave, members, editingConnect, connects }) => 
                     className={fieldErrors.leaderId ? 'border-red-500' : ''}
                 />
                 {fieldErrors.leaderId && <p className="text-red-600 text-sm mt-1">{fieldErrors.leaderId}</p>}
+            </div>
+
+            <div>
+                <label htmlFor="auxLeaderId" className="block text-sm font-medium text-gray-700 mb-1">Líder Auxiliar (opcional)</label>
+                <PersonAutocomplete
+                    value={formData.auxLeaderId}
+                    onChange={(value) => setFormData(prev => ({ ...prev, auxLeaderId: value }))}
+                    placeholder="Escolha alguém do Connect para ser Auxiliar..."
+                    options={(editingConnect ? members.filter(m => m.connectId === editingConnect.id) : members.filter(m => formData.memberIds.includes(m.id))).map(member => ({ value: member.id, label: member.name }))}
+                    className={fieldErrors.auxLeaderId ? 'border-red-500' : ''}
+                />
+                {fieldErrors.auxLeaderId && <p className="text-red-600 text-sm mt-1">{fieldErrors.auxLeaderId}</p>}
+                <p className="text-xs text-gray-500 mt-1">Esta pessoa poderá marcar presença, sem acesso a cadastros.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

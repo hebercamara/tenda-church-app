@@ -221,11 +221,10 @@ const LeadershipTrackModal = ({ isOpen, onClose, member, allConnects, onSave, co
     }
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} size="2xl">
+        <Modal isOpen={isOpen} onClose={onClose} size="2xl" title="Trilho de Liderança">
             <div className="flex flex-col max-h-[85vh]">
-                <div className="flex-shrink-0 pb-4 border-b flex justify-between items-center">
+                <div className="flex-shrink-0 pb-4 flex justify-between items-center">
                     <div>
-                        <h2 className="text-2xl font-bold text-gray-900">Trilho de Liderança</h2>
                         <p className="text-lg text-gray-600">{member.name}</p>
                     </div>
                     {canEdit && !isEditing && (

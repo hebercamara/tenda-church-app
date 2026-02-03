@@ -261,7 +261,6 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">{editingMember ? 'Editar Membro' : 'Novo Membro'}</h2>
             {error && <p className="text-red-600 bg-red-100 p-2 rounded-md">{error}</p>}
             
             <fieldset className="border p-4 rounded-md">

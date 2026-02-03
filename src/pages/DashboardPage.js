@@ -6,6 +6,7 @@ import ConnectAttendanceChart from '../components/ConnectAttendanceChart';
 import CourseAttendanceChart from '../components/CourseAttendanceChart';
 
 import { Users, UserPlus, TrendingUp, DollarSign } from 'lucide-react';
+import { useAuthStore } from '../store/authStore';
 
 // Função para encontrar o domingo de uma determinada semana
 const getSundayOfWeek = (date) => {
@@ -20,6 +21,10 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
     const [selectedCourse, setSelectedCourse] = useState(() => {
         return Array.isArray(courses) && courses.length > 0 ? courses[0]?.id || '' : '';
     });
+
+    // Permissão: apenas líderes de Connect podem ver o widget de acompanhamento
+    const { currentUserData } = useAuthStore();
+    const isLeader = !!(currentUserData && connects.some(c => c.leaderId === currentUserData.id));
 
     const dashboardMetrics = useMemo(() => {
         const validReports = reports.filter(r => r && r.reportDate && typeof r.attendance === 'object');
@@ -110,7 +115,9 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
 
                 </div>
                 <div className="lg:col-span-1 space-y-4 sm:space-y-6 lg:space-y-8">
-                    <FollowUpWidget alerts={attendanceAlerts} getConnectName={getConnectName} />
+                    {isLeader && (
+                        <FollowUpWidget alerts={attendanceAlerts} getConnectName={getConnectName} />
+                    )}
                     <BirthdayWidget members={members} />
                 </div>
             </div>

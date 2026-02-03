@@ -1,29 +1,32 @@
 import React, { useState } from 'react';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { Eye, EyeOff } from 'lucide-react'; // Importa os ícones
-
-import { firebaseConfig } from '../firebaseConfig'; 
-import { initializeApp } from 'firebase/app';
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+import { auth } from '../firebaseConfig';
+import { useNavigate } from 'react-router-dom';
 
 const LoginPage = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [errorCode, setErrorCode] = useState('');
     const [message, setMessage] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showPassword, setShowPassword] = useState(false); // Novo estado para controlar a visibilidade
+    const navigate = useNavigate();
 
     const getFriendlyErrorMessage = (code) => {
         switch (code) {
+            case 'auth/missing-email': return 'Por favor, informe o e-mail.';
+            case 'auth/missing-password': return 'Por favor, informe a senha.';
             case 'auth/invalid-email': return 'O formato do e-mail é inválido.';
             case 'auth/user-not-found':
             case 'auth/wrong-password':
             case 'auth/invalid-credential': return 'E-mail ou senha incorretos.';
             case 'auth/email-already-in-use': return 'Este e-mail já está a ser utilizado.';
             case 'auth/weak-password': return 'A senha deve ter pelo menos 6 caracteres.';
+            case 'auth/operation-not-allowed': return 'Login por e-mail/senha está desativado no projeto. Por favor, peça ao administrador para habilitar em Firebase Authentication.';
+            case 'auth/network-request-failed': return 'Falha de rede. Verifique sua conexão e tente novamente.';
+            case 'auth/too-many-requests': return 'Muitas tentativas de login. Aguarde alguns minutos e tente novamente.';
             default: return 'Ocorreu um erro. Por favor, tente novamente.';
         }
     };
@@ -32,11 +35,14 @@ const LoginPage = () => {
         e.preventDefault();
         setError('');
         setMessage('');
+        setErrorCode('');
         setIsSubmitting(true);
         try {
-            await signInWithEmailAndPassword(auth, email, password);
+            await signInWithEmailAndPassword(auth, email.trim(), password);
         } catch (err) {
+            console.error('Login error:', err.code, err.message);
             setError(getFriendlyErrorMessage(err.code));
+            setErrorCode(err.code || 'unknown');
         } finally {
             setIsSubmitting(false);
         }
@@ -44,18 +50,9 @@ const LoginPage = () => {
 
 
 
-    const handleCreateAccount = async (e) => {
+    const goToSignup = (e) => {
         e.preventDefault();
-        setError('');
-        setMessage('');
-        setIsSubmitting(true);
-        try {
-            await createUserWithEmailAndPassword(auth, email, password);
-        } catch (err) {
-            setError(getFriendlyErrorMessage(err.code));
-        } finally {
-            setIsSubmitting(false);
-        }
+        navigate('/signup');
     };
     
     const handlePasswordReset = async (e) => {
@@ -82,9 +79,9 @@ const LoginPage = () => {
             <div className="w-full max-w-md p-8 space-y-8 bg-[#991B1B] rounded-2xl shadow-lg">
                 <div className="flex flex-col items-center">
                     <img 
-                        src="/logo192.png"
+                        src="/logo512.png"
                         onError={(e) => { 
-                          if (e.target.src.includes('logo192.png')) {
+                          if (e.target.src.includes('logo512.png')) {
                             e.target.src = 'https://firebasestorage.googleapis.com/v0/b/tenda-church-app.firebasestorage.app/o/LOGO%20TENDA%20BRANCO.png?alt=media&token=ed7c6ad0-de20-46a3-bb4c-552934e3d3ca';
                           } else {
                             e.target.onerror = null; 
@@ -127,14 +124,21 @@ const LoginPage = () => {
                             </button>
                         </div>
                     </div>
-                    {error && <p className="text-sm text-center text-white bg-red-500/50 p-2 rounded-md">{error}</p>}
+                    {error && (
+                      <p className="text-sm text-center text-white bg-red-500/50 p-2 rounded-md">
+                        {error}
+                        {errorCode && (
+                          <span className="block text-xs mt-1 text-white/80">Detalhes: {errorCode}</span>
+                        )}
+                      </p>
+                    )}
                     {message && <p className="text-sm text-center text-white bg-green-500/50 p-2 rounded-md">{message}</p>}
                     <div className="space-y-3">
                         <button onClick={handleLogin} disabled={isSubmitting} className="relative flex justify-center w-full px-4 py-3 text-sm font-medium text-[#991B1B] bg-white border border-transparent rounded-md group hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#991B1B] focus:ring-white disabled:bg-gray-300 disabled:text-gray-500">
                             {isSubmitting ? 'Aguarde...' : 'Entrar'}
                         </button>
-                        <button onClick={handleCreateAccount} disabled={isSubmitting} className="relative flex justify-center w-full px-4 py-3 text-sm font-medium text-white bg-white/20 border border-transparent rounded-md group hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#991B1B] focus:ring-white disabled:bg-opacity-50">
-                            {isSubmitting ? 'Aguarde...' : 'Criar Conta'}
+                        <button onClick={goToSignup} className="relative flex justify-center w-full px-4 py-3 text-sm font-medium text-white bg-white/20 border border-transparent rounded-md group hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#991B1B] focus:ring-white">
+                            Criar Conta
                         </button>
                         <button onClick={handlePasswordReset} disabled={isSubmitting} className="w-full text-center text-sm text-white/70 hover:text-white transition-colors">
                             Esqueci minha senha

@@ -4,7 +4,7 @@ import { Calendar, Edit, Trash2, Plus, ClipboardList, GraduationCap, Users, Chec
 import { useAuthStore } from '../store/authStore';
 
 // Componente para o Card de Curso (reutilizado nas listas principais)
-const CourseCard = React.memo(({ course, isAdmin, onEditCourse, onDelete, onManageCourse, onFinalizeCourse, onReopenCourse }) => {
+const CourseCard = React.memo(({ course, isAdmin, onEditCourse, onDelete, onManageCourse, onFinalizeCourse, onReopenCourse, canManage }) => {
   const [showReportModal, setShowReportModal] = useState(false);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -15,6 +15,8 @@ const CourseCard = React.memo(({ course, isAdmin, onEditCourse, onDelete, onMana
     if (e.target.closest('button')) {
       return;
     }
+    // Bloqueia o gerenciamento para quem não é admin nem professor/substituto da turma
+    if (!canManage && !isAdmin) return;
     onManageCourse(course);
   };
   
@@ -145,16 +147,49 @@ const CourseCard = React.memo(({ course, isAdmin, onEditCourse, onDelete, onMana
 // ALTERADO: O componente não recebe mais `isAdmin`
 const CoursesPage = ({
   courses = [], courseTemplates = [], onAddCourse, onAddCourseTemplate, onEditCourse, onEditCourseTemplate,
-  onDelete, onManageCourse, onFinalizeCourse, onReopenCourse,
+  onDelete, onManageCourse, onFinalizeCourse, onReopenCourse, allMembers,
 }) => {
   // NOVO: Buscando o status de admin diretamente do store
-  const { isAdmin } = useAuthStore();
+  const { isAdmin, currentUserData } = useAuthStore();
 
   const [activeTab, setActiveTab] = useState('turmas');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [selectedProfessor, setSelectedProfessor] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+
+  // NOVO: função para verificar se usuário é substituto ativo da turma
+    const isActiveSubstitute = (course) => {
+        try {
+            if (!course?.substituteTeacher?.teacherId || !Array.isArray(allMembers)) return false;
+            const userEmail = currentUserData?.email?.toLowerCase();
+            if (!userEmail) return false;
+            const substituteTeacher = allMembers.find(m => m.id === course.substituteTeacher.teacherId);
+            if (!substituteTeacher || substituteTeacher.email?.toLowerCase() !== userEmail) return false;
+            const today = new Date();
+            const startDate = new Date(course.substituteTeacher.startDate);
+            if (course.substituteTeacher.isIndefinite) {
+                return today >= startDate;
+            }
+            const endDate = new Date(course.substituteTeacher.endDate);
+            return today >= startDate && today <= endDate;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const isActiveAuxTeacher = (course) => {
+        try {
+            const userEmail = currentUserData?.email?.toLowerCase();
+            const userId = currentUserData?.id;
+            if (!userEmail && !userId) return false;
+            const byEmail = (course.auxTeacherEmail || '').toLowerCase() === (userEmail || '');
+            const byId = course.auxTeacherId && course.auxTeacherId === userId;
+            return !!(byEmail || byId);
+        } catch (e) {
+            return false;
+        }
+    };
 
   const processedCourses = useMemo(() => {
     if (!Array.isArray(courses)) return { open: [], recentlyClosed: [], archived: [] };
@@ -163,6 +198,12 @@ const CoursesPage = ({
     if (selectedTemplate) filtered = filtered.filter(c => c.templateId === selectedTemplate);
     if (selectedProfessor) filtered = filtered.filter(c => c.teacherId === selectedProfessor);
     if (searchTerm) filtered = filtered.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    // NOVO: professores só veem suas turmas (ou onde são substitutos ou auxiliares)
+    if (!isAdmin && currentUserData?.email) {
+      const userEmail = currentUserData.email.toLowerCase();
+      filtered = filtered.filter(c => c.teacherEmail?.toLowerCase() === userEmail || isActiveSubstitute(c) || isActiveAuxTeacher(c));
+    }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -189,7 +230,7 @@ const CoursesPage = ({
     archived.sort((a, b) => new Date(b.endDate) - new Date(a.endDate));
 
     return { open, recentlyClosed, archived };
-  }, [courses, searchTerm, selectedTemplate, selectedProfessor]);
+  }, [courses, searchTerm, selectedTemplate, selectedProfessor, isAdmin, currentUserData, allMembers]);
 
   const uniqueProfessors = useMemo(() => {
     if (!Array.isArray(courses)) return [];
@@ -201,7 +242,7 @@ const CoursesPage = ({
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-3xl font-bold text-gray-800">Gerenciar Cursos</h2>
         {isAdmin && activeTab === 'turmas' && (<button onClick={() => onAddCourse()} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2"><Plus size={20} /><span>Criar Nova Turma</span></button>)}
-        {isAdmin && activeTab === 'modelos' && (<button onClick={() => onAddCourseTemplate()} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2"><Plus size={20} /><span>Criar Novo Modelo</span></button>)}
+        {isAdmin && activeTab === 'modelos' && (<button onClick={() => onAddCourseTemplate()} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2"><Plus size={20} /><span>Criar Novo Modelo</span></button>)}
       </div>
 
       <div className="border-b border-gray-200 mb-6">
@@ -229,7 +270,7 @@ const CoursesPage = ({
           
           <h3 className="text-xl font-semibold text-gray-700 mb-4">Turmas em Aberto</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {processedCourses.open.map(course => <CourseCard key={course.id} {...{course, isAdmin, onEditCourse, onDelete, onManageCourse, onFinalizeCourse, onReopenCourse}} />)}
+            {processedCourses.open.map(course => <CourseCard key={course.id} {...{course, isAdmin, onEditCourse, onDelete, onManageCourse, onFinalizeCourse, onReopenCourse}} canManage={isAdmin || (currentUserData?.email && (course.teacherEmail?.toLowerCase() === currentUserData.email.toLowerCase() || isActiveSubstitute(course)))} />)}
           </div>
           {processedCourses.open.length === 0 && <p className="text-gray-500 italic">Nenhuma turma em aberto encontrada.</p>}
           
@@ -237,7 +278,7 @@ const CoursesPage = ({
 
           <h3 className="text-xl font-semibold text-gray-700 mb-4">Turmas Encerradas Recentemente</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {processedCourses.recentlyClosed.map(course => <CourseCard key={course.id} {...{course, isAdmin, onEditCourse, onDelete, onManageCourse, onFinalizeCourse, onReopenCourse}} />)}
+            {processedCourses.recentlyClosed.map(course => <CourseCard key={course.id} {...{course, isAdmin, onEditCourse, onDelete, onManageCourse, onFinalizeCourse, onReopenCourse}} canManage={isAdmin || (currentUserData?.email && (course.teacherEmail?.toLowerCase() === currentUserData.email.toLowerCase() || isActiveSubstitute(course)))} />)}
           </div>
           {processedCourses.recentlyClosed.length === 0 && <p className="text-gray-500 italic">Nenhuma turma encerrada recentemente encontrada.</p>}
 
@@ -258,9 +299,15 @@ const CoursesPage = ({
                         </p>
                       </div>
                       <div className="flex items-center space-x-3 mt-2 sm:mt-0">
-                        <button onClick={() => onManageCourse(course)} className="text-gray-500 hover:text-blue-600" title="Presença e Notas"><ClipboardList size={18} /></button>
-                        <button onClick={() => onEditCourse(course)} className="text-gray-500 hover:text-[#DC2626]" title="Editar"><Edit size={18} /></button>
-                        <button onClick={() => onDelete('course', course.id)} className="text-gray-500 hover:text-red-600" title="Excluir"><Trash2 size={18} /></button>
+                        {(isAdmin || (currentUserData?.email && (course.teacherEmail?.toLowerCase() === currentUserData.email.toLowerCase() || isActiveSubstitute(course) || isActiveAuxTeacher(course)))) && (
+                          <button onClick={() => onManageCourse(course)} className="text-gray-500 hover:text-blue-600" title="Presença e Notas"><ClipboardList size={18} /></button>
+                        )}
+                        {isAdmin && (
+                          <button onClick={() => onEditCourse(course)} className="text-gray-500 hover:text-[#DC2626]" title="Editar"><Edit size={18} /></button>
+                        )}
+                        {isAdmin && (
+                          <button onClick={() => onDelete('course', course.id)} className="text-gray-500 hover:text-red-600" title="Excluir"><Trash2 size={18} /></button>
+                        )}
                         {isAdmin && course.finalized && <button onClick={() => onReopenCourse(course)} className="text-gray-500 hover:text-yellow-600" title="Reabrir"><RotateCcw size={18} /></button>}
                       </div>
                     </li>
@@ -276,17 +323,21 @@ const CoursesPage = ({
       {activeTab === 'modelos' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {courseTemplates.sort((a,b) => a.name.localeCompare(b.name)).map(template => (
-              <div key={template.id} className="bg-white rounded-lg p-4 shadow-md flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-start">
-                    <h4 className="font-bold text-lg text-blue-800 flex items-center"><LayoutTemplate size={18} className="mr-2"/>{template.name}</h4>
-                    {isAdmin && <div className="flex space-x-2"><button onClick={() => onEditCourseTemplate(template)} className="text-gray-500 hover:text-blue-600"><Edit size={16} /></button><button onClick={() => onDelete('courseTemplate', template.id)} className="text-gray-500 hover:text-red-600"><Trash2 size={16} /></button></div>}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-2 border-t pt-2">
-                      <p>Provas: {template.assessment.tests.count} (valendo {template.assessment.tests.value} cada)</p>
-                      <p>Trabalhos: {template.assessment.assignments.count} (valendo {template.assessment.assignments.value} cada)</p>
-                      <p>Atividades: {template.assessment.activities.count} (valendo {template.assessment.activities.value} cada)</p>
-                  </div>
+              <div key={template.id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col justify-between">
+                {/* Título como faixa divisória dentro do card, mesma tonalidade do header */}
+                <div className="flex items-center justify-between bg-red-800 text-white px-4 py-2">
+                  <h4 className="font-semibold text-base flex items-center"><LayoutTemplate size={18} className="mr-2" />{template.name}</h4>
+                  {isAdmin && (
+                    <div className="flex space-x-2">
+                      <button onClick={() => onEditCourseTemplate(template)} className="text-white/80 hover:text-white" title="Editar Modelo"><Edit size={16} /></button>
+                      <button onClick={() => onDelete('courseTemplate', template.id)} className="text-white/80 hover:text-white" title="Excluir Modelo"><Trash2 size={16} /></button>
+                    </div>
+                  )}
+                </div>
+                <div className="text-xs text-gray-600 p-4 border-t border-red-200">
+                    <p>Provas: {template.assessment.tests.count} (valendo {template.assessment.tests.value} cada)</p>
+                    <p>Trabalhos: {template.assessment.assignments.count} (valendo {template.assessment.assignments.value} cada)</p>
+                    <p>Atividades: {template.assessment.activities.count} (valendo {template.assessment.activities.value} cada)</p>
                 </div>
               </div>
             ))}

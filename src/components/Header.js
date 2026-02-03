@@ -12,9 +12,9 @@ const Header = ({ onLogout, onMenuClick }) => {
               <Menu size={20} className="sm:w-6 sm:h-6" />
           </button>
           <img
-              src="/logo192.png"
+              src="/logo512.png"
               onError={(e) => { 
-                if (e.target.src.includes('logo192.png')) {
+                if (e.target.src.includes('logo512.png')) {
                   e.target.src = 'https://firebasestorage.googleapis.com/v0/b/tenda-church-app.firebasestorage.app/o/LOGO%20TENDA%20BRANCO.png?alt=media&token=ed7c6ad0-de20-46a3-bb4c-552934e3d3ca';
                 } else {
                   e.target.onerror = null; 

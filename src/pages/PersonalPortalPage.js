@@ -44,23 +44,17 @@ const PersonalPortalPage = ({ allCourses, allMembers, allConnects }) => {
     const [error, setError] = useState('');
 
     useEffect(() => {
-        if (currentUserData && allCourses && allConnects) {
+        if (currentUserData && allCourses && allConnects && allMembers) {
             loadUserData();
         }
-    }, [currentUserData, allCourses, allConnects]);
+    }, [currentUserData, allCourses, allConnects, allMembers]);
 
     const loadUserData = async () => {
         try {
-            // Buscar cursos do usuário
-            const coursesQuery = query(
-                collection(db, 'courses'),
-                where('students', 'array-contains', currentUserData.email)
+            // Use already loaded courses data instead of making additional Firestore query
+            const courses = allCourses.filter(course => 
+                course.students && course.students.includes(currentUserData.email)
             );
-            const coursesSnapshot = await getDocs(coursesQuery);
-            const courses = coursesSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
             setUserCourses(courses);
 
             // Buscar Connect do usuário

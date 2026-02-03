@@ -12,20 +12,20 @@ const BirthdayWidget = ({ members }) => {
       const memberMonth = parseInt(member.dob.split('-')[1], 10);
       return memberMonth === currentMonth;
     }).sort((a, b) => {
-        const dayA = parseInt(a.dob.split('-')[2], 10);
-        const dayB = parseInt(b.dob.split('-')[2], 10);
-        return dayA - dayB;
+      const dayA = parseInt(a.dob.split('-')[2], 10);
+      const dayB = parseInt(b.dob.split('-')[2], 10);
+      return dayA - dayB;
     });
   }, [members, currentMonth]);
 
   return (
-    <div className="bg-white p-3 sm:p-4 md:p-6 rounded-xl shadow-md h-full">
-      <div className="flex items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4">
+    <div className="bg-white p-3 sm:p-4 md:p-6 rounded-xl shadow-md h-full flex flex-col">
+      <div className="flex items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4 flex-shrink-0">
         <Gift size={20} className="sm:w-6 sm:h-6 text-pink-500 flex-shrink-0" />
         <h3 className="text-lg sm:text-xl font-bold text-gray-900 truncate">Aniversariantes do Mês</h3>
       </div>
       {birthdayMembers.length > 0 ? (
-        <ul className="space-y-2 max-h-40 sm:max-h-48 overflow-y-auto pr-1 sm:pr-2">
+        <ul className="space-y-2 overflow-y-auto pr-1 sm:pr-2 flex-1 min-h-0">
           {birthdayMembers.map(member => (
             <li key={member.id} className="flex justify-between items-center text-xs sm:text-sm gap-2">
               <span className="truncate flex-1">{member.name}</span>

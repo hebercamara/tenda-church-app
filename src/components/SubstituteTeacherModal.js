@@ -3,7 +3,7 @@ import Modal from './Modal';
 import PersonAutocomplete from './PersonAutocomplete';
 import LoadingButton from './LoadingButton';
 import { formatDateToBrazilian, convertBrazilianDateToISO } from '../utils/dateUtils';
-import { X, Calendar, Clock, User } from 'lucide-react';
+import { Calendar, Clock, User } from 'lucide-react';
 
 const SubstituteTeacherModal = ({ 
     isOpen, 
@@ -127,23 +127,9 @@ const SubstituteTeacherModal = ({
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={handleClose} size="md">
-            <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-2">
-                    <User className="text-[#DC2626]" size={24} />
-                    <h2 className="text-2xl font-bold text-gray-900">
-                        {currentSubstitute ? 'Editar Professor Substituto' : 'Adicionar Professor Substituto'}
-                    </h2>
-                </div>
-                <button
-                    onClick={handleClose}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                    <X size={24} />
-                </button>
-            </div>
+        <Modal isOpen={isOpen} onClose={handleClose} size="md" title={currentSubstitute ? 'Editar Professor Substituto' : 'Adicionar Professor Substituto'}>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Seleção do Professor Substituto */}
                 <div>
                     <label htmlFor="teacherId" className="block text-sm font-medium text-gray-700 mb-2">

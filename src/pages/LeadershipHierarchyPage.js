@@ -162,7 +162,22 @@ const nodeTypes = {
 };
 
 const LeadershipHierarchyPage = ({ connects, allMembers }) => {
-  const { isAdmin } = useAuthStore();
+  const { isAdmin, currentUserData } = useAuthStore();
+  
+  // Determinar perfis do usuário (mesma lógica do AppRouter)
+  const userEmail = (currentUserData?.email || '').toLowerCase();
+  const isLeader = !!(currentUserData && (
+    currentUserData.isLeader ||
+    connects.some(c => c.leaderId === currentUserData.id) ||
+    connects.some(c => (c.leaderEmail || '').toLowerCase() === userEmail)
+  ));
+  const isSupervisor = !!(currentUserData && (
+    currentUserData.isSupervisor ||
+    connects.some(c => (c.supervisorEmail || '').toLowerCase() === userEmail)
+  ));
+  
+  // Verificar se tem acesso (admin, líder ou supervisor)
+  const hasAccess = isAdmin || isLeader || isSupervisor;
   
 
   const [viewMode, setViewMode] = useState('flow'); // 'list' ou 'flow'
@@ -932,11 +947,11 @@ const LeadershipHierarchyPage = ({ connects, allMembers }) => {
     );
   };
 
-  if (!isAdmin) {
+  if (!hasAccess) {
     return (
       <div className="bg-red-50 border border-red-200 p-6 rounded-lg">
         <h3 className="text-lg font-semibold text-red-800 mb-2">⚠️ Acesso Restrito</h3>
-        <p className="text-red-700">Esta página é acessível apenas para administradores.</p>
+        <p className="text-red-700">Esta página é acessível para administradores, líderes e supervisores.</p>
       </div>
     );
   }

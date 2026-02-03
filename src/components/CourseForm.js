@@ -14,11 +14,13 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
     const { isLoading, setLoading } = useLoadingState();
     
     const initialFormData = {
-        name: '', teacherId: '', startDate: '', endDate: '', classDay: '', classTime: '',
-        assessment: { tests: { count: 0, value: 0 }, activities: { count: 0, value: 0 }, assignments: { count: 0, value: 0 } },
+        name: '', teacherId: '', auxTeacherId: '', startDate: '', endDate: '', classDay: '', classTime: '',
+        assessment: { tests: { count: 0, value: 0 }, activities: { count: 0, value: 0, plan: [] }, assignments: { count: 0, value: 0 } },
         passingCriteria: { minGrade: 7, minAttendance: 75 },
         templateId: '', isExtra: false,
         substituteTeacher: null, // Novo campo para professor substituto
+        lessonsCount: 0,
+        lessonPlan: []
     };
 
     const [formData, setFormData] = useState(initialFormData);
@@ -65,8 +67,9 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                 if (!value) errors.startDate = 'Data de início é obrigatória';
                 break;
             case 'endDate':
-                if (!value) errors.endDate = 'Data de término é obrigatória';
-                else if (formData.startDate && value < formData.startDate) {
+                // endDate só é obrigatória se não houver Plano de Aula (lessonsCount)
+                if (!value && (!formData.lessonsCount || formData.lessonsCount <= 0)) errors.endDate = 'Data de término é obrigatória';
+                else if (value && formData.startDate && value < formData.startDate) {
                     errors.endDate = 'Data de término deve ser posterior à data de início';
                 }
                 break;
@@ -75,6 +78,13 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                 break;
             case 'classTime':
                 if (!value) errors.classTime = 'Horário é obrigatório';
+                break;
+            case 'auxTeacherId':
+                // Auxiliar é opcional; se houver, precisa ter e-mail
+                if (value) {
+                    const aux = members.find(m => m.id === value);
+                    if (!aux?.email) errors.auxTeacherId = 'O auxiliar selecionado precisa ter um e-mail cadastrado';
+                }
                 break;
         }
         
@@ -85,11 +95,10 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
         const { name, value, type, checked } = e.target;
         let val = type === 'checkbox' ? checked : value;
         
-        // Se for campo de data, converte formato brasileiro para ISO
-        if ((name === 'startDate' || name === 'endDate') && value && type !== 'checkbox') {
-            val = convertBrazilianDateToISO(value);
-        }
-
+        // Campos de data agora usam input type="date" e armazenam no formato ISO (yyyy-MM-dd).
+        // Não converter durante a digitação para evitar comportamento inesperado.
+        // O valor do input já vem no formato correto.
+        
         const newFormData = { ...formData, [name]: val };
         if (name === 'isExtra' && checked) {
             newFormData.templateId = '';
@@ -122,9 +131,19 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                 ...prev,
                 templateId: templateId,
                 name: prev.name, // O nome será gerado pelo useEffect
-                assessment: selectedTemplate.assessment,
+                assessment: {
+                    tests: selectedTemplate.assessment?.tests || prev.assessment.tests,
+                    assignments: selectedTemplate.assessment?.assignments || prev.assessment.assignments,
+                    activities: {
+                        count: selectedTemplate.assessment?.activities?.count || 0,
+                        value: selectedTemplate.assessment?.activities?.value || 0,
+                        plan: selectedTemplate.assessment?.activities?.plan || []
+                    }
+                },
                 passingCriteria: selectedTemplate.passingCriteria,
                 isExtra: false,
+                lessonsCount: selectedTemplate.lessonsCount || 0,
+                lessonPlan: Array.isArray(selectedTemplate.lessonPlan) ? selectedTemplate.lessonPlan : [],
             }));
         } else {
             setFormData(prev => ({ ...prev, ...initialFormData, isExtra: prev.isExtra }));
@@ -133,7 +152,38 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
     };
 
     const handleAssessmentChange = (type, field, value) => {
+        if (type === 'activities' && field === 'plan') {
+            const planArray = (value || '')
+                .split(',')
+                .map(v => Number(String(v).trim()))
+                .filter(n => Number.isInteger(n) && n > 0);
+            setFormData(prev => ({
+                ...prev,
+                assessment: {
+                    ...prev.assessment,
+                    activities: { ...prev.assessment.activities, plan: planArray }
+                }
+            }));
+            return;
+        }
         setFormData(prev => ({ ...prev, assessment: { ...prev.assessment, [type]: { ...prev.assessment[type], [field]: Number(value) || 0 } } }));
+    };
+
+    const ensureLessonPlanSize = (count) => {
+        const c = Number(count) || 0;
+        const prev = formData.lessonPlan || [];
+        const next = Array.from({ length: c }, (_, i) => prev[i] || { activityIndex: null, testIndex: null, assignmentIndex: null, notes: '' });
+        setFormData(prevData => ({ ...prevData, lessonsCount: c, lessonPlan: next }));
+    };
+
+    const handleLessonPlanSelect = (rowIndex, field, value) => {
+        const numericFields = ['activityIndex', 'testIndex', 'assignmentIndex'];
+        const parsed = numericFields.includes(field) ? (value ? Number(value) : null) : value;
+        setFormData(prev => {
+            const plan = [...(prev.lessonPlan || [])];
+            plan[rowIndex] = { ...(plan[rowIndex] || { activityIndex: null, testIndex: null, assignmentIndex: null, notes: '' }), [field]: parsed };
+            return { ...prev, lessonPlan: plan };
+        });
     };
 
     const handlePassingChange = (field, value) => {
@@ -147,7 +197,8 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
         try {
             // Validação completa
             const allErrors = {};
-            const requiredFields = ['name', 'teacherId', 'startDate', 'endDate', 'classDay', 'classTime'];
+            const requiredFields = ['name', 'teacherId', 'startDate', 'classDay', 'classTime'];
+            if (!formData.lessonsCount || formData.lessonsCount <= 0) requiredFields.push('endDate');
             
             requiredFields.forEach(field => {
                 const fieldError = validateField(field, formData[field]);
@@ -159,6 +210,20 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
             if (formData.teacherId && !teacher?.email) {
                 allErrors.teacherId = 'O professor selecionado precisa ter um e-mail cadastrado';
             }
+
+            // Validação do auxiliar (se definido)
+            let auxTeacher = null;
+            if (formData.auxTeacherId) {
+                auxTeacher = members.find(m => m.id === formData.auxTeacherId);
+                if (!auxTeacher?.email) {
+                    allErrors.auxTeacherId = 'O auxiliar selecionado precisa ter um e-mail cadastrado';
+                }
+                // Auxiliar deve ser aluno matriculado na turma
+                const enrolledIds = (editingCourse?.students || []).map(s => s.id);
+                if (!enrolledIds.includes(formData.auxTeacherId)) {
+                    allErrors.auxTeacherId = 'O auxiliar deve ser um aluno matriculado nesta turma';
+                }
+            }
             
             if (Object.keys(allErrors).length > 0) {
                 setFieldErrors(allErrors);
@@ -168,7 +233,16 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
             
             setError('');
             setFieldErrors({});
-            await onSave({ ...formData, teacherName: teacher.name, teacherEmail: teacher.email, students: editingCourse?.students || [] });
+            await onSave({
+                ...formData,
+                teacherName: teacher.name,
+                teacherEmail: teacher.email,
+                // Persistir dados do Auxiliar
+                auxTeacherId: formData.auxTeacherId || '',
+                auxTeacherName: auxTeacher?.name || '',
+                auxTeacherEmail: auxTeacher?.email || '',
+                students: editingCourse?.students || []
+            });
         } catch (error) {
             setError('Erro ao salvar curso. Tente novamente.');
         } finally {
@@ -206,13 +280,20 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
         return today >= startDate && (!endDate || today <= endDate);
     };
 
+    // Alunos matriculados para restringir a seleção de Auxiliar de Professor
+    const hasEnrolledStudents = Array.isArray(editingCourse?.students) && editingCourse.students.length > 0;
+    const auxOptions = hasEnrolledStudents
+        ? members
+            .filter(m => editingCourse.students.some(s => s.id === m.id))
+            .map(member => ({ value: member.id, label: member.name }))
+        : [];
+
     const weekDays = Object.keys(weekDaysMap);
 
     return (
         <>
         <form onSubmit={handleSubmit} className="flex flex-col max-h-[85vh]">
             <div className="flex-shrink-0">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">{editingCourse ? 'Editar Turma' : 'Nova Turma'}</h2>
                 {error && <p className="text-red-600 bg-red-100 p-2 rounded-md mb-4">{error}</p>}
             </div>
             <div className="flex-grow overflow-y-auto space-y-4 pr-2">
@@ -260,6 +341,24 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                                 className={fieldErrors.teacherId ? 'border-red-500' : ''}
                             />
                             {fieldErrors.teacherId && <p className="text-red-600 text-sm mt-1">{fieldErrors.teacherId}</p>}
+                        </div>
+                        {/* Campo de Auxiliar de Professor */}
+                        <div>
+                            <label htmlFor="auxTeacherId" className="block text-sm font-medium text-gray-700 mb-1">Auxiliar de Professor</label>
+                            <PersonAutocomplete
+                                value={formData.auxTeacherId}
+                                onChange={(value) => setFormData(prev => ({ ...prev, auxTeacherId: value }))}
+                                placeholder="Digite o nome do auxiliar..."
+                                options={auxOptions}
+                                className={fieldErrors.auxTeacherId ? 'border-red-500' : ''}
+                                disabled={!hasEnrolledStudents}
+                            />
+                            {!hasEnrolledStudents && (
+                                <p className="text-gray-600 text-sm mt-1">
+                                    Seleção disponível apenas para alunos matriculados nesta turma.
+                                </p>
+                            )}
+                            {fieldErrors.auxTeacherId && <p className="text-red-600 text-sm mt-1">{fieldErrors.auxTeacherId}</p>}
                         </div>
                         {/* Campo de Professor Substituto */}
                         <div className="bg-red-50 rounded-lg p-4 border border-red-200">
@@ -380,12 +479,11 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                             <div>
                                  <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">Data de Início</label>
                                  <input 
-                                     type="text" 
+                                     type="date" 
                                      name="startDate" 
                                      id="startDate" 
-                                     value={formData.startDate ? formatDateToBrazilian(formData.startDate) : ''} 
+                                     value={formData.startDate || ''} 
                                      onChange={handleChange} 
-                                     placeholder="dd/mm/aaaa"
                                      className={`w-full bg-gray-100 rounded-md p-2 border focus:ring-2 ${
                                          fieldErrors.startDate 
                                              ? 'border-red-500 focus:ring-red-500' 
@@ -397,12 +495,11 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                             <div>
                                  <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">Data de Término</label>
                                  <input 
-                                     type="text" 
+                                     type="date" 
                                      name="endDate" 
                                      id="endDate" 
-                                     value={formData.endDate ? formatDateToBrazilian(formData.endDate) : ''} 
+                                     value={formData.endDate || ''} 
                                      onChange={handleChange} 
-                                     placeholder="dd/mm/aaaa" 
                                      className={`w-full bg-gray-100 rounded-md p-2 border focus:ring-2 ${
                                          fieldErrors.endDate 
                                              ? 'border-red-500 focus:ring-red-500' 
@@ -428,6 +525,71 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                             </div>
                         );
                     })}
+                </fieldset>
+                <fieldset className="border p-4 rounded-md">
+                    <legend className="px-2 font-semibold">Plano de Aula (Editável para esta turma)</legend>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade de Aulas</label>
+                            <input type="number" min="0" value={formData.lessonsCount || 0} onChange={(e)=>ensureLessonPlanSize(e.target.value)} className="w-full bg-gray-100 rounded-md p-2 border" />
+                            <p className="text-xs text-gray-500 mt-1">Se definido, a geração de presença pode ocorrer sem informar data de término.</p>
+                        </div>
+                    </div>
+                    {formData.lessonsCount > 0 && (
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                                <thead>
+                                    <tr className="text-left">
+                                        <th className="p-2">Aula</th>
+                                        {formData.assessment.activities.count > 0 && <th className="p-2">Atividade</th>}
+                                        {formData.assessment.tests.count > 0 && <th className="p-2">Prova</th>}
+                                        {formData.assessment.assignments.count > 0 && <th className="p-2">Trabalho</th>}
+                                        <th className="p-2">Anotações</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Array.from({ length: formData.lessonsCount }, (_, idx) => (
+                                        <tr key={idx} className="border-t">
+                                            <td className="p-2">Aula {idx+1}</td>
+                                            {formData.assessment.activities.count > 0 && (
+                                                <td className="p-2">
+                                                    <select value={formData.lessonPlan?.[idx]?.activityIndex || ''} onChange={(e)=>handleLessonPlanSelect(idx,'activityIndex', e.target.value)} className="bg-gray-100 rounded-md p-2 border w-full">
+                                                        <option value="">—</option>
+                                                        {Array.from({length: formData.assessment.activities.count}, (_,i)=> (
+                                                            <option key={i+1} value={i+1}>A{i+1}</option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                            )}
+                                            {formData.assessment.tests.count > 0 && (
+                                                <td className="p-2">
+                                                    <select value={formData.lessonPlan?.[idx]?.testIndex || ''} onChange={(e)=>handleLessonPlanSelect(idx,'testIndex', e.target.value)} className="bg-gray-100 rounded-md p-2 border w-full">
+                                                        <option value="">—</option>
+                                                        {Array.from({length: formData.assessment.tests.count}, (_,i)=> (
+                                                            <option key={i+1} value={i+1}>P{i+1}</option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                            )}
+                                            {formData.assessment.assignments.count > 0 && (
+                                                <td className="p-2">
+                                                    <select value={formData.lessonPlan?.[idx]?.assignmentIndex || ''} onChange={(e)=>handleLessonPlanSelect(idx,'assignmentIndex', e.target.value)} className="bg-gray-100 rounded-md p-2 border w-full">
+                                                        <option value="">—</option>
+                                                        {Array.from({length: formData.assessment.assignments.count}, (_,i)=> (
+                                                            <option key={i+1} value={i+1}>T{i+1}</option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                            )}
+                                            <td className="p-2">
+                                                <input type="text" value={formData.lessonPlan?.[idx]?.notes || ''} onChange={(e)=>handleLessonPlanSelect(idx,'notes', e.target.value)} className="bg-gray-100 rounded-md p-2 border w-full" placeholder="Conteúdo abordado, observações..." />
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </fieldset>
                 <fieldset className="border p-4 rounded-md">
                     <legend className="px-2 font-semibold">Critérios de Aprovação (Editável para esta turma)</legend>
