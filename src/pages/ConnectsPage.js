@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { User, Calendar, Edit, Trash2, Plus, MapPin, Clock, Mail, FileText, BarChartHorizontal, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { User, Calendar, Edit, Trash2, Plus, MapPin, Clock, Mail, FileText, BarChartHorizontal, CopyPlus } from 'lucide-react';
 import { formatFullAddress, hasAddressData } from '../utils/addressUtils';
 // NOVO: Importando o store para buscar o status de admin
 import { useAuthStore } from '../store/authStore';
@@ -22,6 +23,7 @@ const ConnectsPage = ({
 }) => {
   // NOVO: Buscando o status de admin diretamente do store
   const { isAdmin, currentUserData } = useAuthStore();
+  const navigate = useNavigate();
   const [auxModalConnect, setAuxModalConnect] = useState(null);
   const [selectedAuxMemberId, setSelectedAuxMemberId] = useState('');
 
@@ -103,13 +105,25 @@ const ConnectsPage = ({
                   </>
                 )}
                 {(isAdmin || c.leaderId === currentUserData?.id || (c.leaderEmail || '').toLowerCase() === userEmail || (c.supervisorEmail || '').toLowerCase() === userEmail) && (
-                  <button
-                    onClick={(e) => handleButtonClick(e, () => onEditConnect(c))}
-                    className="text-gray-500 hover:text-[#DC2626] p-1 rounded hover:bg-gray-200 transition-colors"
-                    title="Editar Connect"
-                  >
-                    <Edit size={16} />
-                  </button>
+                  <>
+                    <button
+                      onClick={(e) => handleButtonClick(e, () => onEditConnect(c))}
+                      className="text-gray-500 hover:text-[#DC2626] p-1 rounded hover:bg-gray-200 transition-colors"
+                      title="Editar Connect"
+                    >
+                      <Edit size={16} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/multiplicar-connect/${c.id}`);
+                      }}
+                      className="text-gray-500 hover:text-blue-600 p-1 rounded hover:bg-gray-200 transition-colors"
+                      title="Multiplicar Connect"
+                    >
+                      <CopyPlus size={16} />
+                    </button>
+                  </>
                 )}
                 {isAdmin && (
                   <button

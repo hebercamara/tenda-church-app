@@ -11,6 +11,7 @@ import LoadingSpinner from './components/LoadingSpinner';
 const DashboardPage = React.lazy(() => import('./pages/DashboardPage'));
 const MembersPage = React.lazy(() => import('./pages/MembersPage'));
 const ConnectsPage = React.lazy(() => import('./pages/ConnectsPage'));
+const MultiplyConnectPage = React.lazy(() => import('./pages/MultiplyConnectPage'));
 const ConnectTrackPage = React.lazy(() => import('./pages/ConnectTrackPage'));
 const CoursesPage = React.lazy(() => import('./pages/CoursesPage'));
 const LeadershipHierarchyPage = React.lazy(() => import('./pages/LeadershipHierarchyPage'));
@@ -185,6 +186,21 @@ const AppRouter = ({
                                 onSetAuxLeader={handleSetAuxLeader}
                                 onRemoveAuxLeader={handleRemoveAuxLeader}
                                 loadingStates={loadingStates}
+                                operationStatus={operationStatus}
+                                setOperationStatus={setOperationStatus}
+                            />
+                        }
+                    />
+                )}
+
+                {/* Multiplicação de Connects - visível para Admins, Líderes e Supervisores */}
+                {(isAdmin || isLeader || isSupervisor || isAuxLeader) && (
+                    <Route
+                        path="/multiplicar-connect/:connectId"
+                        element={
+                            <MultiplyConnectPage
+                                allConnects={allConnects}
+                                allMembers={allMembers}
                                 operationStatus={operationStatus}
                                 setOperationStatus={setOperationStatus}
                             />
