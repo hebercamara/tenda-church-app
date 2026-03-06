@@ -104,11 +104,13 @@ const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMemb
         <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200">
           <div className="flex items-center space-x-2">
             <div className="w-7 h-7 sm:w-8 sm:h-8 bg-[#991B1B] rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xs sm:text-sm">T</span>
+              <span className="text-white font-bold text-xs sm:text-sm">
+                {isAdmin ? "T" : ((currentUserData?.name || currentUserData?.displayName || "T").charAt(0).toUpperCase())}
+              </span>
             </div>
             {(() => {
               const displayName = currentUserData?.name || currentUserData?.displayName || '';
-              const firstName = displayName.trim().split(' ')[0] || 'Tenda';
+              const firstName = displayName.trim().split(' ')[0] || (isAdmin ? 'Tenda' : 'Usuário');
               return (
                 <span className="font-bold text-gray-800 text-sm sm:text-base">{firstName}</span>
               );

@@ -344,39 +344,39 @@ const MultiplyConnectPage = ({
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* COLUNA ESQUERDA: DEFINIÇÃO DO NOVO CONNECT E LIDERANÇA */}
                     <div className="space-y-6">
-                        <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#DC2626]">
-                            <h3 className="text-xl font-bold text-gray-800 border-b border-gray-200 pb-2 mb-4">Novo Connect Gerado</h3>
+                        <div className="bg-gray-800 rounded-lg shadow-md p-6 border-t-4 border-[#DC2626] text-white">
+                            <h3 className="text-xl font-bold text-white border-b border-gray-600 pb-2 mb-4">Novo Connect Gerado</h3>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="md:col-span-2">
-                                    <label className="block text-gray-700 text-sm font-bold mb-2">Número Alocado Automaticamente</label>
+                                    <label className="block text-gray-300 text-sm font-bold mb-2">Número Alocado Automaticamente</label>
                                     <input
                                         type="text"
                                         value={newConnectData.number}
                                         disabled
-                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none bg-gray-100 font-bold text-lg text-gray-700 font-mono"
+                                        className="w-full px-3 py-2 border border-gray-600 rounded focus:outline-none bg-gray-700 font-bold text-lg text-white font-mono"
                                     />
-                                    <p className="text-xs text-gray-500 mt-1">O próximo número disponível no sistema.</p>
+                                    <p className="text-xs text-gray-400 mt-1">O próximo número disponível no sistema.</p>
                                 </div>
                                 <div className="md:col-span-2">
-                                    <label className="block text-gray-700 text-sm font-bold mb-2">Nome de Exibição do Novo Connect</label>
+                                    <label className="block text-gray-300 text-sm font-bold mb-2">Nome de Exibição do Novo Connect</label>
                                     <input
                                         type="text"
                                         name="name"
                                         value={newConnectData.name}
                                         onChange={handleFormChange}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-[#DC2626]"
+                                        className="w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded focus:outline-none focus:border-[#DC2626]"
                                         required
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-gray-700 text-sm font-bold mb-2">Dia da Reunião</label>
+                                    <label className="block text-gray-300 text-sm font-bold mb-2">Dia da Reunião</label>
                                     <select
                                         name="weekday"
                                         value={newConnectData.weekday}
                                         onChange={handleFormChange}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-[#DC2626]"
+                                        className="w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded focus:outline-none focus:border-[#DC2626]"
                                     >
                                         <option value="">Selecione...</option>
                                         <option value="Domingo">Domingo</option>
@@ -389,34 +389,44 @@ const MultiplyConnectPage = ({
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-gray-700 text-sm font-bold mb-2">Horário</label>
+                                    <label className="block text-gray-300 text-sm font-bold mb-2">Horário</label>
                                     <input
                                         type="time"
                                         name="time"
                                         value={newConnectData.time}
                                         onChange={handleFormChange}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-[#DC2626]"
+                                        className="w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded focus:outline-none focus:border-[#DC2626]"
                                     />
                                 </div>
                                 <div className="md:col-span-2">
-                                    <label className="block text-gray-700 text-sm font-bold mb-2">Bairro</label>
+                                    <label className="block text-gray-300 text-sm font-bold mb-2">Bairro</label>
                                     <input
                                         type="text"
                                         name="neighborhood"
                                         value={newConnectData.neighborhood}
                                         onChange={handleFormChange}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-[#DC2626]"
+                                        className="w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded focus:outline-none focus:border-[#DC2626]"
                                     />
                                 </div>
                                 <div className="md:col-span-2">
-                                    <label className="block text-gray-700 text-sm font-bold mb-2">Endereço Completo</label>
+                                    <label className="block text-gray-300 text-sm font-bold mb-2">Cidade</label>
+                                    <input
+                                        type="text"
+                                        name="city"
+                                        value={newConnectData.city}
+                                        onChange={handleFormChange}
+                                        className="w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded focus:outline-none focus:border-[#DC2626]"
+                                    />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-gray-300 text-sm font-bold mb-2">Endereço Completo</label>
                                     <input
                                         type="text"
                                         name="address"
                                         value={newConnectData.address}
                                         onChange={handleFormChange}
                                         placeholder="Ex: Rua A, 123"
-                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-[#DC2626]"
+                                        className="w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded focus:outline-none focus:border-[#DC2626]"
                                     />
                                 </div>
                             </div>

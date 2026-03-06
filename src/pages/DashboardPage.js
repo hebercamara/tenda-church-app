@@ -23,7 +23,7 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
     });
 
     // Permissão: apenas líderes de Connect podem ver o widget de acompanhamento
-    const { currentUserData } = useAuthStore();
+    const { currentUserData, isAdmin } = useAuthStore();
     const isLeader = !!(currentUserData && connects.some(c => c.leaderId === currentUserData.id));
 
     const dashboardMetrics = useMemo(() => {
@@ -32,18 +32,18 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
         if (!validReports || validReports.length === 0) {
             return { avgAttendance: 0, totalGuests: 0, totalOffering: 0 };
         }
-        
+
         const reportsByWeek = validReports.reduce((acc, report) => {
             const dateObj = report.reportDate.toDate ? report.reportDate.toDate() : report.reportDate;
             const sundayOfWeek = getSundayOfWeek(dateObj).toISOString().split('T')[0];
-            
+
             if (!acc[sundayOfWeek]) acc[sundayOfWeek] = [];
             acc[sundayOfWeek].push(report);
             return acc;
         }, {});
 
         const recentWeeks = Object.keys(reportsByWeek)
-            .sort((a,b) => new Date(b) - new Date(a))
+            .sort((a, b) => new Date(b) - new Date(a))
             .slice(0, 4);
 
         let totalPresentLastWeeks = 0;
@@ -54,7 +54,7 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
         });
 
         const avgAttendance = recentWeeks.length > 0 ? Math.round(totalPresentLastWeeks / recentWeeks.length) : 0;
-        
+
         const currentMonth = new Date().getMonth();
         const monthlyReports = validReports.filter(r => {
             const dateObj = r.reportDate.toDate ? r.reportDate.toDate() : r.reportDate;
@@ -93,7 +93,7 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
                             <option value="connectAttendance">Frequência dos Connects</option>
                             <option value="courseAttendance">Frequência dos Cursos</option>
                         </select>
-                        
+
                         {chartType === 'courseAttendance' && (
                             <select
                                 value={selectedCourse}
@@ -107,10 +107,10 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
                             </select>
                         )}
                     </div>
-                    
+
                     <div className="overflow-x-auto">
                         {chartType === 'connectAttendance' && <ConnectAttendanceChart reports={reports} allMembers={members} connectId={null} />}
-                        {chartType === 'courseAttendance' && <CourseAttendanceChart courseId={selectedCourse} courseName={Array.isArray(courses) ? courses.find(c=>c.id===selectedCourse)?.name : ''} />}
+                        {chartType === 'courseAttendance' && <CourseAttendanceChart courseId={selectedCourse} courseName={Array.isArray(courses) ? courses.find(c => c.id === selectedCourse)?.name : ''} />}
                     </div>
 
                 </div>
@@ -118,7 +118,24 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
                     {isLeader && (
                         <FollowUpWidget alerts={attendanceAlerts} getConnectName={getConnectName} />
                     )}
-                    <BirthdayWidget members={members} />
+                    <BirthdayWidget members={(() => {
+                        if (isAdmin) return members;
+                        const userEmail = (currentUserData?.email || '').toLowerCase();
+                        const linkedConnectIds = connects.filter(c => {
+                            const isL = c.leaderId === currentUserData?.id || (c.leaderEmail || '').toLowerCase() === userEmail;
+                            const isS = (c.supervisorEmail || '').toLowerCase() === userEmail;
+                            const isAux = Array.isArray(c.auxLeaders) ? c.auxLeaders.some(l => l.id === currentUserData?.id || (l.email || '').toLowerCase() === userEmail) : (c.auxLeaderId === currentUserData?.id || (c.auxLeaderEmail || '').toLowerCase() === userEmail);
+                            return isL || isS || isAux;
+                        }).map(c => c.id);
+
+                        // Also include user's own connect if they are just a member
+                        const myMemberRecord = members.find(m => m.id === currentUserData?.id || (m.email || '').toLowerCase() === userEmail);
+                        if (myMemberRecord && myMemberRecord.connectId && !linkedConnectIds.includes(myMemberRecord.connectId)) {
+                            linkedConnectIds.push(myMemberRecord.connectId);
+                        }
+
+                        return members.filter(m => linkedConnectIds.includes(m.connectId));
+                    })()} />
                 </div>
             </div>
         </div>
