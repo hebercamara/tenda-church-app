@@ -23,28 +23,40 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
         return Array.isArray(courses) && courses.length > 0 ? courses[0]?.id || '' : '';
     });
 
-    // Permissão: apenas líderes de Connect podem ver o widget de acompanhamento
+    // Permissão: líderes, supervisores, auxiliares ou admins
     const { currentUserData, isAdmin } = useAuthStore();
-    const isLeader = !!(currentUserData && connects.some(c => c.leaderId === currentUserData.id));
+    const userEmail = (currentUserData?.email || '').toLowerCase();
+    const isLeader = !!(currentUserData && connects.some(c => c.leaderId === currentUserData.id || (c.leaderEmail || '').toLowerCase() === userEmail));
+    const isSupervisor = !!(currentUserData && connects.some(c => (c.supervisorEmail || '').toLowerCase() === userEmail));
+    const isAuxLeader = !!(currentUserData && connects.some(c => c.auxLeaderId === currentUserData.id || (c.auxLeaderEmail || '').toLowerCase() === userEmail || (Array.isArray(c.auxLeaders) && c.auxLeaders.some(l => l.id === currentUserData.id || (l.email || '').toLowerCase() === userEmail))));
 
-    // Filtrar decisões pendentes para o líder logado
-    const pendingDecisions = useMemo(() => {
-        if (!isLeader || !allDecisions || allDecisions.length === 0) return [];
+    const hasDecisionAccess = isAdmin || isLeader || isSupervisor || isAuxLeader;
 
-        const userEmail = (currentUserData?.email || '').toLowerCase();
-        const leaderConnectIds = connects.filter(c => {
+    // Filtrar todas as decisões para o usuário logado
+    const visibleDecisions = useMemo(() => {
+        if (!hasDecisionAccess || !allDecisions || allDecisions.length === 0) return [];
+
+        if (isAdmin) {
+            return [...allDecisions].sort((a, b) => {
+                const dA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+                const dB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+                return dB - dA;
+            });
+        }
+
+        const allowedConnectIds = connects.filter(c => {
             const isL = c.leaderId === currentUserData?.id || (c.leaderEmail || '').toLowerCase() === userEmail;
-            return isL;
+            const isS = (c.supervisorEmail || '').toLowerCase() === userEmail;
+            const isAux = c.auxLeaderId === currentUserData?.id || (c.auxLeaderEmail || '').toLowerCase() === userEmail || (Array.isArray(c.auxLeaders) && c.auxLeaders.some(l => l.id === currentUserData?.id || (l.email || '').toLowerCase() === userEmail));
+            return isL || isS || isAux;
         }).map(c => c.id);
 
-        return allDecisions.filter(d =>
-            d.status === 'pendente' && leaderConnectIds.includes(d.connectId)
-        ).sort((a, b) => {
-            const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
-            const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+        return allDecisions.filter(d => allowedConnectIds.includes(d.connectId)).sort((a, b) => {
+            const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+            const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
             return dateB - dateA; // Ordenar da mais recente para a mais antiga
         });
-    }, [allDecisions, connects, currentUserData, isLeader]);
+    }, [allDecisions, connects, currentUserData, isAdmin, hasDecisionAccess, userEmail]);
 
     const dashboardMetrics = useMemo(() => {
         const validReports = reports.filter(r => r && r.reportDate && typeof r.attendance === 'object');
@@ -135,9 +147,9 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
 
                 </div>
                 <div className="lg:col-span-1 space-y-4 sm:space-y-6 lg:space-y-8">
-                    {isLeader && pendingDecisions.length > 0 && (
+                    {hasDecisionAccess && (
                         <PendingDecisionsWidget
-                            decisions={pendingDecisions}
+                            decisions={visibleDecisions}
                             onContacted={handleUpdateDecisionStatus}
                             getConnectName={getConnectName}
                         />

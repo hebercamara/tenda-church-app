@@ -80,18 +80,25 @@ const DecisionDetailsModal = ({ isOpen, onClose, decision, onContacted, getConne
                     <button onClick={onClose} className="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-50 transition">
                         Fechar
                     </button>
-                    <button
-                        onClick={handleMarkAsContacted}
-                        disabled={updating}
-                        className={`flex items-center px-4 py-2 bg-[#991B1B] text-white rounded-md hover:bg-red-800 transition ${updating ? 'opacity-70 cursor-not-allowed' : ''}`}
-                    >
-                        {updating ? 'Marcando...' : (
-                            <>
-                                <CheckCircle className="h-4 w-4 mr-2" />
-                                Marcar como Contatado
-                            </>
-                        )}
-                    </button>
+                    {decision.status !== 'contatado' ? (
+                        <button
+                            onClick={handleMarkAsContacted}
+                            disabled={updating}
+                            className={`flex items-center px-4 py-2 bg-[#991B1B] text-white rounded-md hover:bg-red-800 transition ${updating ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        >
+                            {updating ? 'Marcando...' : (
+                                <>
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Marcar como Contatado
+                                </>
+                            )}
+                        </button>
+                    ) : (
+                        <div className="flex items-center px-4 py-2 bg-green-100 text-green-700 rounded-md font-medium text-sm">
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Já Contatado
+                        </div>
+                    )}
                 </div>
             </div>
         </Modal>
