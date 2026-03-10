@@ -4,6 +4,7 @@ import FollowUpWidget from '../components/widgets/FollowUpWidget';
 import MetricCard from '../components/widgets/MetricCard';
 import ConnectAttendanceChart from '../components/ConnectAttendanceChart';
 import CourseAttendanceChart from '../components/CourseAttendanceChart';
+import PendingDecisionsWidget from '../components/widgets/PendingDecisionsWidget';
 
 import { Users, UserPlus, TrendingUp, DollarSign } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
@@ -16,7 +17,7 @@ const getSundayOfWeek = (date) => {
     return new Date(dateObj.setUTCDate(diff));
 };
 
-const DashboardPage = ({ members = [], connects = [], reports = [], courses = [], attendanceAlerts = [], getConnectName = () => 'N/A' }) => {
+const DashboardPage = ({ members = [], connects = [], reports = [], courses = [], attendanceAlerts = [], getConnectName = () => 'N/A', allDecisions = [], handleUpdateDecisionStatus }) => {
     const [chartType, setChartType] = useState('connectAttendance');
     const [selectedCourse, setSelectedCourse] = useState(() => {
         return Array.isArray(courses) && courses.length > 0 ? courses[0]?.id || '' : '';
@@ -25,6 +26,25 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
     // Permissão: apenas líderes de Connect podem ver o widget de acompanhamento
     const { currentUserData, isAdmin } = useAuthStore();
     const isLeader = !!(currentUserData && connects.some(c => c.leaderId === currentUserData.id));
+
+    // Filtrar decisões pendentes para o líder logado
+    const pendingDecisions = useMemo(() => {
+        if (!isLeader || !allDecisions || allDecisions.length === 0) return [];
+
+        const userEmail = (currentUserData?.email || '').toLowerCase();
+        const leaderConnectIds = connects.filter(c => {
+            const isL = c.leaderId === currentUserData?.id || (c.leaderEmail || '').toLowerCase() === userEmail;
+            return isL;
+        }).map(c => c.id);
+
+        return allDecisions.filter(d =>
+            d.status === 'pendente' && leaderConnectIds.includes(d.connectId)
+        ).sort((a, b) => {
+            const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+            const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+            return dateB - dateA; // Ordenar da mais recente para a mais antiga
+        });
+    }, [allDecisions, connects, currentUserData, isLeader]);
 
     const dashboardMetrics = useMemo(() => {
         const validReports = reports.filter(r => r && r.reportDate && typeof r.attendance === 'object');
@@ -115,6 +135,13 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
 
                 </div>
                 <div className="lg:col-span-1 space-y-4 sm:space-y-6 lg:space-y-8">
+                    {isLeader && pendingDecisions.length > 0 && (
+                        <PendingDecisionsWidget
+                            decisions={pendingDecisions}
+                            onContacted={handleUpdateDecisionStatus}
+                            getConnectName={getConnectName}
+                        />
+                    )}
                     {isLeader && (
                         <FollowUpWidget alerts={attendanceAlerts} getConnectName={getConnectName} />
                     )}

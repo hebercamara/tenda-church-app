@@ -24,6 +24,7 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
+import DecisionFormPage from './pages/DecisionFormPage';
 import LoadingSpinner from './components/LoadingSpinner';
 import AppRouter from './AppRouter';
 
@@ -122,6 +123,7 @@ function AppContent() {
     const [allCourses, setAllCourses] = useState(sampleCourses);
     const [allCourseTemplates, setAllCourseTemplates] = useState(sampleCourseTemplates);
     const [allConnectReports, setAllConnectReports] = useState(sampleConnectReports);
+    const [allDecisions, setAllDecisions] = useState([]);
     const [loadingData, setLoadingData] = useState(true);
     const [connectionError, setConnectionError] = useState(null);
     const [operationStatus, setOperationStatus] = useState({ type: null, message: null });
@@ -273,6 +275,17 @@ function AppContent() {
                     console.error('Erro ao carregar relatórios:', error);
                     setConnectionError('Erro de conexão: Não foi possível carregar os relatórios. Usando dados de exemplo.');
                     setAllConnectReports(sampleConnectReports);
+                }
+            ),
+            onSnapshot(
+                collection(db, `artifacts/${appId}/public/data/decisions`),
+                (s) => {
+                    const decisionsList = s.docs.map(d => ({ id: d.id, ...d.data() }));
+                    setAllDecisions(decisionsList);
+                },
+                (error) => {
+                    console.error('Erro ao carregar decisões:', error);
+                    setAllDecisions([]);
                 }
             )
         ];
@@ -1323,6 +1336,17 @@ function AppContent() {
             setDeleteAction(null);
         }
     };
+
+    const handleUpdateDecisionStatus = async (decisionId, newStatus) => {
+        try {
+            const ref = doc(db, `artifacts/${appId}/public/data/decisions`, decisionId);
+            await updateDoc(ref, { status: newStatus });
+        } catch (error) {
+            console.error('Erro ao atualizar status da decisão:', error);
+            setOperationStatus({ type: 'error', message: 'Erro ao atualizar status do formulário.' });
+        }
+    };
+
     const getConnectName = useCallback((connectId) => { if (!connectId) return 'Sem Connect'; const connect = allConnects.find(c => c.id === connectId); return connect ? `${connect.number} - ${connect.name}` : '...'; }, [allConnects]);
 
 
@@ -1333,6 +1357,7 @@ function AppContent() {
         return (
             <Routes>
                 <Route path="/signup" element={<SignupPage />} />
+                <Route path="/nova-decisao" element={<DecisionFormPage />} />
                 <Route path="*" element={<LoginPage />} />
             </Routes>
         );
@@ -1400,8 +1425,8 @@ function AppContent() {
                 {/* Mensagem de status de operação (legacy) */}
                 {operationStatus.message && (
                     <div className={`mx-4 md:mx-8 mt-4 p-3 rounded-md ${operationStatus.type === 'success'
-                            ? 'bg-green-100 border border-green-400 text-green-700'
-                            : 'bg-red-100 border border-red-400 text-red-700'
+                        ? 'bg-green-100 border border-green-400 text-green-700'
+                        : 'bg-red-100 border border-red-400 text-red-700'
                         }`}>
                         <div className="flex items-center">
                             <div className="flex-shrink-0">
@@ -1437,6 +1462,7 @@ function AppContent() {
                         allCourses={allCourses}
                         allCourseTemplates={allCourseTemplates}
                         allConnectReports={allConnectReports}
+                        allDecisions={allDecisions}
                         visibleMembers={visibleMembers}
                         visibleConnects={visibleConnects}
                         visibleCourses={visibleCourses}
@@ -1474,6 +1500,7 @@ function AppContent() {
                         handleSetAuxTeacher={handleSetAuxTeacher}
                         handleFinalizeCourse={handleFinalizeCourse}
                         handleReopenCourse={handleReopenCourse}
+                        handleUpdateDecisionStatus={handleUpdateDecisionStatus}
 
                         // Funções de utilidade
                         calculateFinalGradeForStudent={calculateFinalGradeForStudent}

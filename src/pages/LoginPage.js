@@ -54,7 +54,7 @@ const LoginPage = () => {
         e.preventDefault();
         navigate('/signup');
     };
-    
+
     const handlePasswordReset = async (e) => {
         e.preventDefault();
         if (!email) {
@@ -78,18 +78,18 @@ const LoginPage = () => {
         <div className="flex items-center justify-center min-h-screen bg-gray-200">
             <div className="w-full max-w-md p-8 space-y-8 bg-[#991B1B] rounded-2xl shadow-lg">
                 <div className="flex flex-col items-center">
-                    <img 
+                    <img
                         src="/logo512.png"
-                        onError={(e) => { 
-                          if (e.target.src.includes('logo512.png')) {
-                            e.target.src = 'https://firebasestorage.googleapis.com/v0/b/tenda-church-app.firebasestorage.app/o/LOGO%20TENDA%20BRANCO.png?alt=media&token=ed7c6ad0-de20-46a3-bb4c-552934e3d3ca';
-                          } else {
-                            e.target.onerror = null; 
-                            e.target.src = 'https://placehold.co/200x50/991B1B/FFFFFF?text=Logo+Tenda+Church';
-                          }
+                        onError={(e) => {
+                            if (e.target.src.includes('logo512.png')) {
+                                e.target.src = 'https://firebasestorage.googleapis.com/v0/b/tenda-church-app.firebasestorage.app/o/LOGO%20TENDA%20BRANCO.png?alt=media&token=ed7c6ad0-de20-46a3-bb4c-552934e3d3ca';
+                            } else {
+                                e.target.onerror = null;
+                                e.target.src = 'https://placehold.co/200x50/991B1B/FFFFFF?text=Logo+Tenda+Church';
+                            }
                         }}
-                        alt="Logo Tenda Church" 
-                        className="h-16 mb-6" 
+                        alt="Logo Tenda Church"
+                        className="h-16 mb-6"
                     />
                 </div>
                 <form className="mt-8 space-y-6">
@@ -101,18 +101,18 @@ const LoginPage = () => {
                         {/* --- CAMPO DE SENHA ATUALIZADO --- */}
                         <div className="relative">
                             <label htmlFor="password" className="sr-only">Senha</label>
-                            <input 
-                                id="password" 
-                                name="password" 
+                            <input
+                                id="password"
+                                name="password"
                                 type={showPassword ? 'text' : 'password'} // Altera o tipo dinamicamente
-                                value={password} 
-                                onChange={(e) => setPassword(e.target.value)} 
-                                required 
-                                className="relative block w-full px-3 py-3 text-white placeholder-gray-300 bg-white/20 border border-transparent rounded-md appearance-none focus:outline-none focus:ring-2 focus:ring-white sm:text-sm pr-10" 
-                                placeholder="Senha" 
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                className="relative block w-full px-3 py-3 text-white placeholder-gray-300 bg-white/20 border border-transparent rounded-md appearance-none focus:outline-none focus:ring-2 focus:ring-white sm:text-sm pr-10"
+                                placeholder="Senha"
                             />
-                            <button 
-                                type="button" 
+                            <button
+                                type="button"
                                 className="absolute inset-y-0 right-0 pr-3 flex items-center"
                                 onClick={() => setShowPassword(!showPassword)}
                             >
@@ -125,12 +125,12 @@ const LoginPage = () => {
                         </div>
                     </div>
                     {error && (
-                      <p className="text-sm text-center text-white bg-red-500/50 p-2 rounded-md">
-                        {error}
-                        {errorCode && (
-                          <span className="block text-xs mt-1 text-white/80">Detalhes: {errorCode}</span>
-                        )}
-                      </p>
+                        <p className="text-sm text-center text-white bg-red-500/50 p-2 rounded-md">
+                            {error}
+                            {errorCode && (
+                                <span className="block text-xs mt-1 text-white/80">Detalhes: {errorCode}</span>
+                            )}
+                        </p>
                     )}
                     {message && <p className="text-sm text-center text-white bg-green-500/50 p-2 rounded-md">{message}</p>}
                     <div className="space-y-3">

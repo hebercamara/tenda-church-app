@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Home, BookOpen, X, Network, GraduationCap, User } from 'lucide-react';
+import { LayoutDashboard, Users, Home, BookOpen, X, Network, GraduationCap, User, UserPlus } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
 const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMembers = [] }) => {
@@ -82,6 +82,9 @@ const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMemb
       // Hierarquia - Visível para Admins, Líderes e Supervisores
       ...((isAdmin || isLeader || isSupervisor) ? [{ id: 'hierarchy', label: 'Hierarquia', icon: Network, path: '/hierarquia-lideranca' }] : []),
     ]),
+
+    // Nova Decisão - Visível para todos os usuários logados
+    { id: 'new-decision', label: 'Nova Decisão', icon: UserPlus, path: '/nova-decisao' },
   ].filter(Boolean);
 
   // Item separado para Minha Área - sempre visível para todos os usuários

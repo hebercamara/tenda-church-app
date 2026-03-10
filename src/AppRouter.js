@@ -18,6 +18,7 @@ const LeadershipHierarchyPage = React.lazy(() => import('./pages/LeadershipHiera
 const BulkImportPage = React.lazy(() => import('./pages/BulkImportPage'));
 const MyStudentsPage = React.lazy(() => import('./pages/MyStudentsPage'));
 const PersonalPortalPage = React.lazy(() => import('./pages/PersonalPortalPage'));
+const DecisionFormPage = React.lazy(() => import('./pages/DecisionFormPage'));
 
 const AppRouter = ({
     allMembers,
@@ -25,6 +26,7 @@ const AppRouter = ({
     allCourses,
     allCourseTemplates,
     allConnectReports,
+    allDecisions,
     membersWithCourses,
     completedCourses,
     memberConnectHistoryDetails,
@@ -54,6 +56,9 @@ const AppRouter = ({
     handleSetAuxLeader,
     handleRemoveAuxLeader,
     handleSetAuxTeacher,
+    handleFinalizeCourse,
+    handleReopenCourse,
+    handleUpdateDecisionStatus,
     // Funções de utilidade
     calculateFinalGradeForStudent,
     getStudentStatusInfo,
@@ -136,6 +141,8 @@ const AppRouter = ({
                             reports={allConnectReports}
                             attendanceAlerts={attendanceAlerts}
                             getConnectName={getConnectName}
+                            allDecisions={allDecisions}
+                            handleUpdateDecisionStatus={handleUpdateDecisionStatus}
                         />
                     }
                 />
@@ -340,6 +347,9 @@ const AppRouter = ({
                         />
                     }
                 />
+
+                {/* Página de Nova Decisão */}
+                <Route path="/nova-decisao" element={<DecisionFormPage />} />
 
                 {/* Rota 404 - redireciona para dashboard */}
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
