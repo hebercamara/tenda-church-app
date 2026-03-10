@@ -23,40 +23,26 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
         return Array.isArray(courses) && courses.length > 0 ? courses[0]?.id || '' : '';
     });
 
-    // Permissão: líderes, supervisores, auxiliares ou admins
+    // Permissão: líderes, pastores, supervisores, auxiliares ou admins
     const { currentUserData, isAdmin } = useAuthStore();
     const userEmail = (currentUserData?.email || '').toLowerCase();
-    const isLeader = !!(currentUserData && connects.some(c => c.leaderId === currentUserData.id || (c.leaderEmail || '').toLowerCase() === userEmail));
-    const isSupervisor = !!(currentUserData && connects.some(c => (c.supervisorEmail || '').toLowerCase() === userEmail));
+
+    const isLeaderOrPastor = !!(currentUserData && (connects.some(c => c.leaderId === currentUserData.id || (c.leaderEmail || '').toLowerCase() === userEmail) || currentUserData.isLeader || currentUserData.isPastor));
+    const isSupervisor = !!(currentUserData && (connects.some(c => (c.supervisorEmail || '').toLowerCase() === userEmail) || currentUserData.isSupervisor));
     const isAuxLeader = !!(currentUserData && connects.some(c => c.auxLeaderId === currentUserData.id || (c.auxLeaderEmail || '').toLowerCase() === userEmail || (Array.isArray(c.auxLeaders) && c.auxLeaders.some(l => l.id === currentUserData.id || (l.email || '').toLowerCase() === userEmail))));
 
-    const hasDecisionAccess = isAdmin || isLeader || isSupervisor || isAuxLeader;
+    const hasDecisionAccess = isAdmin || isLeaderOrPastor || isSupervisor || isAuxLeader;
 
-    // Filtrar todas as decisões para o usuário logado
+    // Mostrar todas as decisões globalmente para quem tem acesso de liderança
     const visibleDecisions = useMemo(() => {
         if (!hasDecisionAccess || !allDecisions || allDecisions.length === 0) return [];
 
-        if (isAdmin) {
-            return [...allDecisions].sort((a, b) => {
-                const dA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
-                const dB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
-                return dB - dA;
-            });
-        }
-
-        const allowedConnectIds = connects.filter(c => {
-            const isL = c.leaderId === currentUserData?.id || (c.leaderEmail || '').toLowerCase() === userEmail;
-            const isS = (c.supervisorEmail || '').toLowerCase() === userEmail;
-            const isAux = c.auxLeaderId === currentUserData?.id || (c.auxLeaderEmail || '').toLowerCase() === userEmail || (Array.isArray(c.auxLeaders) && c.auxLeaders.some(l => l.id === currentUserData?.id || (l.email || '').toLowerCase() === userEmail));
-            return isL || isS || isAux;
-        }).map(c => c.id);
-
-        return allDecisions.filter(d => allowedConnectIds.includes(d.connectId)).sort((a, b) => {
-            const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
-            const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
-            return dateB - dateA; // Ordenar da mais recente para a mais antiga
+        return [...allDecisions].sort((a, b) => {
+            const dA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+            const dB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+            return dB - dA; // Ordenar da mais recente para a mais antiga
         });
-    }, [allDecisions, connects, currentUserData, isAdmin, hasDecisionAccess, userEmail]);
+    }, [allDecisions, hasDecisionAccess]);
 
     const dashboardMetrics = useMemo(() => {
         const validReports = reports.filter(r => r && r.reportDate && typeof r.attendance === 'object');
@@ -154,7 +140,7 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
                             getConnectName={getConnectName}
                         />
                     )}
-                    {isLeader && (
+                    {isLeaderOrPastor && (
                         <FollowUpWidget alerts={attendanceAlerts} getConnectName={getConnectName} />
                     )}
                     <BirthdayWidget members={(() => {
