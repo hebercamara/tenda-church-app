@@ -4,7 +4,7 @@ import { ArrowLeft, Save, CopyPlus, UserCheck, UserMinus, Plus, Star, User } fro
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
 import { writeBatch, collection, doc } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+import { db, appId } from '../firebaseConfig';
 import { useAuthStore } from '../store/authStore';
 
 const MultiplyConnectPage = ({
@@ -199,7 +199,6 @@ const MultiplyConnectPage = ({
         setOperationStatus({ type: 'info', message: 'Multiplicando Connect... Por favor, aguarde.' });
 
         try {
-            const appId = process.env.REACT_APP_FIREBASE_APP_ID || 'default';
             const batch = writeBatch(db);
 
             // 1. Criar novo Connect
