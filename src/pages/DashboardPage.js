@@ -32,6 +32,7 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
     const isAuxLeader = !!(currentUserData && connects.some(c => c.auxLeaderId === currentUserData.id || (c.auxLeaderEmail || '').toLowerCase() === userEmail || (Array.isArray(c.auxLeaders) && c.auxLeaders.some(l => l.id === currentUserData.id || (l.email || '').toLowerCase() === userEmail))));
 
     const hasDecisionAccess = isAdmin || isLeaderOrPastor || isSupervisor || isAuxLeader;
+    const hasFollowUpAccess = isAdmin || isLeaderOrPastor || isSupervisor || isAuxLeader;
 
     // Mostrar todas as decisões globalmente para quem tem acesso de liderança
     const visibleDecisions = useMemo(() => {
@@ -140,8 +141,8 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
                             getConnectName={getConnectName}
                         />
                     )}
-                    {isLeaderOrPastor && (
-                        <FollowUpWidget alerts={attendanceAlerts} getConnectName={getConnectName} />
+                    {hasFollowUpAccess && (
+                        <FollowUpWidget alerts={attendanceAlerts} getConnectName={getConnectName} connects={connects} />
                     )}
                     <BirthdayWidget members={(() => {
                         if (isAdmin) return members;

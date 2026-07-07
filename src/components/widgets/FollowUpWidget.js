@@ -1,82 +1,97 @@
-import React from 'react';
-import { UserX, MessageCircle, AlertTriangle } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { MessageCircle, Users } from 'lucide-react';
+import { useAuthStore } from '../../store/authStore';
 
-const FollowUpWidget = ({ alerts, getConnectName }) => {
-  // Filtra apenas os alertas de 4 e 5 faltas, ignorando os inativos por enquanto
-  const membersToFollowUp = alerts.filter(a => a.status === 'alert');
+const FollowUpWidget = ({ alerts, getConnectName, connects = [] }) => {
+    const { isAdmin, currentUserData } = useAuthStore();
+    const userEmail = (currentUserData?.email || '').toLowerCase();
 
-  if (!membersToFollowUp || membersToFollowUp.length === 0) {
-    return null; // Não mostra o widget se não houver alertas
-  }
+    // Filtra alertas apenas para os Connects do líder logado
+    const membersToFollowUp = useMemo(() => {
+        const raw = (alerts || []).filter(a => a.status === 'alert');
+        if (isAdmin) return raw;
 
-  const buildWhatsAppLink = (rawPhone, message) => {
-    if (!rawPhone) return null;
-    let digits = String(rawPhone).replace(/\D/g, '');
-    if (!digits) return null;
+        const myConnectIds = connects
+            .filter(c =>
+                c.leaderId === currentUserData?.id ||
+                (c.leaderEmail || '').toLowerCase() === userEmail
+            )
+            .map(c => c.id);
 
-    // Remover código do país se já estiver presente
-    if (digits.startsWith('55')) digits = digits.slice(2);
-    // Remover zeros iniciais (DDI/DDD com 0)
-    while (digits.startsWith('0')) digits = digits.slice(1);
+        return raw.filter(a => myConnectIds.includes(a.connectId));
+    }, [alerts, connects, currentUserData, isAdmin, userEmail]);
 
-    // Se vier com 10 dígitos (DDD + 8), presumimos celular sem o dígito 9 e o inserimos
-    if (digits.length === 10) {
-      digits = `${digits.slice(0, 2)}9${digits.slice(2)}`;
-    }
+    if (!membersToFollowUp || membersToFollowUp.length === 0) return null;
 
-    // Após normalização, esperamos 11 dígitos (DDD + 9 + número)
-    if (digits.length !== 11) return null;
+    const buildWhatsAppLink = (rawPhone, message) => {
+        if (!rawPhone) return null;
+        let digits = String(rawPhone).replace(/\D/g, '');
+        if (!digits) return null;
+        if (digits.startsWith('55')) digits = digits.slice(2);
+        while (digits.startsWith('0')) digits = digits.slice(1);
+        if (digits.length === 10) digits = `${digits.slice(0, 2)}9${digits.slice(2)}`;
+        if (digits.length !== 11) return null;
+        return `https://wa.me/55${digits}?text=${encodeURIComponent(message)}`;
+    };
 
-    const withCountry = `55${digits}`;
-    const encodedMsg = encodeURIComponent(message);
-    return `https://wa.me/${withCountry}?text=${encodedMsg}`;
-  };
-
-  const defaultMessage = 'Estes membros faltaram a 4 ou mais reuniões consecutivas. Que tal enviar uma mensagem?';
-
-  return (
-    <div className="relative overflow-hidden rounded-xl shadow-lg h-full border border-orange-300 bg-gradient-to-br from-orange-50 via-amber-50 to-white">
-      {/* Header chamativo */}
-      <div className="flex items-start space-x-3 p-4 bg-gradient-to-r from-orange-100 to-amber-100 border-b border-orange-200">
-        <AlertTriangle size={22} className="text-orange-600 flex-shrink-0 mt-0.5" />
-        <div>
-          <h3 className="text-xl font-extrabold text-orange-900 leading-tight">Membros para Acompanhamento</h3>
-          <p className="text-sm text-orange-800 mt-1">{defaultMessage}</p>
-        </div>
-      </div>
-
-      {/* Lista de membros */}
-      <div className="p-4 space-y-3 max-h-52 overflow-y-auto">
-        {membersToFollowUp.map(alert => {
-          const msg = `Olá! Percebemos que você faltou a ${alert.absences} reuniões consecutivas do Connect ${getConnectName(alert.connectId)}. Está tudo bem? Podemos ajudar em algo?`;
-          const waLink = buildWhatsAppLink(alert.memberPhone, msg);
-          return (
-            <div key={alert.memberId} className="bg-white p-3 rounded-lg border border-orange-200 hover:border-orange-300 transition-shadow shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-bold text-orange-900 text-base">{alert.memberName}</p>
-                  <p className="text-xs text-orange-700">Connect: {getConnectName(alert.connectId)} ({alert.absences} faltas)</p>
+    return (
+        <div className="rounded-xl shadow-md overflow-hidden border border-stone-700">
+            {/* Header — chumbo avermelhado (stone-800), igual ao Portal Pessoal */}
+            <div className="bg-stone-800 px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center text-white">
+                    <Users className="h-5 w-5 mr-2 text-red-400" />
+                    <h3 className="font-semibold text-lg text-white">Acompanhamento</h3>
                 </div>
-                {waLink ? (
-                  <a
-                    href={waLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-xs"
-                    title="Enviar mensagem no WhatsApp"
-                  >
-                    <MessageCircle size={14} className="mr-1" /> Enviar WhatsApp
-                  </a>
-                ) : (
-                  <span className="text-xs text-gray-400">Sem telefone</span>
-                )}
-              </div>
+                <span className="bg-[#991B1B] text-white text-xs font-bold px-2 py-1 rounded-full">
+                    {membersToFollowUp.length}
+                </span>
             </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+
+            {/* Subtítulo */}
+            <div className="px-4 py-2 bg-[#7f1d1d] border-b border-red-900">
+                <p className="text-xs text-red-200">
+                    Membros com 4 ou mais faltas consecutivas no seu Connect
+                </p>
+            </div>
+
+            {/* Corpo vermelho escuro — chama atenção em relação aos outros widgets */}
+            <div className="bg-[#991B1B] divide-y divide-red-800 max-h-64 overflow-y-auto">
+                {membersToFollowUp.map(alert => {
+                    const msg = `Olá! Percebemos que você faltou a ${alert.absences} reuniões consecutivas do Connect ${getConnectName(alert.connectId)}. Está tudo bem? Podemos ajudar em algo?`;
+                    const waLink = buildWhatsAppLink(alert.memberPhone, msg);
+
+                    return (
+                        <div
+                            key={alert.memberId}
+                            className="p-3 flex items-center justify-between hover:bg-[#7f1d1d] transition"
+                        >
+                            <div className="flex flex-col min-w-0">
+                                <p className="font-semibold text-white text-sm truncate">
+                                    {alert.memberName}
+                                </p>
+                                <p className="text-xs text-red-200">
+                                    {alert.absences} falta{alert.absences !== 1 ? 's' : ''} consecutiva{alert.absences !== 1 ? 's' : ''}
+                                </p>
+                            </div>
+                            {waLink ? (
+                                <a
+                                    href={waLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex-shrink-0 ml-3 inline-flex items-center gap-1 px-3 py-1.5 bg-white text-[#991B1B] rounded-md hover:bg-red-50 transition text-xs font-bold shadow"
+                                >
+                                    <MessageCircle size={12} />
+                                    WhatsApp
+                                </a>
+                            ) : (
+                                <span className="flex-shrink-0 ml-3 text-xs text-red-300">Sem telefone</span>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
 };
 
 export default React.memo(FollowUpWidget);

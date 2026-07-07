@@ -7,7 +7,7 @@ import LoadingMessage from './components/LoadingMessage';
 
 // Firebase
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, onSnapshot, addDoc, doc, setDoc, getDocs, deleteDoc, updateDoc, query, writeBatch, where, getDoc, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, doc, setDoc, getDocs, deleteDoc, updateDoc, query, writeBatch, where, getDoc, orderBy, serverTimestamp } from 'firebase/firestore';
 import { db, auth, appId } from './firebaseConfig';
 
 // Dados de exemplo para desenvolvimento
@@ -1488,7 +1488,12 @@ function AppContent() {
     const handleUpdateDecisionStatus = async (decisionId, newStatus) => {
         try {
             const ref = doc(db, `artifacts/${appId}/public/data/decisions`, decisionId);
-            await updateDoc(ref, { status: newStatus });
+            const update = { status: newStatus };
+            // Ao marcar como contatado, registra o timestamp para controle dos 7 dias
+            if (newStatus === 'contatado') {
+                update.contactedAt = serverTimestamp();
+            }
+            await updateDoc(ref, update);
         } catch (error) {
             console.error('Erro ao atualizar status da decisão:', error);
             setOperationStatus({ type: 'error', message: 'Erro ao atualizar status do formulário.' });

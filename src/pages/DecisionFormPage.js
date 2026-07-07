@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { collection, addDoc, getDocs, serverTimestamp } from 'firebase/firestore';
 import { db, appId } from '../firebaseConfig';
 import { Link } from 'react-router-dom';
-import { CheckCircle, ArrowLeft } from 'lucide-react';
+import { CheckCircle, ArrowLeft, History } from 'lucide-react';
+import { useAuthStore } from '../store/authStore';
 
 const DecisionFormPage = () => {
+    const { currentUserData, isAdmin } = useAuthStore();
     const [connects, setConnects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [formData, setFormData] = useState({
@@ -221,11 +223,20 @@ const DecisionFormPage = () => {
                     </form>
                 </div>
 
-                <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
+                <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
                     <Link to="/" className="flex items-center text-sm font-medium text-[#991B1B] hover:text-red-800">
                         <ArrowLeft className="mr-2 h-4 w-4" />
                         Voltar para a página inicial
                     </Link>
+                    {(currentUserData && (isAdmin || true)) && (
+                        <Link
+                            to="/decisoes"
+                            className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-[#991B1B] transition"
+                        >
+                            <History className="h-4 w-4" />
+                            Ver Histórico
+                        </Link>
+                    )}
                 </div>
             </div>
         </div>

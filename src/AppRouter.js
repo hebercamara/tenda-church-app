@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense, useMemo } from 'react';
 import { Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { collection, getDocs } from 'firebase/firestore';
@@ -6,6 +6,7 @@ import { db } from './firebaseConfig';
 
 // Fallback de carregamento para divisão de código
 import LoadingSpinner from './components/LoadingSpinner';
+import NewDecisionAlertModal from './components/NewDecisionAlertModal';
 
 // Code splitting: carregar páginas sob demanda
 const DashboardPage = React.lazy(() => import('./pages/DashboardPage'));
@@ -20,6 +21,9 @@ const MyStudentsPage = React.lazy(() => import('./pages/MyStudentsPage'));
 const PersonalPortalPage = React.lazy(() => import('./pages/PersonalPortalPage'));
 const CourseGroupsPage = React.lazy(() => import('./pages/CourseGroupsPage'));
 const DecisionFormPage = React.lazy(() => import('./pages/DecisionFormPage'));
+const DecisionsHistoryPage = React.lazy(() => import('./pages/DecisionsHistoryPage'));
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 const AppRouter = ({
     allMembers,
@@ -129,8 +133,87 @@ const AppRouter = ({
     // Membros visíveis ao usuário corrente
     const visibleMembers = isAdmin ? allMembers : allMembers.filter(m => visibleConnectIds.includes(m.connectId));
 
+    // ── Filtro de decisões por Connect ────────────────────────────────────────
+    // IDs dos Connects que este usuário lidera, supervisiona ou é auxiliar
+    const myConnectIds = useMemo(() => {
+        const isPastor = !!(currentUserData?.isPastor);
+        if (isAdmin || isPastor) return null; // null = todos
+        return visibleConnectIds;
+    }, [isAdmin, currentUserData, visibleConnectIds]);
+
+    // Decisões do Connect deste usuário (todas, sem filtro de data — para o histórico)
+    const myDecisions = useMemo(() => {
+        if (!allDecisions) return [];
+        const list = myConnectIds === null
+            ? allDecisions
+            : allDecisions.filter(d => myConnectIds.includes(d.connectId));
+        return [...list].sort((a, b) => {
+            const da = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+            const db2 = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+            return db2 - da;
+        });
+    }, [allDecisions, myConnectIds]);
+
+    // Decisões ativas no Dashboard: pendentes + contatadas há menos de 7 dias
+    const activeDecisions = useMemo(() => {
+        return myDecisions.filter(d => {
+            if (d.status === 'pendente') return true;
+            if (d.status === 'contatado') {
+                // Usa contactedAt se disponível; caso contrário, usa createdAt como fallback
+                // para decisões antigas que foram marcadas antes da adição do campo
+                const refDate = d.contactedAt?.toDate
+                    ? d.contactedAt.toDate()
+                    : (d.createdAt?.toDate ? d.createdAt.toDate() : null);
+                // Sem nenhuma data = considera arquivado (não exibe)
+                if (!refDate) return false;
+                return Date.now() - refDate.getTime() < SEVEN_DAYS_MS;
+            }
+            return false;
+        });
+    }, [myDecisions]);
+
+    // ── Modal de alerta ao logar (só para líderes de Connect) ───────────────
+    // Aparece toda vez que o site é aberto/recarregado enquanto houver pendentes.
+    // Usa useRef para garantir que abra apenas UMA vez por montagem, mesmo que
+    // os dados do Firestore cheguem depois do render inicial.
+    const [alertOpen, setAlertOpen] = useState(false);
+    const alertShownRef = useRef(false); // flag: já exibiu nesta montagem?
+    const handleCloseAlert = () => setAlertOpen(false);
+
+    // Decisões pendentes do Connect do líder (para o modal de alerta)
+    const alertDecisions = useMemo(() => {
+        if (!isLeader) return [];
+        return activeDecisions.filter(d => d.status === 'pendente');
+    }, [isLeader, activeDecisions]);
+
+    // Abre o modal assim que o líder e as decisões pendentes forem conhecidos
+    useEffect(() => {
+        if (isLeader && alertDecisions.length > 0 && !alertShownRef.current) {
+            alertShownRef.current = true; // marca como exibido nesta montagem
+            setAlertOpen(true);
+        }
+    }, [isLeader, alertDecisions.length]);
+
+    // Fecha o modal se todas as pendentes forem resolvidas enquanto ele está aberto
+    useEffect(() => {
+        if (alertOpen && alertDecisions.length === 0) {
+            setAlertOpen(false);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [alertDecisions.length]);
+
     return (
         <Suspense fallback={<LoadingSpinner />}>
+            {/* Modal de alerta: decisões pendentes — apenas para líderes de Connect */}
+            {isLeader && alertDecisions.length > 0 && (
+                <NewDecisionAlertModal
+                    isOpen={alertOpen}
+                    onClose={handleCloseAlert}
+                    decisions={alertDecisions}
+                    onContacted={handleUpdateDecisionStatus}
+                    getConnectName={getConnectName}
+                />
+            )}
             <Routes>
                 {/* Rota padrão - redireciona para dashboard */}
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -146,7 +229,7 @@ const AppRouter = ({
                             reports={allConnectReports}
                             attendanceAlerts={attendanceAlerts}
                             getConnectName={getConnectName}
-                            allDecisions={allDecisions}
+                            allDecisions={activeDecisions}
                             handleUpdateDecisionStatus={handleUpdateDecisionStatus}
                         />
                     }
@@ -372,6 +455,20 @@ const AppRouter = ({
 
                 {/* Página de Nova Decisão */}
                 <Route path="/nova-decisao" element={<DecisionFormPage />} />
+
+                {/* Histórico de Decisões - líderes, auxiliares, supervisores, pastores e admins */}
+                {(isAdmin || isLeader || isSupervisor || isAuxLeader || currentUserData?.isPastor) && (
+                    <Route
+                        path="/decisoes"
+                        element={
+                            <DecisionsHistoryPage
+                                allConnects={allConnects}
+                                getConnectName={getConnectName}
+                                handleUpdateDecisionStatus={handleUpdateDecisionStatus}
+                            />
+                        }
+                    />
+                )}
 
                 {/* Rota 404 - redireciona para dashboard */}
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
