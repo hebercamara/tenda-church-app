@@ -124,6 +124,7 @@ function AppContent() {
     const [allCourseTemplates, setAllCourseTemplates] = useState(sampleCourseTemplates);
     const [allConnectReports, setAllConnectReports] = useState(sampleConnectReports);
     const [allDecisions, setAllDecisions] = useState([]);
+    const [allSimpleMembers, setAllSimpleMembers] = useState([]);
     const [loadingData, setLoadingData] = useState(true);
     const [connectionError, setConnectionError] = useState(null);
     const [operationStatus, setOperationStatus] = useState({ type: null, message: null });
@@ -132,7 +133,7 @@ function AppContent() {
     const loadingStates = useMultipleLoadingStates([
         'saveMember', 'saveConnect', 'saveCourse', 'saveCourseTemplate',
         'saveReport', 'deleteMember', 'deleteConnect', 'deleteCourse',
-        'reactivateMember', 'saveAttendance'
+        'reactivateMember', 'saveAttendance', 'saveSimpleMember', 'deleteSimpleMember'
     ]);
     const [isMemberModalOpen, setMemberModalOpen] = useState(false);
     const [isConnectModalOpen, setConnectModalOpen] = useState(false);
@@ -287,12 +288,33 @@ function AppContent() {
                     console.error('Erro ao carregar decisões:', error);
                     setAllDecisions([]);
                 }
+            ),
+            onSnapshot(
+                collection(db, `artifacts/${appId}/public/data/course_members`),
+                (s) => {
+                    const list = s.docs.map(d => ({ id: d.id, ...d.data() }));
+                    setAllSimpleMembers(list);
+                },
+                (error) => {
+                    console.error('Erro ao carregar cadastros simples:', error);
+                }
             )
         ];
         // Remove artificial delay for better performance
         setLoadingData(false);
         return () => unsubs.forEach(unsub => unsub());
     }, [user]);
+
+    const combinedMembers = useMemo(() => {
+        const simpleMapped = allSimpleMembers.map(sm => ({
+            ...sm,
+            isSimple: true,
+            email: sm.email || '',
+            phone: sm.phone || '',
+            dob: sm.dob || ''
+        }));
+        return [...allMembers, ...simpleMapped];
+    }, [allMembers, allSimpleMembers]);
 
     // O resto do arquivo permanece o mesmo...
 
@@ -595,12 +617,94 @@ function AppContent() {
         }
     };
 
+    const handleSaveSimpleMember = async (simpleMemberData, editingSimpleMember = null) => {
+        const collectionPath = `artifacts/${appId}/public/data/course_members`;
+        loadingStates.setLoading('saveSimpleMember', 'Salvando cadastro simples...');
+        try {
+            if (editingSimpleMember) {
+                await setDoc(doc(db, collectionPath, editingSimpleMember.id), simpleMemberData);
+            } else {
+                await addDoc(collection(db, collectionPath), simpleMemberData);
+            }
+            loadingStates.setSuccess('saveSimpleMember', 'Cadastro simples salvo!');
+        } catch (error) {
+            console.error("Erro ao salvar cadastro simples:", error);
+            loadingStates.setError('saveSimpleMember', 'Erro ao salvar. Tente novamente.');
+            throw error;
+        }
+    };
+
+    const handleDeleteSimpleMember = async (simpleMemberId) => {
+        const docRef = doc(db, `artifacts/${appId}/public/data/course_members`, simpleMemberId);
+        loadingStates.setLoading('deleteSimpleMember', 'Excluindo cadastro simples...');
+        try {
+            await deleteDoc(docRef);
+            loadingStates.setSuccess('deleteSimpleMember', 'Cadastro simples excluído!');
+        } catch (error) {
+            console.error("Erro ao excluir cadastro simples:", error);
+            loadingStates.setError('deleteSimpleMember', 'Erro ao excluir.');
+        }
+    };
+
+    const handleMergeSimpleMemberToFull = async (simpleMemberId, fullMemberId, fullMemberName) => {
+        try {
+            console.log(`🔀 Iniciando mesclagem: ${simpleMemberId} -> ${fullMemberId}`);
+            const batch = writeBatch(db);
+
+            // 1. Procurar cursos em que o cadastro simplificado está inscrito
+            const coursesToUpdate = allCourses.filter(course => 
+                Array.isArray(course.students) && course.students.some(s => s.id === simpleMemberId)
+            );
+
+            for (const course of coursesToUpdate) {
+                // Atualiza a lista de estudantes na turma
+                const updatedStudents = course.students.map(s => {
+                    if (s.id === simpleMemberId) {
+                        return { ...s, id: fullMemberId, name: fullMemberName };
+                    }
+                    return s;
+                });
+
+                const courseRef = doc(db, `artifacts/${appId}/public/data/courses`, course.id);
+                batch.update(courseRef, { students: updatedStudents });
+
+                // Migrar o histórico de presença
+                const attendanceRef = collection(db, `artifacts/${appId}/public/data/courses/${course.id}/attendance`);
+                const attendanceSnapshot = await getDocs(attendanceRef);
+                
+                attendanceSnapshot.forEach(attendanceDoc => {
+                    const data = attendanceDoc.data();
+                    if (data && data.statuses && simpleMemberId in data.statuses) {
+                        const updatedStatuses = { ...data.statuses };
+                        updatedStatuses[fullMemberId] = updatedStatuses[simpleMemberId];
+                        delete updatedStatuses[simpleMemberId];
+
+                        batch.update(attendanceDoc.ref, { statuses: updatedStatuses });
+                    }
+                });
+            }
+
+            // 2. Excluir o cadastro simples original
+            const simpleMemberRef = doc(db, `artifacts/${appId}/public/data/course_members`, simpleMemberId);
+            batch.delete(simpleMemberRef);
+
+            // Executar todas as gravações em lote de forma atômica
+            await batch.commit();
+            console.log('🔀 Mesclagem concluída com sucesso!');
+        } catch (error) {
+            console.error("Erro ao realizar mesclagem:", error);
+            alert("Ocorreu um erro ao migrar o histórico escolar da pessoa unificada.");
+        }
+    };
+
     const handleCheckDuplicate = async (newMemberData) => {
         const SIMILARITY_THRESHOLD = 0.8;
-        const newEmail = newMemberData.email.toLowerCase().trim();
-        const newPhone = newMemberData.phone.replace(/\D/g, '');
+        const newEmail = (newMemberData.email || '').toLowerCase().trim();
+        const newPhone = (newMemberData.phone || '').replace(/\D/g, '');
         const newDob = newMemberData.dob;
         let potentialDuplicate = null;
+
+        // 1. Procurar em membros completos
         for (const existingMember of allMembers) {
             if (!existingMember.name) continue;
             const existingEmail = existingMember.email?.toLowerCase().trim();
@@ -617,6 +721,19 @@ function AppContent() {
                 }
             }
         }
+
+        // 2. Procurar em cadastros simples (pelo nome)
+        if (!potentialDuplicate) {
+            for (const simpleMember of allSimpleMembers) {
+                if (!simpleMember.name) continue;
+                const isNameSimilar = areNamesSimilar(newMemberData.name, simpleMember.name, SIMILARITY_THRESHOLD);
+                if (isNameSimilar) {
+                    potentialDuplicate = { ...simpleMember, isSimple: true };
+                    break;
+                }
+            }
+        }
+
         if (potentialDuplicate) {
             setExistingMemberForCheck(potentialDuplicate);
             setNewMemberForCheck(newMemberData);
@@ -632,8 +749,26 @@ function AppContent() {
         setDuplicateModalOpen(false);
     };
 
-    const handleConfirmDuplicate = () => {
-        if (existingMemberForCheck?.connectId) {
+    const handleConfirmDuplicate = async () => {
+        if (existingMemberForCheck?.isSimple) {
+            // Unificação: Salvar o novo membro completo e migrar o histórico escolar do simples
+            const collectionPath = `artifacts/${appId}/public/data/members`;
+            const today = new Date();
+            let dataToSave = { ...newMemberForCheck };
+            if (dataToSave.connectId) {
+                dataToSave.connectHistory = [{ connectId: dataToSave.connectId, startDate: today, endDate: null }];
+            }
+            try {
+                const docRef = await addDoc(collection(db, collectionPath), dataToSave);
+                const newMemberId = docRef.id;
+                
+                await handleMergeSimpleMemberToFull(existingMemberForCheck.id, newMemberId, dataToSave.name);
+                alert(`O cadastro simplificado de "${existingMemberForCheck.name}" foi promovido a Membro Completo e todo o histórico de cursos e presenças foi transferido com sucesso.`);
+            } catch (error) {
+                console.error("Erro na unificação:", error);
+                alert("Erro ao unificar cadastros.");
+            }
+        } else if (existingMemberForCheck?.connectId) {
             const connect = allConnects.find(c => c.id === existingMemberForCheck.connectId);
             const leader = allMembers.find(m => m.id === connect?.leaderId);
             alert(`Este membro já pertence ao Connect ${connect?.number} - ${connect?.name}.\n\nPor favor, entre em contato com o líder: ${leader?.name} (${leader?.phone}) para atualizar o cadastro existente.`);
@@ -1192,6 +1327,19 @@ function AppContent() {
             alert('Não foi possível pular o dia de aula.');
         }
     };
+    const handleSaveCourseGroups = async (courseId, groupsData) => {
+        const docRef = doc(db, `artifacts/${appId}/public/data/courses`, courseId);
+        loadingStates.setLoading('saveCourse', 'Salvando grupos...');
+        try {
+            await retryFirestoreOperation(async () => {
+                await updateDoc(docRef, { groups: groupsData });
+            });
+            loadingStates.setSuccess('saveCourse', 'Grupos salvos com sucesso!');
+        } catch (error) {
+            console.error("Erro ao salvar grupos:", error);
+            loadingStates.setError('saveCourse', 'Erro ao salvar grupos.');
+        }
+    };
     const handleSaveConnectReport = async (reportData) => {
         const dateString = reportData.reportDate.toISOString().split('T')[0];
         const reportId = `${reportData.connectId}_${dateString}`;
@@ -1460,9 +1608,11 @@ function AppContent() {
                         allMembers={allMembers}
                         allConnects={allConnects}
                         allCourses={allCourses}
-                        allCourseTemplates={allCourseTemplates}
+                         allCourseTemplates={allCourseTemplates}
                         allConnectReports={allConnectReports}
                         allDecisions={allDecisions}
+                        allSimpleMembers={allSimpleMembers}
+                        combinedMembers={combinedMembers}
                         visibleMembers={visibleMembers}
                         visibleConnects={visibleConnects}
                         visibleCourses={visibleCourses}
@@ -1501,6 +1651,9 @@ function AppContent() {
                         handleFinalizeCourse={handleFinalizeCourse}
                         handleReopenCourse={handleReopenCourse}
                         handleUpdateDecisionStatus={handleUpdateDecisionStatus}
+                        handleSaveCourseGroups={handleSaveCourseGroups}
+                        handleSaveSimpleMember={handleSaveSimpleMember}
+                        handleDeleteSimpleMember={handleDeleteSimpleMember}
 
                         // Funções de utilidade
                         calculateFinalGradeForStudent={calculateFinalGradeForStudent}
@@ -1553,7 +1706,7 @@ function AppContent() {
                 />
             </Modal>
             {reportingConnect && <ConnectReportModal isOpen={isReportModalOpen} onClose={closeReportModal} connect={reportingConnect} members={allMembers} onSave={handleSaveConnectReport} isAdmin={isAdmin} onViewMember={openMemberDetails} />}
-            {managingCourse && <ManageCourseModal course={managingCourse} members={allMembers} isOpen={isManageCourseModalOpen} onClose={closeManageCourseModal} onSaveStudents={handleSaveCourseStudents} onSaveAttendance={handleSaveAttendance} onSkipClassDay={handleSkipClassDay} onViewMember={openMemberDetails} />}
+            {managingCourse && <ManageCourseModal course={managingCourse} members={allMembers} allMembers={allMembers} allSimpleMembers={allSimpleMembers} onSaveSimpleMember={handleSaveSimpleMember} areNamesSimilar={areNamesSimilar} isOpen={isManageCourseModalOpen} onClose={closeManageCourseModal} onSaveStudents={handleSaveCourseStudents} onSaveAttendance={handleSaveAttendance} onSkipClassDay={handleSkipClassDay} onViewMember={openMemberDetails} />}
             <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={handleConfirmDelete} title="Confirmar Exclusão" message={deleteAction?.message} />
             {generatingReportForConnect && <ConnectFullReportModal isOpen={isConnectFullReportModalOpen} onClose={closeConnectFullReportModal} connect={generatingReportForConnect} allMembers={allMembers} allReports={allConnectReports} />}
 

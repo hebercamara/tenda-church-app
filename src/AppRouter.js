@@ -18,6 +18,7 @@ const LeadershipHierarchyPage = React.lazy(() => import('./pages/LeadershipHiera
 const BulkImportPage = React.lazy(() => import('./pages/BulkImportPage'));
 const MyStudentsPage = React.lazy(() => import('./pages/MyStudentsPage'));
 const PersonalPortalPage = React.lazy(() => import('./pages/PersonalPortalPage'));
+const CourseGroupsPage = React.lazy(() => import('./pages/CourseGroupsPage'));
 const DecisionFormPage = React.lazy(() => import('./pages/DecisionFormPage'));
 
 const AppRouter = ({
@@ -27,6 +28,8 @@ const AppRouter = ({
     allCourseTemplates,
     allConnectReports,
     allDecisions,
+    allSimpleMembers,
+    combinedMembers,
     membersWithCourses,
     completedCourses,
     memberConnectHistoryDetails,
@@ -59,6 +62,9 @@ const AppRouter = ({
     handleFinalizeCourse,
     handleReopenCourse,
     handleUpdateDecisionStatus,
+    handleSaveCourseGroups,
+    handleSaveSimpleMember,
+    handleDeleteSimpleMember,
     // Funções de utilidade
     calculateFinalGradeForStudent,
     getStudentStatusInfo,
@@ -72,12 +78,10 @@ const AppRouter = ({
     // Perfis derivados (líder, supervisor e professor) para controle de rotas
     const userEmail = (currentUserData?.email || '').toLowerCase();
     const isLeader = !!(currentUserData && (
-        currentUserData.isLeader ||
         allConnects.some(c => c.leaderId === currentUserData.id) ||
         allConnects.some(c => (c.leaderEmail || '').toLowerCase() === userEmail)
     ));
     const isSupervisor = !!(currentUserData && (
-        currentUserData.isSupervisor ||
         allConnects.some(c => (c.supervisorEmail || '').toLowerCase() === userEmail)
     ));
     const isAuxLeader = !!(currentUserData && (
@@ -105,7 +109,8 @@ const AppRouter = ({
 
     const isAuxTeacher = !!(currentUserData && (
         allCourses.some(course => (course.auxTeacherEmail || '').toLowerCase() === userEmail) ||
-        allCourses.some(course => course.auxTeacherId === currentUserData.id)
+        allCourses.some(course => course.auxTeacherId === currentUserData.id) ||
+        allCourses.some(course => Array.isArray(course.groups) && course.groups.some(g => g && (g.assistantId === currentUserData.id || (g.assistantEmail || '').toLowerCase() === userEmail)))
     ));
 
     // Conjunto de Connects que o usuário pode ver (lidera, supervisiona ou é auxiliar)
@@ -154,6 +159,9 @@ const AppRouter = ({
                         element={
                             <MembersPage
                                 allMembers={isAdmin ? allMembers : visibleMembers}
+                                allSimpleMembers={allSimpleMembers}
+                                onSaveSimpleMember={handleSaveSimpleMember}
+                                onDeleteSimpleMember={handleDeleteSimpleMember}
                                 allConnects={allConnects}
                                 isAdmin={isAdmin}
                                 currentUserData={currentUserData}
@@ -254,6 +262,20 @@ const AppRouter = ({
                                 calculateFinalGradeForStudent={calculateFinalGradeForStudent}
                                 getStudentStatusInfo={getStudentStatusInfo}
                                 onSetAuxTeacher={handleSetAuxTeacher}
+                            />
+                        }
+                    />
+                )}
+
+                {/* Gerenciar Grupos do Curso - Visível apenas para Admins, Professores e Substitutos */}
+                {(isAdmin || isTeacher) && (
+                    <Route
+                        path="/curso-grupos/:courseId"
+                        element={
+                            <CourseGroupsWrapper
+                                allCourses={allCourses}
+                                allMembers={allMembers}
+                                onSaveGroups={handleSaveCourseGroups}
                             />
                         }
                     />
@@ -414,6 +436,26 @@ const ConnectTrackWrapper = ({ allConnects, allMembers, allCourses, attendanceAl
             attendanceAlerts={attendanceAlerts}
             onEditMember={handleViewMember}
             onReactivateMember={handleReactivateMember}
+        />
+    );
+};
+
+// Componente wrapper para CourseGroupsPage que usa useParams
+const CourseGroupsWrapper = ({ allCourses, allMembers, onSaveGroups }) => {
+    const { courseId } = useParams();
+    const navigate = useNavigate();
+    const course = allCourses.find(c => c.id === courseId);
+    
+    if (!course) {
+        return <Navigate to="/cursos" replace />;
+    }
+    
+    return (
+        <CourseGroupsPage
+            course={course}
+            allMembers={allMembers}
+            onSaveGroups={onSaveGroups}
+            onBack={() => navigate('/cursos')}
         />
     );
 };

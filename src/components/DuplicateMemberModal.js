@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Mail, Phone, Calendar, Users, AlertTriangle } from 'lucide-react';
+import { User, Mail, Phone, Calendar, AlertTriangle } from 'lucide-react';
 
 const DuplicateMemberModal = React.memo(({ isOpen, onClose, onConfirm, onReject, existingMember, newMemberData }) => {
     if (!isOpen) return null;
@@ -19,6 +19,14 @@ const DuplicateMemberModal = React.memo(({ isOpen, onClose, onConfirm, onReject,
         </div>
     );
 
+    const existingFullName = existingMember.isSimple 
+        ? `${existingMember.name} ${existingMember.lastName || ''}`.trim()
+        : existingMember.name;
+        
+    const existingEmail = existingMember.isSimple 
+        ? 'Cadastro Simplificado de Curso' 
+        : existingMember.email;
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl text-left">
@@ -34,19 +42,24 @@ const DuplicateMemberModal = React.memo(({ isOpen, onClose, onConfirm, onReject,
                     <div className="bg-gray-50 p-4 rounded-lg border">
                         <h4 className="font-bold text-lg text-gray-800 mb-3">Cadastro Existente</h4>
                         <div className="space-y-2">
-                            {renderField(<User size={16} />, "Nome", existingMember.name)}
-                            {renderField(<Mail size={16} />, "E-mail", existingMember.email)}
-                            {renderField(<Phone size={16} />, "Telefone", existingMember.phone)}
-                            {renderField(<Calendar size={16} />, "Nascimento", existingMember.dob)}
+                            {renderField(<User size={16} />, "Nome", existingFullName)}
+                            {renderField(<Mail size={16} />, "E-mail", existingEmail)}
+                            {!existingMember.isSimple && renderField(<Phone size={16} />, "Telefone", existingMember.phone)}
+                            {!existingMember.isSimple && renderField(<Calendar size={16} />, "Nascimento", existingMember.dob)}
+                            {existingMember.isSimple && (
+                                <div className="text-xs text-orange-600 bg-orange-50 border border-orange-200 p-2 rounded-md font-semibold">
+                                    Este é um cadastro rápido de curso. Se você confirmar que é a mesma pessoa, o cadastro será promovido a Membro Completo e todo o histórico de presenças e notas será unificado.
+                                </div>
+                            )}
                         </div>
                     </div>
                     <div className="bg-red-50 p-4 rounded-lg border border-red-200">
                         <h4 className="font-bold text-lg text-red-800 mb-3">Novo Cadastro</h4>
                         <div className="space-y-2">
-                            {renderField(<User size={16} />, "Nome", existingMember.name, newMemberData.name)}
-                            {renderField(<Mail size={16} />, "E-mail", existingMember.email, newMemberData.email)}
-                            {renderField(<Phone size={16} />, "Telefone", existingMember.phone, newMemberData.phone)}
-                            {renderField(<Calendar size={16} />, "Nascimento", existingMember.dob, newMemberData.dob)}
+                            {renderField(<User size={16} />, "Nome", existingFullName, newMemberData.name)}
+                            {renderField(<Mail size={16} />, "E-mail", existingEmail, newMemberData.email)}
+                            {renderField(<Phone size={16} />, "Telefone", existingMember.isSimple ? '' : existingMember.phone, newMemberData.phone)}
+                            {renderField(<Calendar size={16} />, "Nascimento", existingMember.isSimple ? '' : existingMember.dob, newMemberData.dob)}
                         </div>
                     </div>
                 </div>
