@@ -206,7 +206,11 @@ const CoursesPage = ({
         c.teacherEmail?.toLowerCase() === userEmail || 
         isActiveSubstitute(c) || 
         isActiveAuxTeacher(c) ||
-        (Array.isArray(c.groups) && c.groups.some(g => g && (g.assistantId === currentUserData.id || (g.assistantEmail || '').toLowerCase() === userEmail)))
+        (Array.isArray(c.groups) && c.groups.some(g => g && (
+            g.assistantId === currentUserData.id || 
+            (g.assistantEmail || '').toLowerCase() === userEmail ||
+            (Array.isArray(g.assistants) && g.assistants.some(a => a.id === currentUserData.id || (a.email || '').toLowerCase() === userEmail))
+        )))
       );
     }
 
@@ -275,7 +279,7 @@ const CoursesPage = ({
           
           <h3 className="text-xl font-semibold text-gray-700 mb-4">Turmas em Aberto</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {processedCourses.open.map(course => <CourseCard key={course.id} {...{course, isAdmin, onEditCourse, onDelete, onManageCourse, onFinalizeCourse, onReopenCourse}} canManage={isAdmin || (currentUserData?.email && (course.teacherEmail?.toLowerCase() === currentUserData.email.toLowerCase() || isActiveSubstitute(course) || isActiveAuxTeacher(course) || (Array.isArray(course.groups) && course.groups.some(g => g && (g.assistantId === currentUserData.id || (g.assistantEmail || '').toLowerCase() === currentUserData.email.toLowerCase())))))} />)}
+            {processedCourses.open.map(course => <CourseCard key={course.id} {...{course, isAdmin, onEditCourse, onDelete, onManageCourse, onFinalizeCourse, onReopenCourse}} canManage={isAdmin || (currentUserData?.email && (course.teacherEmail?.toLowerCase() === currentUserData.email.toLowerCase() || isActiveSubstitute(course) || isActiveAuxTeacher(course) || (Array.isArray(course.groups) && course.groups.some(g => g && (g.assistantId === currentUserData.id || (g.assistantEmail || '').toLowerCase() === currentUserData.email.toLowerCase() || (Array.isArray(g.assistants) && g.assistants.some(a => a.id === currentUserData.id || (a.email || '').toLowerCase() === currentUserData.email.toLowerCase())))))))} />)}
           </div>
           {processedCourses.open.length === 0 && <p className="text-gray-500 italic">Nenhuma turma em aberto encontrada.</p>}
           
@@ -283,7 +287,7 @@ const CoursesPage = ({
 
           <h3 className="text-xl font-semibold text-gray-700 mb-4">Turmas Encerradas Recentemente</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {processedCourses.recentlyClosed.map(course => <CourseCard key={course.id} {...{course, isAdmin, onEditCourse, onDelete, onManageCourse, onFinalizeCourse, onReopenCourse}} canManage={isAdmin || (currentUserData?.email && (course.teacherEmail?.toLowerCase() === currentUserData.email.toLowerCase() || isActiveSubstitute(course) || isActiveAuxTeacher(course) || (Array.isArray(course.groups) && course.groups.some(g => g && (g.assistantId === currentUserData.id || (g.assistantEmail || '').toLowerCase() === currentUserData.email.toLowerCase())))))} />)}
+            {processedCourses.recentlyClosed.map(course => <CourseCard key={course.id} {...{course, isAdmin, onEditCourse, onDelete, onManageCourse, onFinalizeCourse, onReopenCourse}} canManage={isAdmin || (currentUserData?.email && (course.teacherEmail?.toLowerCase() === currentUserData.email.toLowerCase() || isActiveSubstitute(course) || isActiveAuxTeacher(course) || (Array.isArray(course.groups) && course.groups.some(g => g && (g.assistantId === currentUserData.id || (g.assistantEmail || '').toLowerCase() === currentUserData.email.toLowerCase() || (Array.isArray(g.assistants) && g.assistants.some(a => a.id === currentUserData.id || (a.email || '').toLowerCase() === currentUserData.email.toLowerCase())))))))} />)}
           </div>
           {processedCourses.recentlyClosed.length === 0 && <p className="text-gray-500 italic">Nenhuma turma encerrada recentemente encontrada.</p>}
 

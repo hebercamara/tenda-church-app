@@ -292,7 +292,14 @@ function AppContent() {
             onSnapshot(
                 collection(db, `artifacts/${appId}/public/data/course_members`),
                 (s) => {
-                    const list = s.docs.map(d => ({ id: d.id, ...d.data() }));
+                    const list = s.docs.map(d => {
+                        const data = d.data();
+                        return { 
+                            id: d.id, 
+                            ...data, 
+                            name: data.lastName ? `${data.name} ${data.lastName}`.trim() : data.name 
+                        };
+                    });
                     setAllSimpleMembers(list);
                 },
                 (error) => {
@@ -1100,21 +1107,29 @@ function AppContent() {
         }
     };
     const generateAttendanceRecords = async (courseId, courseData) => {
+        const attendanceSnapshot = await getDocs(collection(db, `artifacts/${appId}/public/data/courses/${courseId}/attendance`));
+        const existingRecords = {};
+        attendanceSnapshot.forEach(d => { existingRecords[d.id] = d.data(); });
+
         const batch = writeBatch(db);
         const weekDaysMap = { "Domingo": 0, "Segunda-feira": 1, "Terça-feira": 2, "Quarta-feira": 3, "Quinta-feira": 4, "Sexta-feira": 5, "Sábado": 6 };
-        const targetDay = weekDaysMap[courseData.classDay];
+        const targetDay = courseData.isSporadic ? null : weekDaysMap[courseData.classDay];
         const activityPlanCsv = Array.isArray(courseData?.assessment?.activities?.plan) ? courseData.assessment.activities.plan : [];
         const lessonPlan = Array.isArray(courseData?.lessonPlan) ? courseData.lessonPlan : [];
         const hasLessonPlan = (courseData?.lessonsCount || 0) > 0 && lessonPlan.length > 0;
         let sessionNumber = 0;
-        let currentDate = new Date(courseData.startDate + 'T00:00:00');
+        let currentDate = courseData.isSporadic ? null : new Date(courseData.startDate + 'T00:00:00');
 
         const createRecordForDate = (theDate) => {
             sessionNumber += 1;
             const dateString = theDate.toISOString().split('T')[0];
             const attendanceRef = doc(db, `artifacts/${appId}/public/data/courses/${courseId}/attendance/${dateString}`);
-            const initialStatuses = (courseData.students || []).reduce((acc, student) => { acc[student.id] = 'pendente'; return acc; }, {});
-            const record = { date: theDate, statuses: initialStatuses, sessionNumber };
+            
+            const record = { date: theDate, sessionNumber };
+            if (!existingRecords[dateString]) {
+                const initialStatuses = (courseData.students || []).reduce((acc, student) => { acc[student.id] = 'pendente'; return acc; }, {});
+                record.statuses = initialStatuses;
+            }
 
             if (hasLessonPlan) {
                 const planEntry = lessonPlan[sessionNumber - 1] || {};
@@ -1131,26 +1146,36 @@ function AppContent() {
                 }
             }
 
-            batch.set(attendanceRef, record);
+            batch.set(attendanceRef, record, { merge: true });
         };
 
-        const lessonsCount = Number(courseData?.lessonsCount) || 0;
-        if (lessonsCount > 0) {
-            let generated = 0;
-            while (generated < lessonsCount) {
-                if (currentDate.getUTCDay() === targetDay) {
-                    createRecordForDate(currentDate);
-                    generated += 1;
+        if (courseData.isSporadic) {
+            const sortedClasses = [...(courseData.sporadicClasses || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
+            for (const sc of sortedClasses) {
+                if (sc.date) {
+                    const theDate = new Date(sc.date + 'T00:00:00');
+                    createRecordForDate(theDate);
                 }
-                currentDate.setDate(currentDate.getDate() + 1);
             }
         } else {
-            const endDate = new Date(courseData.endDate + 'T00:00:00');
-            while (currentDate <= endDate) {
-                if (currentDate.getUTCDay() === targetDay) {
-                    createRecordForDate(currentDate);
+            const lessonsCount = Number(courseData?.lessonsCount) || 0;
+            if (lessonsCount > 0) {
+                let generated = 0;
+                while (generated < lessonsCount) {
+                    if (currentDate.getUTCDay() === targetDay) {
+                        createRecordForDate(currentDate);
+                        generated += 1;
+                    }
+                    currentDate.setDate(currentDate.getDate() + 1);
                 }
-                currentDate.setDate(currentDate.getDate() + 1);
+            } else {
+                const endDate = new Date(courseData.endDate + 'T00:00:00');
+                while (currentDate <= endDate) {
+                    if (currentDate.getUTCDay() === targetDay) {
+                        createRecordForDate(currentDate);
+                    }
+                    currentDate.setDate(currentDate.getDate() + 1);
+                }
             }
         }
 
@@ -1164,6 +1189,7 @@ function AppContent() {
         try {
             if (editingCourse) {
                 await setDoc(doc(db, collectionPath, editingCourse.id), courseData);
+                await generateAttendanceRecords(editingCourse.id, courseData);
             } else {
                 const newCourseRef = await addDoc(collection(db, collectionPath), courseData);
                 await generateAttendanceRecords(newCourseRef.id, courseData);

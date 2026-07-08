@@ -2,6 +2,9 @@ import React, { useState, useRef } from 'react';
 import { Plus, Trash2, AlertTriangle, Copy, ArrowRight, UserCheck, ChevronDown, X, Mail, Phone, Calendar } from 'lucide-react';
 import Modal from './Modal';
 import LoadingButton from './LoadingButton';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db, appId } from '../firebaseConfig';
+
 
 // Definição dos campos extras disponíveis
 const EXTRA_FIELD_OPTIONS = [
@@ -198,7 +201,37 @@ const BatchSimpleMemberModal = ({ isOpen, onClose, onSave, onSaveAndEnroll, allM
                 const resolution = resolutions[i];
 
                 if (resolution && resolution.action === 'unify') {
-                    enrolledMemberIds.push(resolution.targetId);
+                    const targetId = resolution.targetId;
+                    enrolledMemberIds.push(targetId);
+
+                    // --- Merge Inteligente (Atualizar campos vazios) ---
+                    const targetMember = (allMembers || []).find(m => m.id === targetId) 
+                                      || (allSimpleMembers || []).find(m => m.id === targetId);
+                    
+                    if (targetMember && extraFields.length > 0) {
+                        const updates = {};
+                        extraFields.forEach(f => {
+                            const newValue = (row[f.key] || '').trim();
+                            const existingValue = (targetMember[f.key] || '').trim();
+                            
+                            // Apenas atualiza se a planilha tiver o dado e o banco estiver vazio
+                            if (newValue && !existingValue) {
+                                updates[f.key] = newValue;
+                            }
+                        });
+
+                        if (Object.keys(updates).length > 0) {
+                            try {
+                                const isSimple = !(allMembers || []).some(m => m.id === targetId);
+                                const collectionName = isSimple ? 'course_members' : 'members';
+                                const docRef = doc(db, `artifacts/${appId}/public/data/${collectionName}`, targetId);
+                                await updateDoc(docRef, updates);
+                            } catch (e) {
+                                console.error('Erro no merge inteligente:', e);
+                            }
+                        }
+                    }
+                    // ----------------------------------------------------
                 } else {
                     // Monta objeto apenas com os campos preenchidos
                     const simpleMemberData = {

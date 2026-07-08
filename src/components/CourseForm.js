@@ -17,7 +17,7 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
         name: '', teacherId: '', auxTeacherId: '', startDate: '', endDate: '', classDay: '', classTime: '',
         assessment: { tests: { count: 0, value: 0 }, activities: { count: 0, value: 0, plan: [] }, assignments: { count: 0, value: 0 } },
         passingCriteria: { minGrade: 7, minAttendance: 75 },
-        templateId: '', isExtra: false,
+        templateId: '', isExtra: false, isSporadic: false, sporadicClasses: [],
         substituteTeacher: null, // Novo campo para professor substituto
         lessonsCount: 0,
         lessonPlan: []
@@ -64,20 +64,29 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                 if (!value) errors.teacherId = 'Professor é obrigatório';
                 break;
             case 'startDate':
-                if (!value) errors.startDate = 'Data de início é obrigatória';
+                if (!formData.isSporadic && !value) errors.startDate = 'Data de início é obrigatória';
                 break;
             case 'endDate':
-                // endDate só é obrigatória se não houver Plano de Aula (lessonsCount)
-                if (!value && (!formData.lessonsCount || formData.lessonsCount <= 0)) errors.endDate = 'Data de término é obrigatória';
-                else if (value && formData.startDate && value < formData.startDate) {
+                // endDate só é obrigatória se não houver Plano de Aula e não for esporádico
+                if (!formData.isSporadic && !value && (!formData.lessonsCount || formData.lessonsCount <= 0)) errors.endDate = 'Data de término é obrigatória';
+                else if (!formData.isSporadic && value && formData.startDate && value < formData.startDate) {
                     errors.endDate = 'Data de término deve ser posterior à data de início';
                 }
                 break;
             case 'classDay':
-                if (!value) errors.classDay = 'Dia da aula é obrigatório';
+                if (!formData.isSporadic && !value) errors.classDay = 'Dia da aula é obrigatório';
                 break;
             case 'classTime':
-                if (!value) errors.classTime = 'Horário é obrigatório';
+                if (!formData.isSporadic && !value) errors.classTime = 'Horário é obrigatório';
+                break;
+            case 'sporadicClasses':
+                if (formData.isSporadic) {
+                    if (!value || value.length === 0) {
+                        errors.sporadicClasses = 'Adicione pelo menos uma aula esporádica';
+                    } else if (value.some(c => !c.date || !c.time)) {
+                        errors.sporadicClasses = 'Preencha todas as datas e horários das aulas esporádicas';
+                    }
+                }
                 break;
             case 'auxTeacherId':
                 // Auxiliar é opcional; se houver, precisa ter e-mail
@@ -106,6 +115,13 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
             newFormData.assessment = initialFormData.assessment;
             newFormData.passingCriteria = initialFormData.passingCriteria;
             setSelectedTemplateName('');
+        }
+        
+        if (name === 'isSporadic') {
+            // Inicializa uma aula em branco caso esteja ativando o modo
+            if (checked && (!newFormData.sporadicClasses || newFormData.sporadicClasses.length === 0)) {
+                newFormData.sporadicClasses = [{ id: Date.now().toString(), date: '', time: '' }];
+            }
         }
 
         // Validação da data final
@@ -142,6 +158,7 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                 },
                 passingCriteria: selectedTemplate.passingCriteria,
                 isExtra: false,
+                isSporadic: false,
                 lessonsCount: selectedTemplate.lessonsCount || 0,
                 lessonPlan: Array.isArray(selectedTemplate.lessonPlan) ? selectedTemplate.lessonPlan : [],
             }));
@@ -190,6 +207,27 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
         setFormData(prev => ({ ...prev, passingCriteria: { ...prev.passingCriteria, [field]: Number(value) || 0 } }));
     };
 
+    const handleAddSporadicClass = () => {
+        setFormData(prev => ({
+            ...prev,
+            sporadicClasses: [...(prev.sporadicClasses || []), { id: Date.now().toString() + Math.random().toString(), date: '', time: '' }]
+        }));
+    };
+
+    const handleRemoveSporadicClass = (id) => {
+        setFormData(prev => ({
+            ...prev,
+            sporadicClasses: (prev.sporadicClasses || []).filter(c => c.id !== id)
+        }));
+    };
+
+    const handleSporadicChange = (id, field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            sporadicClasses: (prev.sporadicClasses || []).map(c => c.id === id ? { ...c, [field]: value } : c)
+        }));
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -197,8 +235,14 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
         try {
             // Validação completa
             const allErrors = {};
-            const requiredFields = ['name', 'teacherId', 'startDate', 'classDay', 'classTime'];
-            if (!formData.lessonsCount || formData.lessonsCount <= 0) requiredFields.push('endDate');
+            const requiredFields = ['name', 'teacherId'];
+            
+            if (formData.isSporadic) {
+                requiredFields.push('sporadicClasses');
+            } else {
+                requiredFields.push('startDate', 'classDay', 'classTime');
+                if (!formData.lessonsCount || formData.lessonsCount <= 0) requiredFields.push('endDate');
+            }
             
             requiredFields.forEach(field => {
                 const fieldError = validateField(field, formData[field]);
@@ -304,9 +348,15 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                             <option value="">Selecione um modelo de curso...</option>
                             {allCourseTemplates.map(template => ( <option key={template.id} value={template.id}>{template.name}</option> ))}
                         </select>
-                        <div className="flex items-center">
-                            <input type="checkbox" id="isExtra" name="isExtra" checked={formData.isExtra} onChange={handleChange} disabled={!!editingCourse} className="h-4 w-4 rounded border-gray-300 text-red-600"/>
-                            <label htmlFor="isExtra" className="ml-2 block text-sm text-gray-900">É um curso extracurricular?</label>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                            <div className="flex items-center">
+                                <input type="checkbox" id="isExtra" name="isExtra" checked={formData.isExtra} onChange={handleChange} disabled={!!editingCourse} className="h-4 w-4 rounded border-gray-300 text-red-600"/>
+                                <label htmlFor="isExtra" className="ml-2 block text-sm text-gray-900">É um curso extracurricular?</label>
+                            </div>
+                            <div className="flex items-center">
+                                <input type="checkbox" id="isSporadic" name="isSporadic" checked={formData.isSporadic} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-red-600"/>
+                                <label htmlFor="isSporadic" className="ml-2 block text-sm text-gray-900">Aulas Esporádicas</label>
+                            </div>
                         </div>
                         <div>
                            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Nome da Turma</label>
@@ -439,76 +489,127 @@ const CourseForm = ({ onClose, onSave, members, allCourseTemplates, editingCours
                                 </p>
                             )}
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label htmlFor="classDay" className="block text-sm font-medium text-gray-700 mb-1">Dia da Aula</label>
-                                <select 
-                                    name="classDay" 
-                                    id="classDay" 
-                                    value={formData.classDay} 
-                                    onChange={handleChange} 
-                                    className={`w-full bg-gray-100 rounded-md p-2 border focus:ring-2 ${
-                                        fieldErrors.classDay 
-                                            ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-300 focus:ring-[#DC2626]'
-                                    }`}
-                                >
-                                    <option value="">Selecione...</option>
-                                    {weekDays.map(day => <option key={day} value={day}>{day}</option>)}
-                                </select>
-                                {fieldErrors.classDay && <p className="text-red-600 text-sm mt-1">{fieldErrors.classDay}</p>}
+                        {!formData.isSporadic ? (
+                            <>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label htmlFor="classDay" className="block text-sm font-medium text-gray-700 mb-1">Dia da Aula</label>
+                                        <select 
+                                            name="classDay" 
+                                            id="classDay" 
+                                            value={formData.classDay} 
+                                            onChange={handleChange} 
+                                            className={`w-full bg-gray-100 rounded-md p-2 border focus:ring-2 ${
+                                                fieldErrors.classDay 
+                                                    ? 'border-red-500 focus:ring-red-500' 
+                                                    : 'border-gray-300 focus:ring-[#DC2626]'
+                                            }`}
+                                        >
+                                            <option value="">Selecione...</option>
+                                            {weekDays.map(day => <option key={day} value={day}>{day}</option>)}
+                                        </select>
+                                        {fieldErrors.classDay && <p className="text-red-600 text-sm mt-1">{fieldErrors.classDay}</p>}
+                                    </div>
+                                    <div>
+                                        <label htmlFor="classTime" className="block text-sm font-medium text-gray-700 mb-1">Horário</label>
+                                        <input 
+                                            type="time" 
+                                            name="classTime" 
+                                            id="classTime" 
+                                            value={formData.classTime} 
+                                            onChange={handleChange} 
+                                            className={`w-full bg-gray-100 rounded-md p-2 border focus:ring-2 ${
+                                                fieldErrors.classTime 
+                                                    ? 'border-red-500 focus:ring-red-500' 
+                                                    : 'border-gray-300 focus:ring-[#DC2626]'
+                                            }`} 
+                                        />
+                                        {fieldErrors.classTime && <p className="text-red-600 text-sm mt-1">{fieldErrors.classTime}</p>}
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                         <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">Data de Início</label>
+                                         <input 
+                                             type="date" 
+                                             name="startDate" 
+                                             id="startDate" 
+                                             value={formData.startDate || ''} 
+                                             onChange={handleChange} 
+                                             className={`w-full bg-gray-100 rounded-md p-2 border focus:ring-2 ${
+                                                 fieldErrors.startDate 
+                                                     ? 'border-red-500 focus:ring-red-500' 
+                                                     : 'border-gray-300 focus:ring-[#DC2626]'
+                                             }`} 
+                                         />
+                                         {fieldErrors.startDate && <p className="text-red-600 text-sm mt-1">{fieldErrors.startDate}</p>}
+                                     </div>
+                                    <div>
+                                         <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">Data de Término</label>
+                                         <input 
+                                             type="date" 
+                                             name="endDate" 
+                                             id="endDate" 
+                                             value={formData.endDate || ''} 
+                                             onChange={handleChange} 
+                                             className={`w-full bg-gray-100 rounded-md p-2 border focus:ring-2 ${
+                                                 fieldErrors.endDate 
+                                                     ? 'border-red-500 focus:ring-red-500' 
+                                                     : 'border-gray-300 focus:ring-[#DC2626]'
+                                             }`} 
+                                         />
+                                         {fieldErrors.endDate && <p className="text-red-600 text-sm mt-1">{fieldErrors.endDate}</p>}
+                                     </div>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h4 className="font-semibold text-red-800 text-sm">Aulas Programadas</h4>
+                                    <button 
+                                        type="button" 
+                                        onClick={handleAddSporadicClass}
+                                        className="text-xs flex items-center bg-white px-2 py-1 rounded border border-red-200 text-red-700 hover:bg-red-100"
+                                    >
+                                        <Plus size={12} className="mr-1" /> Adicionar Aula
+                                    </button>
+                                </div>
+                                
+                                {fieldErrors.sporadicClasses && (
+                                    <p className="text-red-600 text-sm">{fieldErrors.sporadicClasses}</p>
+                                )}
+                                
+                                <div className="space-y-2">
+                                    {(formData.sporadicClasses || []).map((sc, index) => (
+                                        <div key={sc.id} className="flex items-center gap-3 bg-white p-2 border rounded-md">
+                                            <span className="text-xs font-bold text-gray-500 w-16">Aula {index + 1}</span>
+                                            <input 
+                                                type="date" 
+                                                value={sc.date} 
+                                                onChange={e => handleSporadicChange(sc.id, 'date', e.target.value)}
+                                                className="flex-1 bg-gray-50 rounded p-1.5 border text-sm focus:ring-1 focus:ring-red-500"
+                                            />
+                                            <input 
+                                                type="time" 
+                                                value={sc.time} 
+                                                onChange={e => handleSporadicChange(sc.id, 'time', e.target.value)}
+                                                className="w-28 bg-gray-50 rounded p-1.5 border text-sm focus:ring-1 focus:ring-red-500"
+                                            />
+                                            <button 
+                                                type="button" 
+                                                onClick={() => handleRemoveSporadicClass(sc.id)}
+                                                className="text-gray-400 hover:text-red-600 p-1 rounded"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {(!formData.sporadicClasses || formData.sporadicClasses.length === 0) && (
+                                        <p className="text-sm text-gray-500 italic text-center py-2">Nenhuma aula adicionada.</p>
+                                    )}
+                                </div>
                             </div>
-                            <div>
-                                <label htmlFor="classTime" className="block text-sm font-medium text-gray-700 mb-1">Horário</label>
-                                <input 
-                                    type="time" 
-                                    name="classTime" 
-                                    id="classTime" 
-                                    value={formData.classTime} 
-                                    onChange={handleChange} 
-                                    className={`w-full bg-gray-100 rounded-md p-2 border focus:ring-2 ${
-                                        fieldErrors.classTime 
-                                            ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-300 focus:ring-[#DC2626]'
-                                    }`} 
-                                />
-                                {fieldErrors.classTime && <p className="text-red-600 text-sm mt-1">{fieldErrors.classTime}</p>}
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                 <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">Data de Início</label>
-                                 <input 
-                                     type="date" 
-                                     name="startDate" 
-                                     id="startDate" 
-                                     value={formData.startDate || ''} 
-                                     onChange={handleChange} 
-                                     className={`w-full bg-gray-100 rounded-md p-2 border focus:ring-2 ${
-                                         fieldErrors.startDate 
-                                             ? 'border-red-500 focus:ring-red-500' 
-                                             : 'border-gray-300 focus:ring-[#DC2626]'
-                                     }`} 
-                                 />
-                                 {fieldErrors.startDate && <p className="text-red-600 text-sm mt-1">{fieldErrors.startDate}</p>}
-                             </div>
-                            <div>
-                                 <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">Data de Término</label>
-                                 <input 
-                                     type="date" 
-                                     name="endDate" 
-                                     id="endDate" 
-                                     value={formData.endDate || ''} 
-                                     onChange={handleChange} 
-                                     className={`w-full bg-gray-100 rounded-md p-2 border focus:ring-2 ${
-                                         fieldErrors.endDate 
-                                             ? 'border-red-500 focus:ring-red-500' 
-                                             : 'border-gray-300 focus:ring-[#DC2626]'
-                                     }`} 
-                                 />
-                                 {fieldErrors.endDate && <p className="text-red-600 text-sm mt-1">{fieldErrors.endDate}</p>}
-                             </div>
-                        </div>
+                        )}
                     </div>
                 </fieldset>
                 

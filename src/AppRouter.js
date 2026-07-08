@@ -114,7 +114,11 @@ const AppRouter = ({
     const isAuxTeacher = !!(currentUserData && (
         allCourses.some(course => (course.auxTeacherEmail || '').toLowerCase() === userEmail) ||
         allCourses.some(course => course.auxTeacherId === currentUserData.id) ||
-        allCourses.some(course => Array.isArray(course.groups) && course.groups.some(g => g && (g.assistantId === currentUserData.id || (g.assistantEmail || '').toLowerCase() === userEmail)))
+        allCourses.some(course => Array.isArray(course.groups) && course.groups.some(g => g && (
+            g.assistantId === currentUserData.id || 
+            (g.assistantEmail || '').toLowerCase() === userEmail ||
+            (Array.isArray(g.assistants) && g.assistants.some(a => a.id === currentUserData.id || (a.email || '').toLowerCase() === userEmail))
+        )))
     ));
 
     // Conjunto de Connects que o usuário pode ver (lidera, supervisiona ou é auxiliar)
@@ -334,11 +338,13 @@ const AppRouter = ({
                                 allMembers={allMembers}
                                 onAddCourse={handleAddCourse}
                                 onEditCourse={handleEditCourse}
-                                onDeleteCourse={handleDeleteCourse}
+                                onDelete={(type, id) => {
+                                    if (type === 'course') handleDeleteCourse('course', id);
+                                    else if (type === 'courseTemplate') handleDeleteCourseTemplate('courseTemplate', id);
+                                }}
                                 onManageCourse={handleManageCourse}
                                 onAddCourseTemplate={handleAddCourseTemplate}
                                 onEditCourseTemplate={handleEditCourseTemplate}
-                                onDeleteCourseTemplate={handleDeleteCourseTemplate}
                                 loadingStates={loadingStates}
                                 operationStatus={operationStatus}
                                 setOperationStatus={setOperationStatus}
@@ -355,11 +361,12 @@ const AppRouter = ({
                     <Route
                         path="/curso-grupos/:courseId"
                         element={
-                            <CourseGroupsWrapper
-                                allCourses={allCourses}
-                                allMembers={allMembers}
-                                onSaveGroups={handleSaveCourseGroups}
-                            />
+                                <CourseGroupsWrapper
+                                    allCourses={allCourses}
+                                    allMembers={allMembers}
+                                    allSimpleMembers={allSimpleMembers}
+                                    onSaveGroups={handleSaveCourseGroups}
+                                />
                         }
                     />
                 )}
@@ -538,7 +545,7 @@ const ConnectTrackWrapper = ({ allConnects, allMembers, allCourses, attendanceAl
 };
 
 // Componente wrapper para CourseGroupsPage que usa useParams
-const CourseGroupsWrapper = ({ allCourses, allMembers, onSaveGroups }) => {
+const CourseGroupsWrapper = ({ allCourses, allMembers, allSimpleMembers, onSaveGroups }) => {
     const { courseId } = useParams();
     const navigate = useNavigate();
     const course = allCourses.find(c => c.id === courseId);
@@ -551,6 +558,7 @@ const CourseGroupsWrapper = ({ allCourses, allMembers, onSaveGroups }) => {
         <CourseGroupsPage
             course={course}
             allMembers={allMembers}
+            allSimpleMembers={allSimpleMembers}
             onSaveGroups={onSaveGroups}
             onBack={() => navigate('/cursos')}
         />

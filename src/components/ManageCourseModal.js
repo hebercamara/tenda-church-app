@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import Modal from './Modal';
 import PersonAutocomplete from './PersonAutocomplete';
 import BatchSimpleMemberModal from './BatchSimpleMemberModal';
-import { Check, Trash2, ChevronLeft, ChevronRight, X, Users, Table } from 'lucide-react';
+import { Check, Trash2, ChevronLeft, ChevronRight, X, Users, Table, Download } from 'lucide-react';
 import { formatDateToBrazilian, formatDateToAbbreviated } from '../utils/dateUtils';
 
 const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSaveSimpleMember, areNamesSimilar, isOpen, onClose, onSaveStudents, onSaveAttendance, onSkipClassDay, onViewMember }) => {
@@ -34,8 +34,13 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
         if (isMainTeacherOrSubOrAdmin) return null;
         if (!Array.isArray(course.groups)) return [];
         const myGroups = course.groups.filter(g => 
-            g && (g.assistantId === currentUserData?.id || 
-            (g.assistantEmail || '').toLowerCase() === userEmail)
+            g && (
+                g.assistantId === currentUserData?.id || 
+                (g.assistantEmail || '').toLowerCase() === userEmail ||
+                (Array.isArray(g.assistants) && g.assistants.some(a => 
+                    a.id === currentUserData?.id || (a.email || '').toLowerCase() === userEmail
+                ))
+            )
         );
         const ids = new Set();
         myGroups.forEach(g => {
@@ -49,6 +54,14 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
     const [activeTab, setActiveTab] = useState('attendance');
     const [selectedMemberToEnroll, setSelectedMemberToEnroll] = useState('');
 
+    const findStudent = (id) => {
+        let student = Array.isArray(members) ? members.find(m => m && m.id === id) : null;
+        if (!student && Array.isArray(allSimpleMembers)) {
+            student = allSimpleMembers.find(m => m && m.id === id) || null;
+        }
+        return student;
+    };
+
     // Estados locais para rascunho (draft)
     const [draftEnrolledStudents, setDraftEnrolledStudents] = useState([]);
     const [isBatchModalOpen, setBatchModalOpen] = useState(false);
@@ -59,7 +72,7 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
             studentIds.forEach(id => {
                 if (!updated.some(s => s && s.id === id)) {
                     // Procura o membro na lista atualizada de membros
-                    const student = Array.isArray(members) ? members.find(m => m && m.id === id) : null;
+                    const student = findStudent(id);
                     const name = student ? student.name : 'Novo Aluno';
                     updated.push({
                         id: id,
@@ -130,7 +143,7 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
 
         // Passo 1: extrair primeiro nome e último sobrenome de cada aluno
         const nameData = allStudents.map(s => {
-            const member = Array.isArray(members) ? members.find(m => m && m.id === s.id) : null;
+            const member = findStudent(s.id);
             const fullName = member ? (member.name || '') : (s.name || '');
             const parts = fullName.trim().split(/\s+/);
             const firstName = parts[0] || 'Aluno';
@@ -157,7 +170,7 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
         });
 
         return nameMap;
-    }, [draftEnrolledStudents, members]);
+    }, [draftEnrolledStudents, members, allSimpleMembers]);
 
     // Função helper para acessar o mapa
     const getStudentKnownName = (student) => {
@@ -310,7 +323,7 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
     };
 
     const handleEnroll = (studentId) => {
-        const student = Array.isArray(members) ? members.find(m => m && m.id === studentId) : null;
+        const student = findStudent(studentId);
         if (student && !draftEnrolledStudents.some(s => s && s.id === studentId)) {
             const newStudent = { id: student.id, name: student.name, scores: { tests: [], activities: [], assignments: [] } };
             setDraftEnrolledStudents(prev => [...prev, newStudent]);
@@ -393,7 +406,78 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
         }
     };
 
+    const handleExportData = () => {
+        let csvContent = '\uFEFF'; // BOM para o Excel entender UTF-8 com acentos
+        const headers = ['Nome do Aluno'];
+        
+        const validRecords = attendanceRecords.filter(r => !r.ignoreAttendance && !r.noClass);
+        validRecords.forEach(r => {
+            const dateObj = r.date?.toDate ? r.date.toDate() : new Date(r.date);
+            headers.push(formatDateToAbbreviated(dateObj));
+        });
 
+        const assessmentLabels = { tests: 'Prova', activities: 'Atividade', assignments: 'Trabalho' };
+        ['tests', 'activities', 'assignments'].forEach(type => {
+            const count = course.assessment?.[type]?.count || 0;
+            for (let i = 0; i < count; i++) {
+                headers.push(`${assessmentLabels[type]} ${i + 1}`);
+            }
+        });
+        
+        headers.push('Frequência %', 'Faltas', 'Média Final', 'Status Final');
+        csvContent += headers.join(';') + '\n';
+
+        visibleStudentsInModal.forEach(student => {
+            const row = [`"${getStudentKnownName(student)}"`];
+            
+            let presentCount = 0;
+            validRecords.forEach(r => {
+                const status = r.statuses?.[student.id] || 'pendente';
+                if (status === 'presente') presentCount++;
+                row.push(status);
+            });
+            
+            ['tests', 'activities', 'assignments'].forEach(type => {
+                const count = course.assessment?.[type]?.count || 0;
+                for (let i = 0; i < count; i++) {
+                    const score = student.scores?.[type]?.[i] !== undefined ? student.scores[type][i] : 0;
+                    row.push(score.toString().replace('.', ','));
+                }
+            });
+            
+            const freq = validRecords.length > 0 ? ((presentCount / validRecords.length) * 100).toFixed(1) : 0;
+            const faltas = validRecords.length - presentCount;
+            
+            let totalGrade = 0;
+            ['tests', 'activities', 'assignments'].forEach(type => {
+                const typeData = course.assessment?.[type];
+                const typeScores = student.scores?.[type] || [];
+                const count = typeData?.count || 0;
+                for (let i = 0; i < count; i++) {
+                    totalGrade += Number(typeScores[i] || 0);
+                }
+            });
+            
+            let statusStr = '-';
+            if (course.passingCriteria) {
+                const passedFreq = freq >= course.passingCriteria.minAttendance;
+                const passedGrade = totalGrade >= course.passingCriteria.minGrade;
+                statusStr = (passedFreq && passedGrade) ? 'Aprovado' : 'Reprovado';
+            }
+            
+            row.push(`${freq}%`, faltas, totalGrade.toFixed(2).replace('.', ','), statusStr);
+            csvContent += row.join(';') + '\n';
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `${course.name} - Diario de Classe.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     if (!isOpen) return null;
     const notEnrolledMembers = Array.isArray(members) ? members.filter(m => m && !draftEnrolledStudents.some(s => s && s.id === m.id)) : [];
@@ -421,6 +505,14 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
                         </div>
                         {isMainTeacherOrSubOrAdmin && (
                             <div className="flex items-center gap-2 flex-wrap">
+                                <button
+                                    type="button"
+                                    onClick={handleExportData}
+                                    className="px-4 py-2 rounded-lg bg-green-700 hover:bg-green-900 text-white font-semibold text-sm flex items-center space-x-2 transition-all shadow"
+                                >
+                                    <Download size={16} />
+                                    <span>Exportar Dados</span>
+                                </button>
                                 <button
                                     type="button"
                                     onClick={() => setBatchModalOpen(true)}
