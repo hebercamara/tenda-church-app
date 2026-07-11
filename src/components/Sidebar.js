@@ -51,8 +51,26 @@ const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMemb
     return today >= startDate && today <= endDate;
   });
 
+  const isCourseAssistant = currentUserData && allCourses.some(course => {
+      const email = userEmail;
+      
+      // Auxiliar da turma inteira
+      if (course.auxiliaryTeacherId === currentUserData.id || (course.auxiliaryTeacherEmail || '').toLowerCase() === email) return true;
+      if (Array.isArray(course.auxiliaryTeachers) && course.auxiliaryTeachers.some(a => a.id === currentUserData.id || (a.email || '').toLowerCase() === email)) return true;
+
+      // Auxiliar de grupo
+      if (Array.isArray(course.groups)) {
+          return course.groups.some(g => {
+              if (g.assistantId === currentUserData.id || (g.assistantEmail || '').toLowerCase() === email) return true;
+              if (Array.isArray(g.assistants) && g.assistants.some(a => a.id === currentUserData.id || (a.email || '').toLowerCase() === email)) return true;
+              return false;
+          });
+      }
+      return false;
+  });
+
   // Determinar se é membro comum (não tem nenhum perfil especial)
-  const isCommonMember = !isAdmin && !isLeader && !isSupervisor && !isTeacher && !isAuxLeader;
+  const isCommonMember = !isAdmin && !isLeader && !isSupervisor && !isTeacher && !isAuxLeader && !isCourseAssistant;
 
   const navItems = [
     // Para membros comuns, mostrar apenas itens básicos
@@ -73,7 +91,7 @@ const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMemb
         [{ id: 'connects', label: 'Connects', icon: Home, path: '/connects' }] : []),
 
       // Cursos - Visível para Admins e Professores
-      ...((isAdmin || isTeacher) ?
+      ...((isAdmin || isTeacher || isCourseAssistant) ?
         [{ id: 'courses', label: 'Cursos', icon: BookOpen, path: '/cursos' }] : []),
 
       // Meus Alunos - Visível para Professores e Líderes

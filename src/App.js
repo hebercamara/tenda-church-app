@@ -1252,9 +1252,22 @@ function AppContent() {
             };
             const isAuxTeacher = () => {
                 try {
-                    const byEmail = (course?.auxTeacherEmail || '').toLowerCase() === (userEmail || '');
-                    const byId = course?.auxTeacherId && currentUserData?.id && course.auxTeacherId === currentUserData.id;
-                    return !!(byEmail || byId);
+                    const email = userEmail || '';
+                    
+                    // Auxiliar da turma inteira (legado e novo)
+                    if (course?.auxTeacherId === currentUserData?.id || (course?.auxTeacherEmail || '').toLowerCase() === email) return true;
+                    if (course?.auxiliaryTeacherId === currentUserData?.id || (course?.auxiliaryTeacherEmail || '').toLowerCase() === email) return true;
+                    if (Array.isArray(course?.auxiliaryTeachers) && course.auxiliaryTeachers.some(a => a.id === currentUserData?.id || (a.email || '').toLowerCase() === email)) return true;
+
+                    // Auxiliar de grupo
+                    if (Array.isArray(course?.groups)) {
+                        return course.groups.some(g => {
+                            if (g.assistantId === currentUserData?.id || (g.assistantEmail || '').toLowerCase() === email) return true;
+                            if (Array.isArray(g.assistants) && g.assistants.some(a => a.id === currentUserData?.id || (a.email || '').toLowerCase() === email)) return true;
+                            return false;
+                        });
+                    }
+                    return false;
                 } catch {
                     return false;
                 }

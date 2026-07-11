@@ -295,7 +295,7 @@ const CourseGroupsPage = ({ course, allMembers, allSimpleMembers, onSaveGroups, 
                                     : [];
 
                                 return (
-                                    <div key={group.id} className="bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col" style={{ maxHeight: '50vh' }}>
+                                    <div key={group.id} className="bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col" style={{ maxHeight: '75vh' }}>
                                         {/* Card Header */}
                                         <div className="bg-gray-50 border-b p-3 flex items-center justify-between gap-3 flex-shrink-0">
                                             <input

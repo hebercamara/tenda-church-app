@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import Modal from './Modal';
 import PersonAutocomplete from './PersonAutocomplete';
 import BatchSimpleMemberModal from './BatchSimpleMemberModal';
-import { Check, Trash2, ChevronLeft, ChevronRight, X, Users, Table, Download } from 'lucide-react';
+import { Check, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, Users, Table, Download } from 'lucide-react';
 import { formatDateToBrazilian, formatDateToAbbreviated } from '../utils/dateUtils';
 
 const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSaveSimpleMember, areNamesSimilar, isOpen, onClose, onSaveStudents, onSaveAttendance, onSkipClassDay, onViewMember }) => {
@@ -52,6 +52,15 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
     }, [course.groups, currentUserData, userEmail, isMainTeacherOrSubOrAdmin]);
 
     const [activeTab, setActiveTab] = useState('attendance');
+    const [showMobileActions, setShowMobileActions] = useState(false);
+
+    useEffect(() => {
+        let timer;
+        if (showMobileActions) {
+            timer = setTimeout(() => setShowMobileActions(false), 4000);
+        }
+        return () => clearTimeout(timer);
+    }, [showMobileActions]);
     const [selectedMemberToEnroll, setSelectedMemberToEnroll] = useState('');
 
     const findStudent = (id) => {
@@ -259,6 +268,7 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
             setSelectedDate(null);
             setHasUnsavedChanges(false);
 
+            let isFirstSnapshot = true;
             const attendanceRef = collection(db, `artifacts/${appId}/public/data/courses/${course.id}/attendance`);
             const q = query(attendanceRef, orderBy("date", "asc"));
             const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -268,8 +278,9 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
                     .filter(r => r && r.id && r.date && r.date.seconds != null);
                 setAttendanceRecords(records);
 
-                // Encontrar a data mais próxima do dia atual
-                if (records.length > 0) {
+                // Encontrar a data mais próxima do dia atual apenas no carregamento inicial
+                if (records.length > 0 && isFirstSnapshot) {
+                    isFirstSnapshot = false;
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
 
@@ -288,16 +299,14 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
                     // Ajustar o índice para centralizar — garantir que nunca saia dos limites
                     const maxValidIndex = records.length - 1;
                     const centerIndex = Math.max(0, Math.min(closestIndex, maxValidIndex));
-                    setCurrentDateIndex(centerIndex);
-
-                    if (!selectedDate && records[centerIndex]) {
-                        setSelectedDate(records[centerIndex].id);
-                    }
+                    
+                    setCurrentDateIndex(prev => prev === 0 ? centerIndex : prev);
+                    setSelectedDate(prev => prev || records[centerIndex].id);
                 }
             });
             return () => unsubscribe();
         }
-    }, [isOpen, course, visibleDatesCount]);
+    }, [isOpen, course]);
 
     // Funções para navegação das datas
     const getVisibleDates = () => {
@@ -484,13 +493,97 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
     const currentAttendance = attendanceRecords.find(r => r.id === selectedDate)?.statuses || {};
     const assessment = course.assessment;
 
+    const renderBadges = () => {
+        if (activeTab !== 'attendance') return null;
+        return (
+            <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 bg-gray-100 border border-gray-200 rounded-full px-3 py-1 text-xs font-semibold text-gray-700">
+                    <span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span>
+                    {visibleStudentsInModal.length} aluno{visibleStudentsInModal.length !== 1 ? 's' : ''}
+                </span>
+                {selectedDate && (() => {
+                    const rec = attendanceRecords.find(r => r.id === selectedDate);
+                    if (!rec) return null;
+                    const statuses = rec.statuses || {};
+                    const presentes = visibleStudentsInModal.filter(s => statuses[s.id] === 'presente').length;
+                    const ausentes = visibleStudentsInModal.filter(s => statuses[s.id] === 'ausente').length;
+                    return (
+                        <span className="inline-flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 text-xs font-semibold text-gray-600">
+                            <span className="text-green-600">✓ {presentes}</span>
+                            <span className="text-gray-300">|</span>
+                            <span className="text-red-500">✗ {ausentes}</span>
+                        </span>
+                    );
+                })()}
+            </div>
+        );
+    };
+
+    const actionButtons = (
+        <>
+            <button
+                type="button"
+                onClick={handleExportData}
+                className="px-4 py-2 rounded-lg bg-green-700 hover:bg-green-900 text-white font-semibold text-sm flex items-center space-x-2 transition-all shadow whitespace-nowrap w-full md:w-auto"
+            >
+                <Download size={16} />
+                <span>Exportar Dados</span>
+            </button>
+            <button
+                type="button"
+                onClick={() => setBatchModalOpen(true)}
+                className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-900 text-white font-semibold text-sm flex items-center space-x-2 transition-all shadow whitespace-nowrap w-full md:w-auto"
+            >
+                <Table size={16} />
+                <span>Inscrição Rápida (Excel)</span>
+            </button>
+            <button
+                type="button"
+                onClick={() => {
+                    onClose();
+                    navigate(`/curso-grupos/${course.id}`);
+                }}
+                className="px-4 py-2 rounded-lg bg-[#DC2626] hover:bg-[#991B1B] text-white font-semibold text-sm flex items-center space-x-2 transition-all shadow whitespace-nowrap w-full md:w-auto"
+            >
+                <Users size={16} />
+                <span>{Array.isArray(course.groups) && course.groups.length > 0 ? 'Gerir Grupos' : 'Dividir Turma em Grupos'}</span>
+            </button>
+        </>
+    );
+
     return (
         <Modal isOpen={isOpen} onClose={onClose} size="6xl" title={course.name} fullHeight={true} bodyClassName="p-0">
             <div className="flex flex-col h-full p-6">
                 <div className="flex-shrink-0">
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
                         <div>
-                            <p className="text-gray-600 mt-1">Professor: {getTeacherKnownName()}</p>
+                            <div className="flex items-center gap-3 flex-wrap mt-1">
+                                <p className="text-gray-600 m-0">Professor: {getTeacherKnownName()}</p>
+                                <div className="md:hidden flex items-center gap-2">
+                                    {isMainTeacherOrSubOrAdmin && (
+                                        <div className="relative flex items-center">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowMobileActions(!showMobileActions)}
+                                                className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg flex items-center space-x-1"
+                                            >
+                                                <span className="text-sm font-semibold">Ações</span>
+                                                {showMobileActions ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                            </button>
+                                            
+                                            <div className={`
+                                                flex flex-col gap-2
+                                                absolute top-full left-0 mt-2 z-50
+                                                bg-white p-3 rounded-lg shadow-lg border border-gray-200
+                                                transition-all duration-200 origin-top-left
+                                                ${showMobileActions ? 'scale-100 opacity-100 visible' : 'scale-95 opacity-0 invisible'}
+                                            `}>
+                                                {actionButtons}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                             {getActiveSubstitute() && (
                                 <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-md">
                                     <p className="text-sm text-yellow-800">
@@ -503,72 +596,25 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
                                 </div>
                             )}
                         </div>
-                        {isMainTeacherOrSubOrAdmin && (
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <button
-                                    type="button"
-                                    onClick={handleExportData}
-                                    className="px-4 py-2 rounded-lg bg-green-700 hover:bg-green-900 text-white font-semibold text-sm flex items-center space-x-2 transition-all shadow"
-                                >
-                                    <Download size={16} />
-                                    <span>Exportar Dados</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setBatchModalOpen(true)}
-                                    className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-900 text-white font-semibold text-sm flex items-center space-x-2 transition-all shadow"
-                                >
-                                    <Table size={16} />
-                                    <span>Inscrição Rápida (Excel)</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        onClose();
-                                        navigate(`/curso-grupos/${course.id}`);
-                                    }}
-                                    className="px-4 py-2 rounded-lg bg-[#DC2626] hover:bg-[#991B1B] text-white font-semibold text-sm flex items-center space-x-2 transition-all shadow"
-                                >
-                                    <Users size={16} />
-                                    <span>{Array.isArray(course.groups) && course.groups.length > 0 ? 'Gerir Grupos' : 'Dividir Turma em Grupos'}</span>
-                                </button>
-                            </div>
-                        )}
+                        <div className="hidden md:flex items-center justify-end gap-3 flex-wrap">
+                            {isMainTeacherOrSubOrAdmin && actionButtons}
+                        </div>
                     </div>
                     <div className="border-b border-gray-200">
                         <div className="flex items-center justify-between">
                             <nav className="-mb-px flex flex-wrap space-x-4 sm:space-x-8" aria-label="Tabs">
-                                <button onClick={() => setActiveTab('attendance')} className={`${activeTab === 'attendance' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Lista de Presença</button>
+                                <button onClick={() => setActiveTab('attendance')} className={`${activeTab === 'attendance' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Presença</button>
                                 {isMainTeacherOrSubOrAdmin && (
                                     <>
-                                        <button onClick={() => setActiveTab('grades')} className={`${activeTab === 'grades' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Quadro de Notas</button>
-                                        <button onClick={() => setActiveTab('students')} className={`${activeTab === 'students' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Inscrição de Alunos</button>
+                                        <button onClick={() => setActiveTab('grades')} className={`${activeTab === 'grades' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Notas</button>
+                                        <button onClick={() => setActiveTab('students')} className={`${activeTab === 'students' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Inscrição</button>
                                     </>
                                 )}
                             </nav>
-                            {/* Badges de contagem — visíveis na aba de presença */}
-                            {activeTab === 'attendance' && (
-                                <div className="flex items-center gap-2 pb-1">
-                                    <span className="inline-flex items-center gap-1.5 bg-gray-100 border border-gray-200 rounded-full px-3 py-1 text-xs font-semibold text-gray-700">
-                                        <span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span>
-                                        {visibleStudentsInModal.length} aluno{visibleStudentsInModal.length !== 1 ? 's' : ''}
-                                    </span>
-                                    {selectedDate && (() => {
-                                        const rec = attendanceRecords.find(r => r.id === selectedDate);
-                                        if (!rec) return null;
-                                        const statuses = rec.statuses || {};
-                                        const presentes = visibleStudentsInModal.filter(s => statuses[s.id] === 'presente').length;
-                                        const ausentes = visibleStudentsInModal.filter(s => statuses[s.id] === 'ausente').length;
-                                        return (
-                                            <span className="inline-flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 text-xs font-semibold text-gray-600">
-                                                <span className="text-green-600">✓ {presentes}</span>
-                                                <span className="text-gray-300">|</span>
-                                                <span className="text-red-500">✗ {ausentes}</span>
-                                            </span>
-                                        );
-                                    })()}
-                                </div>
-                            )}
+                            {/* Badges de contagem — visíveis na aba de presença (Desktop) */}
+                            <div className="hidden md:block pb-1">
+                                {renderBadges()}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -675,7 +721,6 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
                                                     <option key={`activity-opt-${i}`} value={i + 1}>{`A${i + 1}`}</option>
                                                 ))}
                                             </select>
-                                            <span className="text-xs text-gray-500">Quando definido, marcar presença também marca a atividade correspondente (A1, A2, ...).</span>
                                         </div>
                                         <div className="flex items-end gap-6 mb-2">
                                             <div className="flex flex-col">
