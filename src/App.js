@@ -628,12 +628,15 @@ function AppContent() {
         const collectionPath = `artifacts/${appId}/public/data/course_members`;
         loadingStates.setLoading('saveSimpleMember', 'Salvando cadastro simples...');
         try {
+            let resultRef = null;
             if (editingSimpleMember) {
                 await setDoc(doc(db, collectionPath, editingSimpleMember.id), simpleMemberData);
+                resultRef = { id: editingSimpleMember.id };
             } else {
-                await addDoc(collection(db, collectionPath), simpleMemberData);
+                resultRef = await addDoc(collection(db, collectionPath), simpleMemberData);
             }
             loadingStates.setSuccess('saveSimpleMember', 'Cadastro simples salvo!');
+            return resultRef;
         } catch (error) {
             console.error("Erro ao salvar cadastro simples:", error);
             loadingStates.setError('saveSimpleMember', 'Erro ao salvar. Tente novamente.');
