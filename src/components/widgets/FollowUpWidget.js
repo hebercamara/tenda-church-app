@@ -2,24 +2,19 @@ import React, { useMemo } from 'react';
 import { MessageCircle, Users } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
-const FollowUpWidget = ({ alerts, getConnectName, connects = [] }) => {
+const FollowUpWidget = ({ alerts, getConnectName, visibleConnectIds }) => {
     const { isAdmin, currentUserData } = useAuthStore();
     const userEmail = (currentUserData?.email || '').toLowerCase();
 
     // Filtra alertas apenas para os Connects do líder logado
     const membersToFollowUp = useMemo(() => {
         const raw = (alerts || []).filter(a => a.status === 'alert');
-        if (isAdmin) return raw;
+        if (isAdmin || visibleConnectIds === null) return raw;
 
-        const myConnectIds = connects
-            .filter(c =>
-                c.leaderId === currentUserData?.id ||
-                (c.leaderEmail || '').toLowerCase() === userEmail
-            )
-            .map(c => c.id);
+        if (!visibleConnectIds) return [];
 
-        return raw.filter(a => myConnectIds.includes(a.connectId));
-    }, [alerts, connects, currentUserData, isAdmin, userEmail]);
+        return raw.filter(a => visibleConnectIds.includes(a.connectId));
+    }, [alerts, visibleConnectIds, isAdmin]);
 
     if (!membersToFollowUp || membersToFollowUp.length === 0) return null;
 

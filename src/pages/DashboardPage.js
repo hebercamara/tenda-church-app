@@ -45,8 +45,44 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
         });
     }, [allDecisions, hasDecisionAccess]);
 
+    // IDs dos Connects que o usuário atual tem acesso
+    const visibleConnectIds = useMemo(() => {
+        if (isAdmin || currentUserData?.isPastor) return null; // Acesso a todos
+        
+        const linkedConnectIds = connects.filter(c => {
+            const isL = c.leaderId === currentUserData?.id || (c.leaderEmail || '').toLowerCase() === userEmail;
+            const isS = (c.supervisorEmail || '').toLowerCase() === userEmail;
+            const isAux = Array.isArray(c.auxLeaders) ? c.auxLeaders.some(l => l.id === currentUserData?.id || (l.email || '').toLowerCase() === userEmail) : (c.auxLeaderId === currentUserData?.id || (c.auxLeaderEmail || '').toLowerCase() === userEmail);
+            return isL || isS || isAux;
+        }).map(c => c.id);
+
+        return linkedConnectIds;
+    }, [isAdmin, currentUserData, userEmail, connects]);
+
+    // Relatórios filtrados por acesso
+    const visibleReports = useMemo(() => {
+        if (visibleConnectIds === null) return reports;
+        return reports.filter(r => visibleConnectIds.includes(r.connectId));
+    }, [reports, visibleConnectIds]);
+
+    // Membros filtrados por acesso
+    const visibleMembers = useMemo(() => {
+        if (visibleConnectIds === null) return members;
+        
+        const linkedConnectIds = [...visibleConnectIds];
+        
+        // Incluir o connect em que o usuário está matriculado (como membro), se aplicável
+        const myMemberRecord = members.find(m => m.id === currentUserData?.id || (m.email || '').toLowerCase() === userEmail);
+        if (myMemberRecord && myMemberRecord.connectId && !linkedConnectIds.includes(myMemberRecord.connectId)) {
+            linkedConnectIds.push(myMemberRecord.connectId);
+        }
+
+        return members.filter(m => linkedConnectIds.includes(m.connectId));
+    }, [members, visibleConnectIds, currentUserData, userEmail]);
+
+
     const dashboardMetrics = useMemo(() => {
-        const validReports = reports.filter(r => r && r.reportDate && typeof r.attendance === 'object');
+        const validReports = visibleReports.filter(r => r && r.reportDate && typeof r.attendance === 'object');
 
         if (!validReports || validReports.length === 0) {
             return { avgAttendance: 0, totalGuests: 0, totalOffering: 0 };
@@ -66,13 +102,17 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
             .slice(0, 4);
 
         let totalPresentLastWeeks = 0;
+        let totalReportsLastWeeks = 0;
+        
         recentWeeks.forEach(week => {
+            totalReportsLastWeeks += reportsByWeek[week].length;
             reportsByWeek[week].forEach(report => {
                 totalPresentLastWeeks += Object.values(report.attendance).filter(s => s === 'presente').length;
             });
         });
 
-        const avgAttendance = recentWeeks.length > 0 ? Math.round(totalPresentLastWeeks / recentWeeks.length) : 0;
+        // Frequência média por Connect (total de presentes dividido pela quantidade de relatórios)
+        const avgAttendance = totalReportsLastWeeks > 0 ? Math.round(totalPresentLastWeeks / totalReportsLastWeeks) : 0;
 
         const currentMonth = new Date().getMonth();
         const monthlyReports = validReports.filter(r => {
@@ -80,12 +120,13 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
             return dateObj.getMonth() === currentMonth;
         });
 
+        // Total de convidados e ofertas (apenas dos Connects visíveis)
         const totalGuests = monthlyReports.reduce((sum, r) => sum + (Number(r.guests) || 0), 0);
         const totalOffering = monthlyReports.reduce((sum, r) => sum + (Number(r.offering) || 0), 0);
 
         return { avgAttendance, totalGuests, totalOffering };
 
-    }, [reports]);
+    }, [visibleReports]);
 
     return (
         <div className="p-3 sm:p-4 lg:p-6 space-y-6 sm:space-y-8">
@@ -98,7 +139,7 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
                 <MetricCard icon={TrendingUp} title="Média de Presentes (Semana)" value={dashboardMetrics.avgAttendance} color="#3B82F6" />
                 <MetricCard icon={UserPlus} title="Convidados (Mês)" value={dashboardMetrics.totalGuests} color="#22C55E" />
                 <MetricCard icon={DollarSign} title="Ofertas (Mês)" value={dashboardMetrics.totalOffering.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} color="#EAB308" />
-                <MetricCard icon={Users} title="Total de Membros" value={members.length} color="#EF4444" />
+                <MetricCard icon={Users} title="Total de Membros" value={visibleMembers.length} color="#EF4444" />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
@@ -128,7 +169,7 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
                     </div>
 
                     <div className="overflow-x-auto">
-                        {chartType === 'connectAttendance' && <ConnectAttendanceChart reports={reports} allMembers={members} connectId={null} />}
+                        {chartType === 'connectAttendance' && <ConnectAttendanceChart reports={visibleReports} allMembers={visibleMembers} connectId={null} />}
                         {chartType === 'courseAttendance' && <CourseAttendanceChart courseId={selectedCourse} courseName={Array.isArray(courses) ? courses.find(c => c.id === selectedCourse)?.name : ''} />}
                     </div>
 
@@ -142,26 +183,9 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
                         />
                     )}
                     {hasFollowUpAccess && (
-                        <FollowUpWidget alerts={attendanceAlerts} getConnectName={getConnectName} connects={connects} />
+                        <FollowUpWidget alerts={attendanceAlerts} getConnectName={getConnectName} visibleConnectIds={visibleConnectIds} />
                     )}
-                    <BirthdayWidget members={(() => {
-                        if (isAdmin) return members;
-                        const userEmail = (currentUserData?.email || '').toLowerCase();
-                        const linkedConnectIds = connects.filter(c => {
-                            const isL = c.leaderId === currentUserData?.id || (c.leaderEmail || '').toLowerCase() === userEmail;
-                            const isS = (c.supervisorEmail || '').toLowerCase() === userEmail;
-                            const isAux = Array.isArray(c.auxLeaders) ? c.auxLeaders.some(l => l.id === currentUserData?.id || (l.email || '').toLowerCase() === userEmail) : (c.auxLeaderId === currentUserData?.id || (c.auxLeaderEmail || '').toLowerCase() === userEmail);
-                            return isL || isS || isAux;
-                        }).map(c => c.id);
-
-                        // Also include user's own connect if they are just a member
-                        const myMemberRecord = members.find(m => m.id === currentUserData?.id || (m.email || '').toLowerCase() === userEmail);
-                        if (myMemberRecord && myMemberRecord.connectId && !linkedConnectIds.includes(myMemberRecord.connectId)) {
-                            linkedConnectIds.push(myMemberRecord.connectId);
-                        }
-
-                        return members.filter(m => linkedConnectIds.includes(m.connectId));
-                    })()} />
+                    <BirthdayWidget members={visibleMembers} />
                 </div>
             </div>
         </div>

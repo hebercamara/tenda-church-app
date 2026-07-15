@@ -96,7 +96,7 @@ const ConnectAttendanceChart = ({ reports, allMembers, connectId }) => {
 
       // --- NOVA LÓGICA ---
       const totalGuests = reportsForWeek.reduce((sum, report) => sum + (Number(report.guests) || 0), 0);
-      const reportingConnectsCount = new Set(reportsForWeek.map(r => r.connectId)).size;
+      const reportingConnectsCount = reportsForWeek.length; // mudado para reportsForWeek.length para evitar inflar média se um connect enviar vários relatórios
       
       // Média de Frequência (Presentes + Convidados)
       const averageTotal = reportingConnectsCount > 0 ? (totalPresent + totalGuests) / reportingConnectsCount : 0;
