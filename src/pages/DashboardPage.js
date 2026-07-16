@@ -142,7 +142,7 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
                 <MetricCard icon={Users} title="Total de Membros" value={visibleMembers.length} color="#EF4444" />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 items-start">
                 <div className="lg:col-span-2 bg-white p-3 sm:p-4 md:p-6 rounded-xl shadow-md">
                     <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-between items-start sm:items-center mb-4">
                         <select
