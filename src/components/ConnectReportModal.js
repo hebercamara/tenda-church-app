@@ -207,19 +207,11 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
         });
     }, [members, connect, selectedDate]);
 
-    // Lógica de seleção de data baseada no papel do usuário (isAdmin)
+    // Lógica de seleção de data (agora padrão para todos os usuários)
     useEffect(() => {
         if (!connect) return;
 
-        // Se for Admin, define a data padrão como hoje e permite qualquer data
-        if (isAdmin) {
-            const today = new Date().toISOString().split('T')[0];
-            setSelectedDate(today);
-            setReportDates([]); // Limpa as datas do dropdown
-            return;
-        }
-
-        // Se for Líder, calcula apenas a data da semana atual e anterior
+        // Calcula apenas a data da semana atual e anterior baseada no dia do Connect
         const getReportDatesForLeader = () => {
             const connectWeekday = weekDaysMap[connect.weekday];
             if (connectWeekday === undefined) return;
@@ -250,7 +242,7 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
         };
 
         getReportDatesForLeader();
-    }, [connect, isAdmin]);
+    }, [connect]);
 
     // Busca o relatório existente quando a data ou connect mudam
     useEffect(() => {
@@ -311,24 +303,13 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
                 <div className="flex-shrink-0">
                     <p className="text-gray-600 mb-4">{connect.name}</p>
 
-                    {/* Renderização condicional do seletor de data */}
-                    {isAdmin ? (
-                        <div>
-                            <label htmlFor="reportDate" className="block text-sm font-medium text-gray-700 mb-1">Selecione uma data para o relatório (Admin)</label>
-                            <BrazilianDatePicker
-                                value={selectedDate}
-                                onChange={setSelectedDate}
-                                className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626]"
-                            />
-                        </div>
-                    ) : (
-                        <div>
-                            <label htmlFor="reportDate" className="block text-sm font-medium text-gray-700 mb-1">Selecione a data da reunião</label>
-                            <select id="reportDate" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626]">
-                                {reportDates.map(date => <option key={date.value} value={date.value}>{date.label}</option>)}
-                            </select>
-                        </div>
-                    )}
+                    {/* Seletor de data */}
+                    <div>
+                        <label htmlFor="reportDate" className="block text-sm font-medium text-gray-700 mb-1">Selecione a data da reunião</label>
+                        <select id="reportDate" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border border-gray-300 focus:ring-2 focus:ring-[#DC2626]">
+                            {reportDates.map(date => <option key={date.value} value={date.value}>{date.label}</option>)}
+                        </select>
+                    </div>
                 </div>
                 {isLoading ? <div className="text-center p-8">Carregando relatório...</div> : (
                     <>
