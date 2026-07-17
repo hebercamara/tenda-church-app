@@ -437,13 +437,18 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
         csvContent += headers.join(';') + '\n';
 
         visibleStudentsInModal.forEach(student => {
-            const row = [`"${getStudentKnownName(student)}"`];
+            const row = [`"${student.name || ''}"`];
             
             let presentCount = 0;
             validRecords.forEach(r => {
                 const status = r.statuses?.[student.id] || 'pendente';
                 if (status === 'presente') presentCount++;
-                row.push(status);
+                
+                let statusLabel = '-';
+                if (status === 'presente') statusLabel = 'P';
+                else if (status === 'ausente') statusLabel = 'F';
+                
+                row.push(statusLabel);
             });
             
             ['tests', 'activities', 'assignments'].forEach(type => {
@@ -477,6 +482,8 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
             row.push(`${freq}%`, faltas, totalGrade.toFixed(2).replace('.', ','), statusStr);
             csvContent += row.join(';') + '\n';
         });
+        
+        csvContent += '\nLegenda: P = Presente; F = Falta; - = Pendente\n';
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
