@@ -122,6 +122,7 @@ function AppContent() {
     const [allConnects, setAllConnects] = useState(sampleConnects);
     const [allCourses, setAllCourses] = useState(sampleCourses);
     const [allCourseTemplates, setAllCourseTemplates] = useState(sampleCourseTemplates);
+    const [allCertificateTemplates, setAllCertificateTemplates] = useState([]);
     const [allConnectReports, setAllConnectReports] = useState(sampleConnectReports);
     const [allDecisions, setAllDecisions] = useState([]);
     const [allSimpleMembers, setAllSimpleMembers] = useState([]);
@@ -220,6 +221,7 @@ function AppContent() {
             setAllConnects(sampleConnects);
             setAllCourses(sampleCourses);
             setAllCourseTemplates(sampleCourseTemplates);
+            setAllCertificateTemplates([]);
             setAllConnectReports(sampleConnectReports);
             return;
         }
@@ -253,7 +255,7 @@ function AppContent() {
                 }
             ),
             onSnapshot(
-                collection(db, `artifacts/${appId}/public/data/courseTemplates`),
+                query(collection(db, `artifacts/${appId}/public/data/courseTemplates`)),
                 (s) => {
                     const templatesList = s.docs.map(d => ({ id: d.id, ...d.data() }));
                     const finalTemplatesList = templatesList.length > 0 ? templatesList : sampleCourseTemplates;
@@ -263,6 +265,18 @@ function AppContent() {
                     console.error('Erro ao carregar templates de curso:', error);
                     setConnectionError('Erro de conexão: Não foi possível carregar os templates de curso. Usando dados de exemplo.');
                     setAllCourseTemplates(sampleCourseTemplates);
+                }
+            ),
+            onSnapshot(
+                query(collection(db, `artifacts/${appId}/public/data/certificate_templates`)),
+                (s) => {
+                    const templatesList = s.docs.map(d => ({ id: d.id, ...d.data() }));
+                    setAllCertificateTemplates(templatesList);
+                },
+                (error) => {
+                    console.error('Erro ao carregar templates de certificado:', error);
+                    setConnectionError('Erro de conexão: Não foi possível carregar os templates de certificado.');
+                    setAllCertificateTemplates([]);
                 }
             ),
             onSnapshot(
@@ -494,7 +508,10 @@ function AppContent() {
     const closeCourseModal = () => { setEditingCourse(null); setCourseModalOpen(false); };
     const openCourseTemplateModal = (template = null) => { setEditingCourseTemplate(template); setCourseTemplateModalOpen(true); };
     const closeCourseTemplateModal = () => { setEditingCourseTemplate(null); setCourseTemplateModalOpen(false); };
-    const openManageCourseModal = (course) => { setManagingCourse(course); setManageCourseModalOpen(true); };
+    const openManageCourseModal = (course, initialTab = 'attendance') => { 
+        setManagingCourse({ ...course, initialTab }); 
+        setManageCourseModalOpen(true); 
+    };
     const closeManageCourseModal = () => setManageCourseModalOpen(false);
     const openReportModal = (connect) => { setReportingConnect(connect); setReportModalOpen(true); };
     const closeReportModal = () => setReportModalOpen(false);
@@ -1224,7 +1241,29 @@ function AppContent() {
                     return false;
                 }
             };
-            const allowed = isAdmin || (course && userEmail && (course.teacherEmail?.toLowerCase() === userEmail || isSubActive()));
+            const isAuxTeacher = () => {
+                try {
+                    const email = userEmail || '';
+                    
+                    // Auxiliar da turma inteira (legado e novo)
+                    if (course?.auxTeacherId === currentUserData?.id || (course?.auxTeacherEmail || '').toLowerCase() === email) return true;
+                    if (course?.auxiliaryTeacherId === currentUserData?.id || (course?.auxiliaryTeacherEmail || '').toLowerCase() === email) return true;
+                    if (Array.isArray(course?.auxiliaryTeachers) && course.auxiliaryTeachers.some(a => a.id === currentUserData?.id || (a.email || '').toLowerCase() === email)) return true;
+
+                    // Auxiliar de grupo
+                    if (Array.isArray(course?.groups)) {
+                        return course.groups.some(g => {
+                            if (g.assistantId === currentUserData?.id || (g.assistantEmail || '').toLowerCase() === email) return true;
+                            if (Array.isArray(g.assistants) && g.assistants.some(a => a.id === currentUserData?.id || (a.email || '').toLowerCase() === email)) return true;
+                            return false;
+                        });
+                    }
+                    return false;
+                } catch {
+                    return false;
+                }
+            };
+            const allowed = isAdmin || (course && userEmail && (course.teacherEmail?.toLowerCase() === userEmail || isSubActive() || isAuxTeacher()));
             if (!allowed) {
                 alert('Você não tem permissão para alterar a lista de alunos desta turma.');
                 return;
@@ -1501,6 +1540,8 @@ function AppContent() {
             let collectionPath = `artifacts/${appId}/public/data/${type}s`;
             if (type === 'courseTemplate') {
                 collectionPath = `artifacts/${appId}/public/data/courseTemplates`;
+            } else if (type === 'certificateTemplate') {
+                collectionPath = `artifacts/${appId}/public/data/certificate_templates`;
             }
 
             if (type === 'connect') {
@@ -1656,6 +1697,7 @@ function AppContent() {
                         allConnects={allConnects}
                         allCourses={allCourses}
                          allCourseTemplates={allCourseTemplates}
+                         allCertificateTemplates={allCertificateTemplates}
                         allConnectReports={allConnectReports}
                         allDecisions={allDecisions}
                         allSimpleMembers={allSimpleMembers}
@@ -1687,6 +1729,7 @@ function AppContent() {
                         handleAddCourseTemplate={openCourseTemplateModal}
                         handleEditCourseTemplate={openCourseTemplateModal}
                         handleDeleteCourseTemplate={triggerDelete}
+                        handleDeleteCertificateTemplate={triggerDelete}
                         handleGenerateReport={openReportModal}
                         handleGenerateFullReport={openConnectFullReportModal}
                         handleViewMember={openLeadershipTrackModal}
@@ -1753,7 +1796,7 @@ function AppContent() {
                 />
             </Modal>
             {reportingConnect && <ConnectReportModal isOpen={isReportModalOpen} onClose={closeReportModal} connect={reportingConnect} members={allMembers} onSave={handleSaveConnectReport} isAdmin={isAdmin} onViewMember={openMemberDetails} />}
-            {managingCourse && <ManageCourseModal course={managingCourse} members={allMembers} allMembers={allMembers} allSimpleMembers={allSimpleMembers} onSaveSimpleMember={handleSaveSimpleMember} areNamesSimilar={areNamesSimilar} isOpen={isManageCourseModalOpen} onClose={closeManageCourseModal} onSaveStudents={handleSaveCourseStudents} onSaveAttendance={handleSaveAttendance} onSkipClassDay={handleSkipClassDay} onViewMember={openMemberDetails} />}
+            {managingCourse && <ManageCourseModal course={managingCourse} members={allMembers} allMembers={allMembers} allSimpleMembers={allSimpleMembers} allCertificateTemplates={allCertificateTemplates} onSaveSimpleMember={handleSaveSimpleMember} areNamesSimilar={areNamesSimilar} isOpen={isManageCourseModalOpen} onClose={closeManageCourseModal} onSaveStudents={handleSaveCourseStudents} onSaveAttendance={handleSaveAttendance} onSkipClassDay={handleSkipClassDay} onViewMember={openMemberDetails} />}
             <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={handleConfirmDelete} title="Confirmar Exclusão" message={deleteAction?.message} />
             {generatingReportForConnect && <ConnectFullReportModal isOpen={isConnectFullReportModalOpen} onClose={closeConnectFullReportModal} connect={generatingReportForConnect} allMembers={allMembers} allReports={allConnectReports} />}
 

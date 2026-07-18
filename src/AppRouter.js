@@ -15,6 +15,7 @@ const ConnectsPage = React.lazy(() => import('./pages/ConnectsPage'));
 const MultiplyConnectPage = React.lazy(() => import('./pages/MultiplyConnectPage'));
 const ConnectTrackPage = React.lazy(() => import('./pages/ConnectTrackPage'));
 const CoursesPage = React.lazy(() => import('./pages/CoursesPage'));
+const CertificateEditorPage = React.lazy(() => import('./pages/CertificateEditorPage'));
 const LeadershipHierarchyPage = React.lazy(() => import('./pages/LeadershipHierarchyPage'));
 const BulkImportPage = React.lazy(() => import('./pages/BulkImportPage'));
 const MyStudentsPage = React.lazy(() => import('./pages/MyStudentsPage'));
@@ -30,6 +31,7 @@ const AppRouter = ({
     allConnects,
     allCourses,
     allCourseTemplates,
+    allCertificateTemplates,
     allConnectReports,
     allDecisions,
     allSimpleMembers,
@@ -55,6 +57,7 @@ const AppRouter = ({
     handleAddCourseTemplate,
     handleEditCourseTemplate,
     handleDeleteCourseTemplate,
+    handleDeleteCertificateTemplate,
     handleGenerateReport,
     handleGenerateFullReport,
     handleViewMember,
@@ -335,14 +338,18 @@ const AppRouter = ({
                             <CoursesPage
                                 courses={allCourses}
                                 courseTemplates={allCourseTemplates}
+                                certificateTemplates={allCertificateTemplates}
                                 allMembers={allMembers}
                                 onAddCourse={handleAddCourse}
                                 onEditCourse={handleEditCourse}
                                 onDelete={(type, id) => {
                                     if (type === 'course') handleDeleteCourse('course', id);
                                     else if (type === 'courseTemplate') handleDeleteCourseTemplate('courseTemplate', id);
+                                    else if (type === 'certificateTemplate') handleDeleteCertificateTemplate('certificateTemplate', id);
                                 }}
                                 onManageCourse={handleManageCourse}
+                                onFinalizeCourse={handleFinalizeCourse}
+                                onReopenCourse={handleReopenCourse}
                                 onAddCourseTemplate={handleAddCourseTemplate}
                                 onEditCourseTemplate={handleEditCourseTemplate}
                                 loadingStates={loadingStates}
@@ -380,6 +387,21 @@ const AppRouter = ({
                                 connects={allConnects}
                                 allMembers={allMembers}
                                 onLeadershipTrack={handleLeadershipTrack}
+                                operationStatus={operationStatus}
+                                setOperationStatus={setOperationStatus}
+                            />
+                        }
+                    />
+                )}
+
+                {/* Editor de Certificados - Admins */}
+                {isAdmin && (
+                    <Route
+                        path="/certificados/editor/:id"
+                        element={
+                            <CertificateEditorPage
+                                allCertificateTemplates={allCertificateTemplates}
+                                loadingStates={loadingStates}
                                 operationStatus={operationStatus}
                                 setOperationStatus={setOperationStatus}
                             />

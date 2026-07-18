@@ -2,6 +2,7 @@
 import { initializeApp } from "firebase/app";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 
 // Sua configuração, que já está correta.
 export const firebaseConfig = {
@@ -26,6 +27,9 @@ export const db = initializeFirestore(app, {
 
 // Auth
 export const auth = getAuth(app);
+
+// Storage
+export const storage = getStorage(app);
 
 // Exportar o ID do app (usa-se como namespace nos paths do Firestore)
 export const appId = firebaseConfig.projectId;

@@ -7,10 +7,11 @@ import { useNavigate } from 'react-router-dom';
 import Modal from './Modal';
 import PersonAutocomplete from './PersonAutocomplete';
 import BatchSimpleMemberModal from './BatchSimpleMemberModal';
+import CertificateGenerationTab from './CertificateGenerationTab';
 import { Check, Trash2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, Users, Table, Download } from 'lucide-react';
 import { formatDateToBrazilian, formatDateToAbbreviated } from '../utils/dateUtils';
 
-const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSaveSimpleMember, areNamesSimilar, isOpen, onClose, onSaveStudents, onSaveAttendance, onSkipClassDay, onViewMember }) => {
+const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSaveSimpleMember, areNamesSimilar, isOpen, onClose, onSaveStudents, onSaveAttendance, onSkipClassDay, onViewMember, allCertificateTemplates }) => {
     const { isAdmin, currentUserData } = useAuthStore();
     const navigate = useNavigate();
 
@@ -51,7 +52,7 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
         return Array.from(ids);
     }, [course.groups, currentUserData, userEmail, isMainTeacherOrSubOrAdmin]);
 
-    const [activeTab, setActiveTab] = useState('attendance');
+    const [activeTab, setActiveTab] = useState(course?.initialTab || 'attendance');
     const [showMobileActions, setShowMobileActions] = useState(false);
 
     useEffect(() => {
@@ -264,7 +265,7 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
                 .map(s => ({ ...s, scores: s.scores || { tests: [], activities: [], assignments: [] } }));
             setDraftEnrolledStudents(studentsWithScores);
 
-            setActiveTab('attendance');
+            setActiveTab(course?.initialTab || 'attendance');
             setSelectedDate(null);
             setHasUnsavedChanges(false);
 
@@ -615,6 +616,9 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
                                     <>
                                         <button onClick={() => setActiveTab('grades')} className={`${activeTab === 'grades' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Notas</button>
                                         <button onClick={() => setActiveTab('students')} className={`${activeTab === 'students' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Inscrição</button>
+                                        {course.finalized && (
+                                            <button onClick={() => setActiveTab('certificates')} className={`${activeTab === 'certificates' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Certificados</button>
+                                        )}
                                     </>
                                 )}
                             </nav>
@@ -627,6 +631,14 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
                 </div>
 
                 <div className="flex-grow mt-6 min-h-0">
+                    {activeTab === 'certificates' && (
+                        <CertificateGenerationTab 
+                            course={course} 
+                            attendanceRecords={attendanceRecords} 
+                            visibleStudentsInModal={visibleStudentsInModal} 
+                            allCertificateTemplates={allCertificateTemplates}
+                        />
+                    )}
                     {activeTab === 'students' && (
                         <div className="flex flex-col h-full space-y-6">
                             <div className="flex-shrink-0">
