@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef, Suspense, useMemo } from 'react';
+﻿import React, { useState, useEffect, useRef, Suspense, useMemo } from 'react';
 import { Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from './firebaseConfig';
+import { getTenantId } from './utils/tenantUtils';
 
 // Fallback de carregamento para divisão de código
 import LoadingSpinner from './components/LoadingSpinner';
@@ -23,6 +24,8 @@ const PersonalPortalPage = React.lazy(() => import('./pages/PersonalPortalPage')
 const CourseGroupsPage = React.lazy(() => import('./pages/CourseGroupsPage'));
 const DecisionFormPage = React.lazy(() => import('./pages/DecisionFormPage'));
 const DecisionsHistoryPage = React.lazy(() => import('./pages/DecisionsHistoryPage'));
+const MasterAdminPage = React.lazy(() => import('./pages/MasterAdminPage'));
+const ImpersonatePage = React.lazy(() => import('./pages/ImpersonatePage'));
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -79,7 +82,7 @@ const AppRouter = ({
     attendanceAlerts,
     getConnectName
 }) => {
-    const { isAdmin, currentUserData } = useAuthStore();
+    const { isAdmin, currentUserData, isSuperAdmin } = useAuthStore();
     const navigate = useNavigate();
 
     // Perfis derivados (líder, supervisor e professor) para controle de rotas
@@ -225,6 +228,23 @@ const AppRouter = ({
                 {/* Rota padrão - redireciona para dashboard */}
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
+                {/* Master Admin Route */}
+                <Route
+                    path="/master-admin"
+                    element={
+                        <MasterAdminPage onBack={() => window.history.back()} />
+                    }
+                />
+
+                
+                {(isAdmin || isSuperAdmin) && (
+                    <Route
+                        path="/visualizar-como"
+                        element={
+                            <ImpersonatePage allMembers={allMembers} />
+                        }
+                    />
+                )}
                 {/* Dashboard */}
                 <Route
                     path="/dashboard"
@@ -522,8 +542,8 @@ const ConnectTrackWrapper = ({ allConnects, allMembers, allCourses, attendanceAl
             const connectMembers = allMembers.filter(m => m.connectId === connect.id);
             const membersWithCoursesPromises = connectMembers.map(async (member) => {
                 try {
-                    const appId = process.env.REACT_APP_FIREBASE_APP_ID || 'default';
-                    const coursesRef = collection(db, `artifacts/${appId}/public/data/members/${member.id}/completedCourses`);
+                    const appId = getTenantId();
+                    const coursesRef = collection(db, `artifacts/${getTenantId()}/public/data/members/${member.id}/completedCourses`);
                     const querySnapshot = await getDocs(coursesRef);
                     const completedCourses = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     return { ...member, completedCourses };
@@ -588,3 +608,4 @@ const CourseGroupsWrapper = ({ allCourses, allMembers, allSimpleMembers, onSaveG
 };
 
 export default AppRouter;
+

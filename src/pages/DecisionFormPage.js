@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, getDocs, serverTimestamp } from 'firebase/firestore';
-import { db, appId } from '../firebaseConfig';
+import { db } from '../firebaseConfig';
+import { getTenantId } from '../utils/tenantUtils';
 import { Link } from 'react-router-dom';
 import { CheckCircle, ArrowLeft, History } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
@@ -24,7 +25,7 @@ const DecisionFormPage = () => {
     useEffect(() => {
         const fetchConnects = async () => {
             try {
-                const querySnapshot = await getDocs(collection(db, `artifacts/${appId}/public/data/connects`));
+                const querySnapshot = await getDocs(collection(db, `artifacts/${getTenantId()}/public/data/connects`));
                 const connectsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
                 // Ordenar por número
@@ -70,7 +71,7 @@ const DecisionFormPage = () => {
         setError('');
 
         try {
-            await addDoc(collection(db, `artifacts/${appId}/public/data/decisions`), {
+            await addDoc(collection(db, `artifacts/${getTenantId()}/public/data/decisions`), {
                 ...formData,
                 status: 'pendente',
                 createdAt: serverTimestamp()

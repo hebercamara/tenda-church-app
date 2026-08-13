@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
-import { db, appId } from '../firebaseConfig';
+import { db } from '../firebaseConfig';
+import { getTenantId } from '../utils/tenantUtils';
 import Modal from './Modal';
 import { formatDateToBrazilian, convertBrazilianDateToISO } from '../utils/dateUtils';
 
@@ -251,7 +252,7 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members, onSave, isAdmin
         const fetchReport = async () => {
             setIsLoading(true);
             const reportId = `${connect.id}_${selectedDate}`;
-            const reportRef = doc(db, `artifacts/${appId}/public/data/connect_reports`, reportId);
+            const reportRef = doc(db, `artifacts/${getTenantId()}/public/data/connect_reports`, reportId);
             const reportSnap = await getDoc(reportRef);
 
             if (reportSnap.exists()) {

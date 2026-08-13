@@ -1,10 +1,11 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Home, BookOpen, X, Network, GraduationCap, User, UserPlus } from 'lucide-react';
+import { LayoutDashboard, Users, Home, BookOpen, X, Network, GraduationCap, User, UserPlus, Eye } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
 const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMembers = [] }) => {
-  const { isAdmin, currentUserData } = useAuthStore();
+  const { isAdmin, isSuperAdmin, currentUserData, impersonatedUser } = useAuthStore();
+  const realIsAdmin = impersonatedUser ? false : isAdmin;
   const location = useLocation();
 
   // Determinar perfis do usuário
@@ -98,7 +99,12 @@ const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMemb
       ...((isTeacher || isLeader) && !isAdmin ? [{ id: 'my-students', label: 'Meus Alunos', icon: GraduationCap, path: '/meus-alunos' }] : []),
 
       // Hierarquia - Visível para Admins, Líderes e Supervisores
+      
+      // Hierarquia - Visível para Admins, Líderes e Supervisores
       ...((isAdmin || isLeader || isSupervisor) ? [{ id: 'hierarchy', label: 'Hierarquia', icon: Network, path: '/hierarquia-lideranca' }] : []),
+
+      // Impersonate
+      ...((realIsAdmin || isSuperAdmin) && !impersonatedUser ? [{ id: 'impersonate', label: 'Visualizar como...', icon: Eye, path: '/visualizar-como' }] : []),
     ]),
 
     // Nova Decisão - Visível para todos os usuários logados
@@ -126,12 +132,13 @@ const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMemb
           <div className="flex items-center space-x-2">
             <div className="w-7 h-7 sm:w-8 sm:h-8 bg-[#991B1B] rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-xs sm:text-sm">
-                {isAdmin ? "T" : ((currentUserData?.name || currentUserData?.displayName || "T").charAt(0).toUpperCase())}
+                {useAuthStore.getState().isSuperAdmin ? "S" : ((currentUserData?.name || currentUserData?.displayName || useAuthStore.getState().tenantData?.name || "U").charAt(0).toUpperCase())}
               </span>
             </div>
             {(() => {
+              const { isSuperAdmin, tenantData } = useAuthStore.getState();
               const displayName = currentUserData?.name || currentUserData?.displayName || '';
-              const firstName = displayName.trim().split(' ')[0] || (isAdmin ? 'Tenda' : 'Usuário');
+              const firstName = displayName.trim().split(' ')[0] || (isSuperAdmin ? 'Super Admin' : (tenantData?.name || 'Usuário'));
               return (
                 <span className="font-bold text-gray-800 text-sm sm:text-base">{firstName}</span>
               );
@@ -185,3 +192,4 @@ const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMemb
 };
 
 export default Sidebar;
+

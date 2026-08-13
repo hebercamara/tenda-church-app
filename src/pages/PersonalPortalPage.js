@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
+import { updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, sendPasswordResetEmail } from 'firebase/auth';
 import { auth, db } from '../firebaseConfig';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { 
@@ -25,7 +25,18 @@ import {
 } from 'lucide-react';
 
 const PersonalPortalPage = ({ allCourses, allMembers, allConnects }) => {
-    const { currentUserData } = useAuthStore();
+    const { currentUserData, impersonatedUser } = useAuthStore();
+    const handleSendPasswordReset = async () => {
+        try {
+            setError('');
+            setMessage('');
+            await sendPasswordResetEmail(auth, currentUserData.email);
+            setMessage('E-mail de redefinição de senha enviado com sucesso!');
+        } catch (error) {
+            console.error('Erro ao enviar e-mail de redefinição:', error);
+            setError('Erro ao enviar e-mail. Verifique se o usuário tem um e-mail válido.');
+        }
+    };
     const [activeTab, setActiveTab] = useState('dashboard');
     const [loading, setLoading] = useState(true);
     const [userCourses, setUserCourses] = useState([]);
@@ -578,7 +589,11 @@ const PersonalPortalPage = ({ allCourses, allMembers, allConnects }) => {
                     <label className="block text-sm font-medium text-stone-300 mb-2">
                         E-mail
                     </label>
-                    {editingEmail ? (
+                    {impersonatedUser ? (
+                        <div className="bg-amber-900/30 border border-amber-500/50 p-4 rounded-lg">
+                            <p className="text-amber-200 text-sm font-medium">Por motivos de segurança, você não pode alterar o e-mail enquanto visualiza o perfil de outro usuário.</p>
+                        </div>
+                    ) : editingEmail ? (
                         <input
                             type="email"
                             value={emailData.newEmail}
@@ -598,7 +613,15 @@ const PersonalPortalPage = ({ allCourses, allMembers, allConnects }) => {
                         <Key className="h-5 w-5 mr-2" />
                         Alterar Senha
                     </h3>
-                    {!editingPassword ? (
+                    {impersonatedUser ? (
+                        <button
+                            onClick={handleSendPasswordReset}
+                            className="flex items-center space-x-2 px-4 py-2 bg-[#991B1B] text-white rounded-lg hover:bg-[#7f1d1d] transition-colors"
+                        >
+                            <Mail className="h-4 w-4" />
+                            <span>Enviar E-mail de Redefinição</span>
+                        </button>
+                    ) : !editingPassword ? (
                         <button
                             onClick={() => setEditingPassword(true)}
                             className="flex items-center space-x-2 px-4 py-2 bg-stone-600 text-white rounded-lg hover:bg-stone-700 transition-colors"
@@ -744,3 +767,6 @@ const PersonalPortalPage = ({ allCourses, allMembers, allConnects }) => {
 };
 
 export default PersonalPortalPage;
+
+
+

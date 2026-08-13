@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     collection, onSnapshot, doc, updateDoc, deleteDoc, addDoc, serverTimestamp
 } from 'firebase/firestore';
-import { db, appId } from '../firebaseConfig';
+import { db } from '../firebaseConfig';
+import { getTenantId } from '../utils/tenantUtils';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
@@ -145,7 +146,7 @@ const DecisionsHistoryPage = ({ allConnects = [], getConnectName, handleUpdateDe
 
     // Carregar decisões em tempo real
     useEffect(() => {
-        const ref = collection(db, `artifacts/${appId}/public/data/decisions`);
+        const ref = collection(db, `artifacts/${getTenantId()}/public/data/decisions`);
         const unsub = onSnapshot(ref, snap => {
             const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             setDecisions(list);
@@ -178,7 +179,7 @@ const DecisionsHistoryPage = ({ allConnects = [], getConnectName, handleUpdateDe
 
     // Handlers
     const handleEdit = useCallback(async (id, form) => {
-        const ref = doc(db, `artifacts/${appId}/public/data/decisions`, id);
+        const ref = doc(db, `artifacts/${getTenantId()}/public/data/decisions`, id);
         const update = {
             name: form.name || '',
             phone: form.phone || '',
@@ -200,17 +201,17 @@ const DecisionsHistoryPage = ({ allConnects = [], getConnectName, handleUpdateDe
 
     // Desmarca como contatado — volta para pendente e limpa contactedAt
     const handleUnmark = useCallback(async (id) => {
-        const ref = doc(db, `artifacts/${appId}/public/data/decisions`, id);
+        const ref = doc(db, `artifacts/${getTenantId()}/public/data/decisions`, id);
         await updateDoc(ref, { status: 'pendente', contactedAt: null });
     }, []);
 
     const handleDelete = useCallback(async (id) => {
-        await deleteDoc(doc(db, `artifacts/${appId}/public/data/decisions`, id));
+        await deleteDoc(doc(db, `artifacts/${getTenantId()}/public/data/decisions`, id));
         setDeleteConfirm(null);
     }, []);
 
     const handleAdd = useCallback(async (form) => {
-        await addDoc(collection(db, `artifacts/${appId}/public/data/decisions`), {
+        await addDoc(collection(db, `artifacts/${getTenantId()}/public/data/decisions`), {
             ...form,
             status: 'pendente',
             createdAt: serverTimestamp(),

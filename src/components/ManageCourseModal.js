@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 // eslint-disable-next-line no-unused-vars
-import { db, appId } from '../firebaseConfig';
+import { db } from '../firebaseConfig';
+import { getTenantId } from '../utils/tenantUtils';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import Modal from './Modal';
@@ -292,7 +293,7 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
             setHasUnsavedChanges(false);
 
             let isFirstSnapshot = true;
-            const attendanceRef = collection(db, `artifacts/${appId}/public/data/courses/${course.id}/attendance`);
+            const attendanceRef = collection(db, `artifacts/${getTenantId()}/public/data/courses/${course.id}/attendance`);
             const q = query(attendanceRef, orderBy("date", "asc"));
             const unsubscribe = onSnapshot(q, (snapshot) => {
                 // Filtrar apenas registros válidos (com campo date)

@@ -8,16 +8,8 @@ import LoadingMessage from './components/LoadingMessage';
 // Firebase
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, onSnapshot, addDoc, doc, setDoc, getDocs, deleteDoc, updateDoc, query, writeBatch, where, getDoc, orderBy, serverTimestamp } from 'firebase/firestore';
-import { db, auth, appId } from './firebaseConfig';
-
-// Dados de exemplo para desenvolvimento
-import {
-    sampleMembers,
-    sampleConnects,
-    sampleCourses,
-    sampleConnectReports,
-    sampleCourseTemplates
-} from './data/sampleData';
+import { db, auth } from './firebaseConfig';
+import { getTenantId, SUPER_ADMIN_EMAIL } from './utils/tenantUtils';
 
 // Componentes
 import Sidebar from './components/Sidebar';
@@ -43,10 +35,15 @@ import DuplicateMemberModal from './components/DuplicateMemberModal';
 import ConnectTrackPage from './pages/ConnectTrackPage';
 import MemberDetailsModal from './components/MemberDetailsModal';
 
-const ADMIN_EMAIL = "tendachurchgbi@batistavida.com.br";
+// Admin Ã© determinado pelo campo isAdmin do membro OU por ser o Super Admin
+const isAdminEmail = (email) => {
+    if (!email) return false;
+    const lowerEmail = email.toLowerCase();
+    return lowerEmail === SUPER_ADMIN_EMAIL;
+};
 
-// (As funções de utilidade `calculateFinalGradeForStudent`, `getStudentStatusInfo`, `areNamesSimilar` continuam as mesmas aqui...)
-// --- FUNÇÕES DE UTILIDADE (HELPERS) ---
+// (As funÃ§Ãµes de utilidade `calculateFinalGradeForStudent`, `getStudentStatusInfo`, `areNamesSimilar` continuam as mesmas aqui...)
+// --- FUNÃ‡Ã•ES DE UTILIDADE (HELPERS) ---
 const calculateFinalGradeForStudent = (student, course) => {
     const scores = student.scores;
     const { assessment } = course;
@@ -60,7 +57,7 @@ const calculateFinalGradeForStudent = (student, course) => {
 
 const getStudentStatusInfo = (student, course, attendanceRecords) => {
     if (!attendanceRecords || !course || !student) return 'Pendente';
-    // Considerar somente dias válidos (não ignorados e não "sem aula")
+    // Considerar somente dias vÃ¡lidos (nÃ£o ignorados e nÃ£o "sem aula")
     const consideredRecords = attendanceRecords.filter(r => !r.ignoreAttendance && !r.noClass);
     let presentCount = 0;
     consideredRecords.forEach(record => {
@@ -113,24 +110,24 @@ const areNamesSimilar = (nameA, nameB, threshold) => {
 };
 
 function AppContent() {
-    const { user, isAdmin, currentUserData, setAuthData, clearAuthData } = useAuthStore();
+    const { user, isAdmin, currentUserData, setAuthData, clearAuthData, impersonatedUser, clearImpersonation } = useAuthStore();
     const [isLoadingAuth, setIsLoadingAuth] = useState(true);
     const navigate = useNavigate();
 
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [allMembers, setAllMembers] = useState(sampleMembers);
-    const [allConnects, setAllConnects] = useState(sampleConnects);
-    const [allCourses, setAllCourses] = useState(sampleCourses);
-    const [allCourseTemplates, setAllCourseTemplates] = useState(sampleCourseTemplates);
+    const [allMembers, setAllMembers] = useState([]);
+    const [allConnects, setAllConnects] = useState([]);
+    const [allCourses, setAllCourses] = useState([]);
+    const [allCourseTemplates, setAllCourseTemplates] = useState([]);
     const [allCertificateTemplates, setAllCertificateTemplates] = useState([]);
-    const [allConnectReports, setAllConnectReports] = useState(sampleConnectReports);
+    const [allConnectReports, setAllConnectReports] = useState([]);
     const [allDecisions, setAllDecisions] = useState([]);
     const [allSimpleMembers, setAllSimpleMembers] = useState([]);
     const [loadingData, setLoadingData] = useState(true);
     const [connectionError, setConnectionError] = useState(null);
     const [operationStatus, setOperationStatus] = useState({ type: null, message: null });
 
-    // Loading states para operações específicas
+    // Loading states para operaÃ§Ãµes especÃ­ficas
     const loadingStates = useMultipleLoadingStates([
         'saveMember', 'saveConnect', 'saveCourse', 'saveCourseTemplate',
         'saveReport', 'deleteMember', 'deleteConnect', 'deleteCourse',
@@ -165,146 +162,148 @@ function AppContent() {
 
     // --- Efeitos ---
 
-    // CORRIGIDO: useEffect 1 - Apenas para autenticação
+    // CORRIGIDO: useEffect 1 - Apenas para autenticaÃ§Ã£o
     useEffect(() => {
         const authUnsub = onAuthStateChanged(auth, (currentUser) => {
             setAuthData({
                 user: currentUser,
-                isAdmin: false, // Será determinado quando os dados do membro forem carregados
-                currentUserData: null // Será preenchido pelo próximo useEffect
+                isAdmin: false, // SerÃ¡ determinado quando os dados do membro forem carregados
+                currentUserData: null // SerÃ¡ preenchido pelo prÃ³ximo useEffect
             });
             setIsLoadingAuth(false);
         });
         return () => authUnsub();
     }, [setAuthData]);
 
-    // CORRIGIDO: useEffect 2 - Para buscar todos os membros e encontrar o dado do usuário logado
+    // CORRIGIDO: useEffect 2 - Para buscar todos os membros e encontrar o dado do usuÃ¡rio logado
     useEffect(() => {
         if (!user) {
-            setAllMembers(sampleMembers); // Usa dados de exemplo se não houver usuário
+            setAllMembers([]); // Usa dados de exemplo se nÃ£o houver usuÃ¡rio
             return;
         }
         const membersUnsub = onSnapshot(
-            collection(db, `artifacts/${appId}/public/data/members`),
+            collection(db, `artifacts/${getTenantId()}/public/data/members`),
             (snapshot) => {
                 const membersList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
-                // Se não há dados no Firebase, usa dados de exemplo
-                const finalMembersList = membersList.length > 0 ? membersList : sampleMembers;
+                // Se nÃ£o hÃ¡ dados no Firebase, usa dados de exemplo
+                const finalMembersList = membersList;
                 setAllMembers(finalMembersList);
 
-                // Encontra e atualiza os dados do usuário logado no store
-                const memberData = finalMembersList.find(m => m.email?.toLowerCase() === user.email?.toLowerCase());
+                // Encontra e atualiza os dados do usuÃ¡rio logado no store
+                const realMemberData = finalMembersList.find(m => m.email?.toLowerCase() === user.email?.toLowerCase());
+                const realIsAdmin = isAdminEmail(user.email) || (realMemberData?.isAdmin === true);
 
-                // Determina se é admin: email fixo OU campo isAdmin do membro
-                const userIsAdmin = user.email === ADMIN_EMAIL || (memberData?.isAdmin === true);
-
-                setAuthData({ user, isAdmin: userIsAdmin, currentUserData: memberData || null });
+                if (impersonatedUser) {
+                    setAuthData({ user, isAdmin: (impersonatedUser.isAdmin === true), currentUserData: impersonatedUser });
+                } else {
+                    setAuthData({ user, isAdmin: realIsAdmin, currentUserData: realMemberData || null });
+                }
             },
             (error) => {
                 console.error('Erro ao carregar membros:', error);
-                setConnectionError('Erro de conexão: Não foi possível carregar os dados dos membros. Usando dados de exemplo.');
-                setAllMembers(sampleMembers); // Usa dados de exemplo em caso de erro
-                // Em caso de erro, mantém apenas o admin principal
-                const userIsAdmin = user.email === ADMIN_EMAIL;
+                setConnectionError('Erro de conexÃ£o: NÃ£o foi possÃ­vel carregar os dados dos membros. ');
+                setAllMembers([]); // Usa dados de exemplo em caso de erro
+                // Em caso de erro, mantÃ©m apenas o admin principal
+                const userIsAdmin = isAdminEmail(user.email);
                 setAuthData({ user, isAdmin: userIsAdmin, currentUserData: null });
             }
         );
         return () => membersUnsub();
-    }, [user, setAuthData]); // Depende do 'user' do store
+    }, [user, setAuthData, impersonatedUser]); // Depende do 'user' do store
 
     // CORRIGIDO: useEffect 3 - Para buscar os outros dados (Connects, Cursos, etc.)
     useEffect(() => {
         if (!user) {
             setLoadingData(false);
-            // Mantém dados de exemplo se o usuário fizer logout
-            setAllConnects(sampleConnects);
-            setAllCourses(sampleCourses);
-            setAllCourseTemplates(sampleCourseTemplates);
+            // MantÃ©m dados de exemplo se o usuÃ¡rio fizer logout
+            setAllConnects([]);
+            setAllCourses([]);
+            setAllCourseTemplates([]);
             setAllCertificateTemplates([]);
-            setAllConnectReports(sampleConnectReports);
+            setAllConnectReports([]);
             return;
         }
         setLoadingData(true);
         const unsubs = [
             onSnapshot(
-                collection(db, `artifacts/${appId}/public/data/connects`),
+                collection(db, `artifacts/${getTenantId()}/public/data/connects`),
                 (s) => {
                     const connectsList = s.docs.map(d => ({ id: d.id, ...d.data() }));
-                    // Se não há dados no Firebase, usa dados de exemplo
-                    const finalConnectsList = connectsList.length > 0 ? connectsList : sampleConnects;
+                    // Se nÃ£o hÃ¡ dados no Firebase, usa dados de exemplo
+                    const finalConnectsList = connectsList;
                     setAllConnects(finalConnectsList);
                 },
                 (error) => {
                     console.error('Erro ao carregar connects:', error);
-                    setConnectionError('Erro de conexão: Não foi possível carregar os dados dos connects. Usando dados de exemplo.');
-                    setAllConnects(sampleConnects); // Usa dados de exemplo em caso de erro
+                    setConnectionError('Erro de conexÃ£o: NÃ£o foi possÃ­vel carregar os dados dos connects. ');
+                    setAllConnects([]); // Usa dados de exemplo em caso de erro
                 }
             ),
             onSnapshot(
-                collection(db, `artifacts/${appId}/public/data/courses`),
+                collection(db, `artifacts/${getTenantId()}/public/data/courses`),
                 (s) => {
                     const coursesList = s.docs.map(d => ({ id: d.id, ...d.data() }));
-                    const finalCoursesList = coursesList.length > 0 ? coursesList : sampleCourses;
+                    const finalCoursesList = coursesList;
                     setAllCourses(finalCoursesList);
                 },
                 (error) => {
                     console.error('Erro ao carregar cursos:', error);
-                    setConnectionError('Erro de conexão: Não foi possível carregar os dados dos cursos. Usando dados de exemplo.');
-                    setAllCourses(sampleCourses);
+                    setConnectionError('Erro de conexÃ£o: NÃ£o foi possÃ­vel carregar os dados dos cursos. ');
+                    setAllCourses([]);
                 }
             ),
             onSnapshot(
-                query(collection(db, `artifacts/${appId}/public/data/courseTemplates`)),
+                query(collection(db, `artifacts/${getTenantId()}/public/data/courseTemplates`)),
                 (s) => {
                     const templatesList = s.docs.map(d => ({ id: d.id, ...d.data() }));
-                    const finalTemplatesList = templatesList.length > 0 ? templatesList : sampleCourseTemplates;
+                    const finalTemplatesList = templatesList;
                     setAllCourseTemplates(finalTemplatesList);
                 },
                 (error) => {
                     console.error('Erro ao carregar templates de curso:', error);
-                    setConnectionError('Erro de conexão: Não foi possível carregar os templates de curso. Usando dados de exemplo.');
-                    setAllCourseTemplates(sampleCourseTemplates);
+                    setConnectionError('Erro de conexÃ£o: NÃ£o foi possÃ­vel carregar os templates de curso. ');
+                    setAllCourseTemplates([]);
                 }
             ),
             onSnapshot(
-                query(collection(db, `artifacts/${appId}/public/data/certificate_templates`)),
+                query(collection(db, `artifacts/${getTenantId()}/public/data/certificate_templates`)),
                 (s) => {
                     const templatesList = s.docs.map(d => ({ id: d.id, ...d.data() }));
                     setAllCertificateTemplates(templatesList);
                 },
                 (error) => {
                     console.error('Erro ao carregar templates de certificado:', error);
-                    setConnectionError('Erro de conexão: Não foi possível carregar os templates de certificado.');
+                    setConnectionError('Erro de conexÃ£o: NÃ£o foi possÃ­vel carregar os templates de certificado.');
                     setAllCertificateTemplates([]);
                 }
             ),
             onSnapshot(
-                collection(db, `artifacts/${appId}/public/data/connect_reports`),
+                collection(db, `artifacts/${getTenantId()}/public/data/connect_reports`),
                 (s) => {
                     const reportsList = s.docs.map(d => ({ id: d.id, ...d.data() }));
-                    const finalReportsList = reportsList.length > 0 ? reportsList : sampleConnectReports;
+                    const finalReportsList = reportsList;
                     setAllConnectReports(finalReportsList);
                 },
                 (error) => {
-                    console.error('Erro ao carregar relatórios:', error);
-                    setConnectionError('Erro de conexão: Não foi possível carregar os relatórios. Usando dados de exemplo.');
-                    setAllConnectReports(sampleConnectReports);
+                    console.error('Erro ao carregar relatÃ³rios:', error);
+                    setConnectionError('Erro de conexÃ£o: NÃ£o foi possÃ­vel carregar os relatÃ³rios. ');
+                    setAllConnectReports([]);
                 }
             ),
             onSnapshot(
-                collection(db, `artifacts/${appId}/public/data/decisions`),
+                collection(db, `artifacts/${getTenantId()}/public/data/decisions`),
                 (s) => {
                     const decisionsList = s.docs.map(d => ({ id: d.id, ...d.data() }));
                     setAllDecisions(decisionsList);
                 },
                 (error) => {
-                    console.error('Erro ao carregar decisões:', error);
+                    console.error('Erro ao carregar decisÃµes:', error);
                     setAllDecisions([]);
                 }
             ),
             onSnapshot(
-                collection(db, `artifacts/${appId}/public/data/course_members`),
+                collection(db, `artifacts/${getTenantId()}/public/data/course_members`),
                 (s) => {
                     const list = s.docs.map(d => {
                         const data = d.data();
@@ -350,7 +349,7 @@ function AppContent() {
         const supervisedConnects = allConnects.filter(c => c.supervisorEmail?.toLowerCase() === userEmail);
         const ledConnects = allConnects.filter(c => c.leaderEmail?.toLowerCase() === userEmail);
 
-        // Função para verificar se o usuário é professor substituto ativo
+        // FunÃ§Ã£o para verificar se o usuÃ¡rio Ã© professor substituto ativo
         const isActiveSubstitute = (course) => {
             if (!course.substituteTeacher || !course.substituteTeacher.teacherId) return false;
 
@@ -360,12 +359,12 @@ function AppContent() {
             const today = new Date();
             const startDate = new Date(course.substituteTeacher.startDate);
 
-            // Se é indefinido, verifica apenas se já começou
+            // Se Ã© indefinido, verifica apenas se jÃ¡ comeÃ§ou
             if (course.substituteTeacher.isIndefinite) {
                 return today >= startDate;
             }
 
-            // Se tem data de fim, verifica se está no período
+            // Se tem data de fim, verifica se estÃ¡ no perÃ­odo
             const endDate = new Date(course.substituteTeacher.endDate);
             return today >= startDate && today <= endDate;
         };
@@ -398,11 +397,11 @@ function AppContent() {
             return alerts;
         }
 
-        // Função para verificar se um membro estava em um Connect em uma data específica
+        // FunÃ§Ã£o para verificar se um membro estava em um Connect em uma data especÃ­fica
         const wasMemberInConnectAtDate = (member, connectId, date) => {
-            // Se o membro está atualmente no Connect
+            // Se o membro estÃ¡ atualmente no Connect
             if (member.connectId === connectId) {
-                // Verifica se já estava no Connect na data
+                // Verifica se jÃ¡ estava no Connect na data
                 if (member.connectHistory && member.connectHistory.length > 0) {
                     const currentEntry = member.connectHistory.find(entry => !entry.endDate);
                     if (currentEntry) {
@@ -410,10 +409,10 @@ function AppContent() {
                         return date >= startDate;
                     }
                 }
-                return true; // Se não tem histórico, considera que sempre esteve
+                return true; // Se nÃ£o tem histÃ³rico, considera que sempre esteve
             }
 
-            // Se o membro não está atualmente no Connect, verifica o histórico
+            // Se o membro nÃ£o estÃ¡ atualmente no Connect, verifica o histÃ³rico
             if (member.connectHistory && member.connectHistory.length > 0) {
                 return member.connectHistory.some(entry => {
                     if (entry.connectId !== connectId) return false;
@@ -456,7 +455,7 @@ function AppContent() {
                     const report = reportsForConnect[i];
                     const reportDate = report.reportDate.toDate ? report.reportDate.toDate() : new Date(report.reportDate);
 
-                    // Verifica se o membro estava no Connect na data do relatório
+                    // Verifica se o membro estava no Connect na data do relatÃ³rio
                     if (wasMemberInConnectAtDate(member, connectId, reportDate)) {
                         const attendanceStatus = report.attendance?.[member.id];
                         if (attendanceStatus === 'ausente') {
@@ -472,7 +471,7 @@ function AppContent() {
                     for (const report of reportsForConnect) {
                         const reportDate = report.reportDate.toDate ? report.reportDate.toDate() : new Date(report.reportDate);
 
-                        // Verifica se o membro estava no Connect na data do relatório
+                        // Verifica se o membro estava no Connect na data do relatÃ³rio
                         if (wasMemberInConnectAtDate(member, connectId, reportDate)) {
                             const attendanceStatus = report.attendance?.[member.id];
                             if (attendanceStatus === 'ausente') {
@@ -518,7 +517,7 @@ function AppContent() {
     const openConnectFullReportModal = (connect) => { setGeneratingReportForConnect(connect); setConnectFullReportModalOpen(true); };
     const closeConnectFullReportModal = () => setConnectFullReportModalOpen(false);
 
-    // Visualização de cadastro (somente leitura)
+    // VisualizaÃ§Ã£o de cadastro (somente leitura)
     const [isMemberDetailsOpen, setMemberDetailsOpen] = useState(false);
     const openMemberDetails = (member) => { if (!member) return; setViewingMember(member); setMemberDetailsOpen(true); };
     const closeMemberDetails = () => { setMemberDetailsOpen(false); setViewingMember(null); };
@@ -529,7 +528,7 @@ function AppContent() {
         setViewingMember(member);
 
         try {
-            const coursesRef = collection(db, `artifacts/${appId}/public/data/members/${member.id}/completedCourses`);
+            const coursesRef = collection(db, `artifacts/${getTenantId()}/public/data/members/${member.id}/completedCourses`);
             const querySnapshot = await getDocs(coursesRef);
             const courses = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setCompletedCourses(courses);
@@ -570,7 +569,7 @@ function AppContent() {
             setMemberConnectHistoryDetails(historyDetails.sort((a, b) => (b.startDate.toDate ? b.startDate.toDate() : new Date(b.startDate)) - (a.startDate.toDate ? a.startDate.toDate() : new Date(a.startDate))));
 
         } catch (error) {
-            console.error("Erro ao buscar dados para o Trilho de Liderança:", error);
+            console.error("Erro ao buscar dados para o Trilho de LideranÃ§a:", error);
             setCompletedCourses([]);
             setMemberConnectHistoryDetails([]);
         }
@@ -587,13 +586,13 @@ function AppContent() {
     const openConnectTrackPage = async (connect) => {
         if (!connect) return;
 
-        // Navegar para a página do trilho de Connect
+        // Navegar para a pÃ¡gina do trilho de Connect
         navigate(`/connect-track/${connect.id}`);
     };
     const triggerDelete = (type, id) => {
-        let message = "Tem certeza que deseja excluir este item? Esta ação não pode ser desfeita.";
+        let message = "Tem certeza que deseja excluir este item? Esta aÃ§Ã£o nÃ£o pode ser desfeita.";
         if (type === 'connect') {
-            message = "Atenção! Excluir este Connect removerá a associação de todos os membros a ele. Deseja continuar?";
+            message = "AtenÃ§Ã£o! Excluir este Connect removerÃ¡ a associaÃ§Ã£o de todos os membros a ele. Deseja continuar?";
         }
         setDeleteAction({ type, id, message });
         setConfirmModalOpen(true);
@@ -602,7 +601,7 @@ function AppContent() {
     const handleLogout = async () => { await signOut(auth); clearAuthData(); };
 
     const handleSaveMember = async (memberData, originalMember = null) => {
-        const collectionPath = `artifacts/${appId}/public/data/members`;
+        const collectionPath = `artifacts/${getTenantId()}/public/data/members`;
         const today = new Date();
 
         loadingStates.setLoading('saveMember', 'Salvando membro...');
@@ -642,7 +641,7 @@ function AppContent() {
     };
 
     const handleSaveSimpleMember = async (simpleMemberData, editingSimpleMember = null) => {
-        const collectionPath = `artifacts/${appId}/public/data/course_members`;
+        const collectionPath = `artifacts/${getTenantId()}/public/data/course_members`;
         loadingStates.setLoading('saveSimpleMember', 'Salvando cadastro simples...');
         try {
             let resultRef = null;
@@ -662,11 +661,11 @@ function AppContent() {
     };
 
     const handleDeleteSimpleMember = async (simpleMemberId) => {
-        const docRef = doc(db, `artifacts/${appId}/public/data/course_members`, simpleMemberId);
+        const docRef = doc(db, `artifacts/${getTenantId()}/public/data/course_members`, simpleMemberId);
         loadingStates.setLoading('deleteSimpleMember', 'Excluindo cadastro simples...');
         try {
             await deleteDoc(docRef);
-            loadingStates.setSuccess('deleteSimpleMember', 'Cadastro simples excluído!');
+            loadingStates.setSuccess('deleteSimpleMember', 'Cadastro simples excluÃ­do!');
         } catch (error) {
             console.error("Erro ao excluir cadastro simples:", error);
             loadingStates.setError('deleteSimpleMember', 'Erro ao excluir.');
@@ -675,10 +674,10 @@ function AppContent() {
 
     const handleMergeSimpleMemberToFull = async (simpleMemberId, fullMemberId, fullMemberName) => {
         try {
-            console.log(`🔀 Iniciando mesclagem: ${simpleMemberId} -> ${fullMemberId}`);
+            console.log(`ðŸ”€ Iniciando mesclagem: ${simpleMemberId} -> ${fullMemberId}`);
             const batch = writeBatch(db);
 
-            // 1. Procurar cursos em que o cadastro simplificado está inscrito
+            // 1. Procurar cursos em que o cadastro simplificado estÃ¡ inscrito
             const coursesToUpdate = allCourses.filter(course => 
                 Array.isArray(course.students) && course.students.some(s => s.id === simpleMemberId)
             );
@@ -692,11 +691,11 @@ function AppContent() {
                     return s;
                 });
 
-                const courseRef = doc(db, `artifacts/${appId}/public/data/courses`, course.id);
+                const courseRef = doc(db, `artifacts/${getTenantId()}/public/data/courses`, course.id);
                 batch.update(courseRef, { students: updatedStudents });
 
-                // Migrar o histórico de presença
-                const attendanceRef = collection(db, `artifacts/${appId}/public/data/courses/${course.id}/attendance`);
+                // Migrar o histÃ³rico de presenÃ§a
+                const attendanceRef = collection(db, `artifacts/${getTenantId()}/public/data/courses/${course.id}/attendance`);
                 const attendanceSnapshot = await getDocs(attendanceRef);
                 
                 attendanceSnapshot.forEach(attendanceDoc => {
@@ -712,15 +711,15 @@ function AppContent() {
             }
 
             // 2. Excluir o cadastro simples original
-            const simpleMemberRef = doc(db, `artifacts/${appId}/public/data/course_members`, simpleMemberId);
+            const simpleMemberRef = doc(db, `artifacts/${getTenantId()}/public/data/course_members`, simpleMemberId);
             batch.delete(simpleMemberRef);
 
-            // Executar todas as gravações em lote de forma atômica
+            // Executar todas as gravaÃ§Ãµes em lote de forma atÃ´mica
             await batch.commit();
-            console.log('🔀 Mesclagem concluída com sucesso!');
+            console.log('ðŸ”€ Mesclagem concluÃ­da com sucesso!');
         } catch (error) {
             console.error("Erro ao realizar mesclagem:", error);
-            alert("Ocorreu um erro ao migrar o histórico escolar da pessoa unificada.");
+            alert("Ocorreu um erro ao migrar o histÃ³rico escolar da pessoa unificada.");
         }
     };
 
@@ -778,8 +777,8 @@ function AppContent() {
 
     const handleConfirmDuplicate = async () => {
         if (existingMemberForCheck?.isSimple) {
-            // Unificação: Salvar o novo membro completo e migrar o histórico escolar do simples
-            const collectionPath = `artifacts/${appId}/public/data/members`;
+            // UnificaÃ§Ã£o: Salvar o novo membro completo e migrar o histÃ³rico escolar do simples
+            const collectionPath = `artifacts/${getTenantId()}/public/data/members`;
             const today = new Date();
             let dataToSave = { ...newMemberForCheck };
             if (dataToSave.connectId) {
@@ -790,22 +789,22 @@ function AppContent() {
                 const newMemberId = docRef.id;
                 
                 await handleMergeSimpleMemberToFull(existingMemberForCheck.id, newMemberId, dataToSave.name);
-                alert(`O cadastro simplificado de "${existingMemberForCheck.name}" foi promovido a Membro Completo e todo o histórico de cursos e presenças foi transferido com sucesso.`);
+                alert(`O cadastro simplificado de "${existingMemberForCheck.name}" foi promovido a Membro Completo e todo o histÃ³rico de cursos e presenÃ§as foi transferido com sucesso.`);
             } catch (error) {
-                console.error("Erro na unificação:", error);
+                console.error("Erro na unificaÃ§Ã£o:", error);
                 alert("Erro ao unificar cadastros.");
             }
         } else if (existingMemberForCheck?.connectId) {
             const connect = allConnects.find(c => c.id === existingMemberForCheck.connectId);
             const leader = allMembers.find(m => m.id === connect?.leaderId);
-            alert(`Este membro já pertence ao Connect ${connect?.number} - ${connect?.name}.\n\nPor favor, entre em contato com o líder: ${leader?.name} (${leader?.phone}) para atualizar o cadastro existente.`);
+            alert(`Este membro jÃ¡ pertence ao Connect ${connect?.number} - ${connect?.name}.\n\nPor favor, entre em contato com o lÃ­der: ${leader?.name} (${leader?.phone}) para atualizar o cadastro existente.`);
         } else {
-            alert(`Este membro já está no sistema. Para evitar a criação de uma duplicata, por favor, feche esta janela e edite o cadastro existente de "${existingMemberForCheck.name}" na lista de membros.`);
+            alert(`Este membro jÃ¡ estÃ¡ no sistema. Para evitar a criaÃ§Ã£o de uma duplicata, por favor, feche esta janela e edite o cadastro existente de "${existingMemberForCheck.name}" na lista de membros.`);
         }
         setDuplicateModalOpen(false);
     };
 
-    // Função de retry para operações do Firestore com backoff exponencial e detecção de erro transitório
+    // FunÃ§Ã£o de retry para operaÃ§Ãµes do Firestore com backoff exponencial e detecÃ§Ã£o de erro transitÃ³rio
     const retryFirestoreOperation = async (
         operation,
         maxRetries = 5,
@@ -814,7 +813,7 @@ function AppContent() {
         const isTransientError = (err) => {
             const code = err?.code;
             const msg = String(err?.message || '');
-            // Erros comuns de rede/latência que valem retry
+            // Erros comuns de rede/latÃªncia que valem retry
             const transientCodes = ['unavailable', 'deadline-exceeded', 'aborted'];
             const transientMsgPattern = /(ERR_HTTP2_PROTOCOL_ERROR|Failed to load resource|network|quota|timeout)/i;
             return transientCodes.includes(code) || transientMsgPattern.test(msg);
@@ -822,15 +821,15 @@ function AppContent() {
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                console.log(`🔄 Tentativa ${attempt}/${maxRetries} da operação Firestore`);
+                console.log(`ðŸ”„ Tentativa ${attempt}/${maxRetries} da operaÃ§Ã£o Firestore`);
                 return await operation();
             } catch (error) {
                 const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
-                console.error(`❌ Erro na tentativa ${attempt}:`, error);
+                console.error(`âŒ Erro na tentativa ${attempt}:`, error);
 
-                // Se for erro permanente (não transitório) ou está offline, não insiste
+                // Se for erro permanente (nÃ£o transitÃ³rio) ou estÃ¡ offline, nÃ£o insiste
                 if (!isTransientError(error) || !online) {
-                    console.warn('⛔ Erro não transitório ou offline detectado. Interrompendo retries.');
+                    console.warn('â›” Erro nÃ£o transitÃ³rio ou offline detectado. Interrompendo retries.');
                     throw error;
                 }
 
@@ -841,13 +840,13 @@ function AppContent() {
                 // Backoff exponencial com jitter
                 const jitter = Math.floor(Math.random() * 400);
                 const delayMs = baseDelayMs * Math.pow(2, attempt - 1) + jitter;
-                console.log(`⏳ Aguardando ${delayMs}ms antes da nova tentativa...`);
+                console.log(`â³ Aguardando ${delayMs}ms antes da nova tentativa...`);
                 await new Promise(resolve => setTimeout(resolve, delayMs));
             }
         }
     };
 
-    // Definir (adicionar) Líder Auxiliar para um Connect (suporta múltiplos auxiliares)
+    // Definir (adicionar) LÃ­der Auxiliar para um Connect (suporta mÃºltiplos auxiliares)
     const handleSetAuxLeader = async (connect, memberId) => {
         try {
             const userEmail = (currentUserData?.email || '').toLowerCase();
@@ -855,47 +854,47 @@ function AppContent() {
                 connect.leaderId === currentUserData?.id || (connect.leaderEmail || '').toLowerCase() === userEmail ||
                 (connect.supervisorEmail || '').toLowerCase() === userEmail;
             if (!canSet) {
-                setOperationStatus({ type: 'error', message: 'Você não tem permissão para definir Líder Auxiliar deste Connect.' });
+                setOperationStatus({ type: 'error', message: 'VocÃª nÃ£o tem permissÃ£o para definir LÃ­der Auxiliar deste Connect.' });
                 return;
             }
 
             const auxMember = allMembers.find(m => m.id === memberId);
             if (!auxMember || !auxMember.email) {
-                setOperationStatus({ type: 'error', message: 'Seleção inválida. O membro precisa ter e-mail cadastrado.' });
+                setOperationStatus({ type: 'error', message: 'SeleÃ§Ã£o invÃ¡lida. O membro precisa ter e-mail cadastrado.' });
                 return;
             }
 
-            // Preparar lista atual de auxiliares (compatível com documentos legados)
+            // Preparar lista atual de auxiliares (compatÃ­vel com documentos legados)
             const existingAux = Array.isArray(connect.auxLeaders) ? connect.auxLeaders : [];
             const alreadyAux = existingAux.some(l => l.id === auxMember.id || (l.email || '').toLowerCase() === (auxMember.email || '').toLowerCase());
             if (alreadyAux) {
-                setOperationStatus({ type: 'error', message: 'Este membro já é Líder Auxiliar neste Connect.' });
+                setOperationStatus({ type: 'error', message: 'Este membro jÃ¡ Ã© LÃ­der Auxiliar neste Connect.' });
                 return;
             }
 
             const updatedAux = [...existingAux, { id: auxMember.id, email: auxMember.email, name: auxMember.name }];
 
-            loadingStates.setLoading('saveConnect', 'Definindo Líder Auxiliar...');
+            loadingStates.setLoading('saveConnect', 'Definindo LÃ­der Auxiliar...');
             await retryFirestoreOperation(async () => {
-                const ref = doc(db, `artifacts/${appId}/public/data/connects`, connect.id);
+                const ref = doc(db, `artifacts/${getTenantId()}/public/data/connects`, connect.id);
                 await updateDoc(ref, {
-                    // Novo modelo com múltiplos auxiliares
+                    // Novo modelo com mÃºltiplos auxiliares
                     auxLeaders: updatedAux,
-                    // Manter campos legados se ainda não definidos (compatibilidade)
+                    // Manter campos legados se ainda nÃ£o definidos (compatibilidade)
                     auxLeaderId: connect.auxLeaderId || (updatedAux[0]?.id || ''),
                     auxLeaderEmail: connect.auxLeaderEmail || (updatedAux[0]?.email || ''),
                     auxLeaderName: connect.auxLeaderName || (updatedAux[0]?.name || ''),
                 });
             });
 
-            loadingStates.setSuccess('saveConnect', 'Líder Auxiliar adicionado com sucesso!');
+            loadingStates.setSuccess('saveConnect', 'LÃ­der Auxiliar adicionado com sucesso!');
         } catch (error) {
-            console.error('Erro ao definir Líder Auxiliar:', error);
-            loadingStates.setError('saveConnect', 'Erro ao definir Líder Auxiliar.');
+            console.error('Erro ao definir LÃ­der Auxiliar:', error);
+            loadingStates.setError('saveConnect', 'Erro ao definir LÃ­der Auxiliar.');
         }
     };
 
-    // Remover Líder Auxiliar de um Connect
+    // Remover LÃ­der Auxiliar de um Connect
     const handleRemoveAuxLeader = async (connect, memberId) => {
         try {
             const userEmail = (currentUserData?.email || '').toLowerCase();
@@ -903,16 +902,16 @@ function AppContent() {
                 connect.leaderId === currentUserData?.id || (connect.leaderEmail || '').toLowerCase() === userEmail ||
                 (connect.supervisorEmail || '').toLowerCase() === userEmail;
             if (!canSet) {
-                setOperationStatus({ type: 'error', message: 'Você não tem permissão para remover Líder Auxiliar deste Connect.' });
+                setOperationStatus({ type: 'error', message: 'VocÃª nÃ£o tem permissÃ£o para remover LÃ­der Auxiliar deste Connect.' });
                 return;
             }
 
             const existingAux = Array.isArray(connect.auxLeaders) ? connect.auxLeaders : [];
             const newAux = existingAux.filter(l => l.id !== memberId);
 
-            loadingStates.setLoading('saveConnect', 'Removendo Líder Auxiliar...');
+            loadingStates.setLoading('saveConnect', 'Removendo LÃ­der Auxiliar...');
             await retryFirestoreOperation(async () => {
-                const ref = doc(db, `artifacts/${appId}/public/data/connects`, connect.id);
+                const ref = doc(db, `artifacts/${getTenantId()}/public/data/connects`, connect.id);
                 const legacyUpdate = {};
                 // Atualizar campos legados se o removido era o auxiliar legado
                 if (connect.auxLeaderId === memberId) {
@@ -926,10 +925,10 @@ function AppContent() {
                 });
             });
 
-            loadingStates.setSuccess('saveConnect', 'Líder Auxiliar removido com sucesso!');
+            loadingStates.setSuccess('saveConnect', 'LÃ­der Auxiliar removido com sucesso!');
         } catch (error) {
-            console.error('Erro ao remover Líder Auxiliar:', error);
-            loadingStates.setError('saveConnect', 'Erro ao remover Líder Auxiliar.');
+            console.error('Erro ao remover LÃ­der Auxiliar:', error);
+            loadingStates.setError('saveConnect', 'Erro ao remover LÃ­der Auxiliar.');
         }
     };
 
@@ -953,13 +952,13 @@ function AppContent() {
             };
             const canSet = isAdmin || ((course.teacherEmail || '').toLowerCase() === userEmail) || isSubActive();
             if (!canSet) {
-                setOperationStatus({ type: 'error', message: 'Você não tem permissão para definir Auxiliar nesta turma.' });
+                setOperationStatus({ type: 'error', message: 'VocÃª nÃ£o tem permissÃ£o para definir Auxiliar nesta turma.' });
                 return;
             }
 
             const auxMember = allMembers.find(m => m.id === memberId);
             if (!auxMember || !auxMember.email) {
-                setOperationStatus({ type: 'error', message: 'Seleção inválida. O auxiliar precisa ter e-mail cadastrado.' });
+                setOperationStatus({ type: 'error', message: 'SeleÃ§Ã£o invÃ¡lida. O auxiliar precisa ter e-mail cadastrado.' });
                 return;
             }
 
@@ -972,7 +971,7 @@ function AppContent() {
 
             loadingStates.setLoading('saveCourse', 'Definindo Auxiliar de Professor...');
             await retryFirestoreOperation(async () => {
-                const ref = doc(db, `artifacts/${appId}/public/data/courses`, course.id);
+                const ref = doc(db, `artifacts/${getTenantId()}/public/data/courses`, course.id);
                 await updateDoc(ref, {
                     auxTeacherId: auxMember.id,
                     auxTeacherEmail: auxMember.email,
@@ -988,26 +987,26 @@ function AppContent() {
     };
 
     const handleSaveConnect = async (connectData) => {
-        const collectionPath = `artifacts/${appId}/public/data/connects`;
+        const collectionPath = `artifacts/${getTenantId()}/public/data/connects`;
 
-        console.log('🔄 Iniciando salvamento do Connect:', connectData);
+        console.log('ðŸ”„ Iniciando salvamento do Connect:', connectData);
         loadingStates.setLoading('saveConnect', 'Salvando connect...');
 
         try {
             let connectId = editingConnect?.id;
-            console.log('📝 Connect ID:', connectId, 'Editando:', !!editingConnect);
+            console.log('ðŸ“ Connect ID:', connectId, 'Editando:', !!editingConnect);
 
-            // Validações básicas
+            // ValidaÃ§Ãµes bÃ¡sicas
             if (!connectData.leaderId) {
-                throw new Error('Líder é obrigatório');
+                throw new Error('LÃ­der Ã© obrigatÃ³rio');
             }
 
             const leader = allMembers.find(m => m.id === connectData.leaderId);
             if (!leader) {
-                throw new Error('Líder selecionado não encontrado');
+                throw new Error('LÃ­der selecionado nÃ£o encontrado');
             }
 
-            console.log('👤 Líder encontrado:', leader.name);
+            console.log('ðŸ‘¤ LÃ­der encontrado:', leader.name);
 
             // Buscar membros atuais do Connect (se editando)
             let currentMemberIds = [];
@@ -1015,51 +1014,51 @@ function AppContent() {
                 currentMemberIds = allMembers
                     .filter(m => m.connectId === editingConnect.id)
                     .map(m => m.id);
-                console.log('👥 Membros atuais do Connect:', currentMemberIds.length);
+                console.log('ðŸ‘¥ Membros atuais do Connect:', currentMemberIds.length);
             }
 
             // Salvar o Connect
-            console.log('💾 Salvando dados do Connect...');
+            console.log('ðŸ’¾ Salvando dados do Connect...');
             if (editingConnect) {
                 await retryFirestoreOperation(async () => {
                     await setDoc(doc(db, collectionPath, connectId), connectData);
                 });
-                console.log('✅ Connect atualizado com sucesso');
+                console.log('âœ… Connect atualizado com sucesso');
             } else {
-                // Verificar se já existe um Connect com este número
-                console.log('🔍 Verificando duplicação de número...');
+                // Verificar se jÃ¡ existe um Connect com este nÃºmero
+                console.log('ðŸ” Verificando duplicaÃ§Ã£o de nÃºmero...');
                 const querySnapshot = await retryFirestoreOperation(async () => {
                     const q = query(collection(db, collectionPath), where("number", "==", connectData.number));
                     return await getDocs(q);
                 });
 
                 if (!querySnapshot.empty) {
-                    console.log('❌ Connect com número duplicado encontrado');
-                    loadingStates.setError('saveConnect', 'Já existe um Connect com este número.');
+                    console.log('âŒ Connect com nÃºmero duplicado encontrado');
+                    loadingStates.setError('saveConnect', 'JÃ¡ existe um Connect com este nÃºmero.');
                     return;
                 }
-                console.log('✅ Número do Connect disponível');
+                console.log('âœ… NÃºmero do Connect disponÃ­vel');
 
                 const newDocRef = await retryFirestoreOperation(async () => {
                     return await addDoc(collection(db, collectionPath), connectData);
                 });
                 connectId = newDocRef.id;
-                console.log('✅ Novo Connect criado com ID:', connectId);
+                console.log('âœ… Novo Connect criado com ID:', connectId);
             }
 
             // Usar batch para sincronizar membros
-            console.log('🔄 Iniciando sincronização de membros...');
+            console.log('ðŸ”„ Iniciando sincronizaÃ§Ã£o de membros...');
             const batch = writeBatch(db);
 
-            // Remover connectId dos membros que não estão mais no Connect
+            // Remover connectId dos membros que nÃ£o estÃ£o mais no Connect
             const membersToRemove = currentMemberIds.filter(id => !connectData.memberIds.includes(id));
             const today = new Date();
 
-            console.log('➖ Membros a remover:', membersToRemove.length);
+            console.log('âž– Membros a remover:', membersToRemove.length);
             membersToRemove.forEach(memberId => {
                 const member = allMembers.find(m => m.id === memberId);
                 if (member) {
-                    console.log('🔄 Removendo membro:', member.name);
+                    console.log('ðŸ”„ Removendo membro:', member.name);
                     const history = member.connectHistory || [];
                     const lastEntry = history.find(entry => !entry.endDate);
 
@@ -1067,7 +1066,7 @@ function AppContent() {
                         lastEntry.endDate = today;
                     }
 
-                    const memberRef = doc(db, `artifacts/${appId}/public/data/members`, memberId);
+                    const memberRef = doc(db, `artifacts/${getTenantId()}/public/data/members`, memberId);
                     batch.update(memberRef, {
                         connectId: '',
                         connectHistory: history
@@ -1077,12 +1076,12 @@ function AppContent() {
 
             // Adicionar connectId aos novos membros do Connect
             const membersToAdd = connectData.memberIds.filter(id => !currentMemberIds.includes(id));
-            console.log('➕ Membros a adicionar:', membersToAdd.length);
+            console.log('âž• Membros a adicionar:', membersToAdd.length);
 
             membersToAdd.forEach(memberId => {
                 const member = allMembers.find(m => m.id === memberId);
                 if (member) {
-                    console.log('🔄 Adicionando membro:', member.name);
+                    console.log('ðŸ”„ Adicionando membro:', member.name);
                     const history = member.connectHistory || [];
                     const lastEntry = history.find(entry => !entry.endDate);
 
@@ -1098,7 +1097,7 @@ function AppContent() {
                         endDate: null
                     });
 
-                    const memberRef = doc(db, `artifacts/${appId}/public/data/members`, memberId);
+                    const memberRef = doc(db, `artifacts/${getTenantId()}/public/data/members`, memberId);
                     batch.update(memberRef, {
                         connectId: connectId,
                         connectHistory: history
@@ -1106,33 +1105,33 @@ function AppContent() {
                 }
             });
 
-            // Garantir que o líder tenha o connectId correto
-            console.log('👤 Atualizando Connect do líder...');
-            const leaderRef = doc(db, `artifacts/${appId}/public/data/members`, connectData.leaderId);
+            // Garantir que o lÃ­der tenha o connectId correto
+            console.log('ðŸ‘¤ Atualizando Connect do lÃ­der...');
+            const leaderRef = doc(db, `artifacts/${getTenantId()}/public/data/members`, connectData.leaderId);
             batch.update(leaderRef, { connectId: connectId });
 
-            // Executar todas as atualizações em lote
-            console.log('💾 Executando batch de atualizações...');
+            // Executar todas as atualizaÃ§Ãµes em lote
+            console.log('ðŸ’¾ Executando batch de atualizaÃ§Ãµes...');
             await retryFirestoreOperation(async () => {
                 await batch.commit();
             });
-            console.log('✅ Batch executado com sucesso');
+            console.log('âœ… Batch executado com sucesso');
 
             loadingStates.setSuccess('saveConnect', 'Connect salvo com sucesso!');
             closeConnectModal();
         } catch (error) {
-            console.error("❌ Erro ao salvar connect:", error);
-            console.error("📊 Stack trace:", error.stack);
+            console.error("âŒ Erro ao salvar connect:", error);
+            console.error("ðŸ“Š Stack trace:", error.stack);
             loadingStates.setError('saveConnect', `Erro ao salvar connect: ${error.message}`);
         }
     };
     const generateAttendanceRecords = async (courseId, courseData) => {
-        const attendanceSnapshot = await getDocs(collection(db, `artifacts/${appId}/public/data/courses/${courseId}/attendance`));
+        const attendanceSnapshot = await getDocs(collection(db, `artifacts/${getTenantId()}/public/data/courses/${courseId}/attendance`));
         const existingRecords = {};
         attendanceSnapshot.forEach(d => { existingRecords[d.id] = d.data(); });
 
         const batch = writeBatch(db);
-        const weekDaysMap = { "Domingo": 0, "Segunda-feira": 1, "Terça-feira": 2, "Quarta-feira": 3, "Quinta-feira": 4, "Sexta-feira": 5, "Sábado": 6 };
+        const weekDaysMap = { "Domingo": 0, "Segunda-feira": 1, "TerÃ§a-feira": 2, "Quarta-feira": 3, "Quinta-feira": 4, "Sexta-feira": 5, "SÃ¡bado": 6 };
         const targetDay = courseData.isSporadic ? null : weekDaysMap[courseData.classDay];
         const activityPlanCsv = Array.isArray(courseData?.assessment?.activities?.plan) ? courseData.assessment.activities.plan : [];
         const lessonPlan = Array.isArray(courseData?.lessonPlan) ? courseData.lessonPlan : [];
@@ -1143,7 +1142,7 @@ function AppContent() {
         const createRecordForDate = (theDate) => {
             sessionNumber += 1;
             const dateString = theDate.toISOString().split('T')[0];
-            const attendanceRef = doc(db, `artifacts/${appId}/public/data/courses/${courseId}/attendance/${dateString}`);
+            const attendanceRef = doc(db, `artifacts/${getTenantId()}/public/data/courses/${courseId}/attendance/${dateString}`);
             
             const record = { date: theDate, sessionNumber };
             if (!existingRecords[dateString]) {
@@ -1161,7 +1160,7 @@ function AppContent() {
             } else if (activityPlanCsv.length > 0) {
                 const position = activityPlanCsv.indexOf(sessionNumber);
                 if (position >= 0) {
-                    // activityIndex é 1-base: A1 na primeira ocorrência do plano, A2 na segunda, etc.
+                    // activityIndex Ã© 1-base: A1 na primeira ocorrÃªncia do plano, A2 na segunda, etc.
                     record.activityIndex = position + 1;
                 }
             }
@@ -1202,7 +1201,7 @@ function AppContent() {
         await batch.commit();
     };
     const handleSaveCourse = async (courseData) => {
-        const collectionPath = `artifacts/${appId}/public/data/courses`;
+        const collectionPath = `artifacts/${getTenantId()}/public/data/courses`;
 
         loadingStates.setLoading('saveCourse', 'Salvando curso...');
 
@@ -1222,7 +1221,7 @@ function AppContent() {
             loadingStates.setError('saveCourse', 'Erro ao salvar curso. Tente novamente.');
         }
     };
-    const handleSaveCourseTemplate = async (templateData) => { const collectionPath = `artifacts/${appId}/public/data/courseTemplates`; try { if (editingCourseTemplate) { await setDoc(doc(db, collectionPath, editingCourseTemplate.id), templateData); } else { await addDoc(collection(db, collectionPath), templateData); } closeCourseTemplateModal(); } catch (error) { console.error("Erro ao salvar modelo de curso:", error); } };
+    const handleSaveCourseTemplate = async (templateData) => { const collectionPath = `artifacts/${getTenantId()}/public/data/courseTemplates`; try { if (editingCourseTemplate) { await setDoc(doc(db, collectionPath, editingCourseTemplate.id), templateData); } else { await addDoc(collection(db, collectionPath), templateData); } closeCourseTemplateModal(); } catch (error) { console.error("Erro ao salvar modelo de curso:", error); } };
     const handleSaveCourseStudents = async (courseId, students) => {
         try {
             const course = allCourses.find(c => c.id === courseId);
@@ -1265,10 +1264,10 @@ function AppContent() {
             };
             const allowed = isAdmin || (course && userEmail && (course.teacherEmail?.toLowerCase() === userEmail || isSubActive() || isAuxTeacher()));
             if (!allowed) {
-                alert('Você não tem permissão para alterar a lista de alunos desta turma.');
+                alert('VocÃª nÃ£o tem permissÃ£o para alterar a lista de alunos desta turma.');
                 return;
             }
-            const courseRef = doc(db, `artifacts/${appId}/public/data/courses/${courseId}`);
+            const courseRef = doc(db, `artifacts/${getTenantId()}/public/data/courses/${courseId}`);
             await updateDoc(courseRef, { students: students });
         } catch (error) {
             console.error("Erro ao salvar alunos do curso:", error);
@@ -1316,10 +1315,10 @@ function AppContent() {
             };
             const allowed = isAdmin || (course && userEmail && (course.teacherEmail?.toLowerCase() === userEmail || isSubActive() || isAuxTeacher()));
             if (!allowed) {
-                alert('Você não tem permissão para registrar presença/notas nesta turma.');
+                alert('VocÃª nÃ£o tem permissÃ£o para registrar presenÃ§a/notas nesta turma.');
                 return;
             }
-            const attendanceRef = doc(db, `artifacts/${appId}/public/data/courses/${courseId}/attendance/${dateId}`);
+            const attendanceRef = doc(db, `artifacts/${getTenantId()}/public/data/courses/${courseId}/attendance/${dateId}`);
             const payload = {};
             if (statuses) payload.statuses = statuses;
             if (typeof metaOrActivityIndex !== 'undefined') {
@@ -1335,7 +1334,7 @@ function AppContent() {
             }
             await updateDoc(attendanceRef, payload);
         } catch (error) {
-            console.error("Erro ao salvar presença:", error);
+            console.error("Erro ao salvar presenÃ§a:", error);
         }
     };
     const handleSkipClassDay = async (courseId, dateId) => {
@@ -1355,38 +1354,38 @@ function AppContent() {
                 } catch { return false; }
             };
             const allowed = isAdmin || (course && userEmail && (course.teacherEmail?.toLowerCase() === userEmail || isSubActive()));
-            if (!allowed) { alert('Você não tem permissão para alterar o calendário desta turma.'); return; }
+            if (!allowed) { alert('VocÃª nÃ£o tem permissÃ£o para alterar o calendÃ¡rio desta turma.'); return; }
 
-            const attendanceColl = collection(db, `artifacts/${appId}/public/data/courses/${courseId}/attendance`);
+            const attendanceColl = collection(db, `artifacts/${getTenantId()}/public/data/courses/${courseId}/attendance`);
             const snapshot = await getDocs(query(attendanceColl, orderBy('date', 'asc')));
             const records = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             const targetIndex = records.findIndex(r => r.id === dateId);
             if (targetIndex < 0) return;
 
-            // Marcar o dia como 'sem aula' e remover o número de sessão
+            // Marcar o dia como 'sem aula' e remover o nÃºmero de sessÃ£o
             const batch = writeBatch(db);
-            const targetRef = doc(db, `artifacts/${appId}/public/data/courses/${courseId}/attendance/${dateId}`);
+            const targetRef = doc(db, `artifacts/${getTenantId()}/public/data/courses/${courseId}/attendance/${dateId}`);
             batch.update(targetRef, { noClass: true, sessionNumber: null });
 
-            // Reatribuir números de sessão para os dias seguintes
+            // Reatribuir nÃºmeros de sessÃ£o para os dias seguintes
             for (let i = targetIndex + 1; i < records.length; i++) {
                 const rec = records[i];
                 if (typeof rec.sessionNumber === 'number') {
-                    const ref = doc(db, `artifacts/${appId}/public/data/courses/${courseId}/attendance/${rec.id}`);
+                    const ref = doc(db, `artifacts/${getTenantId()}/public/data/courses/${courseId}/attendance/${rec.id}`);
                     batch.update(ref, { sessionNumber: rec.sessionNumber - 1 });
                 }
             }
 
-            // Adicionar uma semana ao calendário: criar novo registro após o último
+            // Adicionar uma semana ao calendÃ¡rio: criar novo registro apÃ³s o Ãºltimo
             const last = records[records.length - 1];
             const lastDate = new Date(last.date.seconds ? last.date.seconds * 1000 : last.date);
             const nextDate = new Date(lastDate);
             nextDate.setDate(nextDate.getDate() + 7);
             const dateString = nextDate.toISOString().split('T')[0];
-            const newRef = doc(db, `artifacts/${appId}/public/data/courses/${courseId}/attendance/${dateString}`);
+            const newRef = doc(db, `artifacts/${getTenantId()}/public/data/courses/${courseId}/attendance/${dateString}`);
             const initialStatuses = (course.students || []).reduce((acc, student) => { acc[student.id] = 'pendente'; return acc; }, {});
 
-            // Próxima sessão é a maior sessão atual + 1
+            // PrÃ³xima sessÃ£o Ã© a maior sessÃ£o atual + 1
             const maxSession = records.reduce((m, r) => typeof r.sessionNumber === 'number' ? Math.max(m, r.sessionNumber) : m, 0);
             const nextSessionNumber = maxSession + 1;
             const record = { date: nextDate, statuses: initialStatuses, sessionNumber: nextSessionNumber };
@@ -1405,11 +1404,11 @@ function AppContent() {
             await batch.commit();
         } catch (error) {
             console.error('Erro ao pular dia de aula:', error);
-            alert('Não foi possível pular o dia de aula.');
+            alert('NÃ£o foi possÃ­vel pular o dia de aula.');
         }
     };
     const handleSaveCourseGroups = async (courseId, groupsData) => {
-        const docRef = doc(db, `artifacts/${appId}/public/data/courses`, courseId);
+        const docRef = doc(db, `artifacts/${getTenantId()}/public/data/courses`, courseId);
         loadingStates.setLoading('saveCourse', 'Salvando grupos...');
         try {
             await retryFirestoreOperation(async () => {
@@ -1424,22 +1423,22 @@ function AppContent() {
     const handleSaveConnectReport = async (reportData) => {
         const dateString = reportData.reportDate.toISOString().split('T')[0];
         const reportId = `${reportData.connectId}_${dateString}`;
-        const reportRef = doc(db, `artifacts/${appId}/public/data/connect_reports`, reportId);
+        const reportRef = doc(db, `artifacts/${getTenantId()}/public/data/connect_reports`, reportId);
 
-        loadingStates.setLoading('saveReport', 'Salvando relatório...');
+        loadingStates.setLoading('saveReport', 'Salvando relatÃ³rio...');
 
         try {
             await setDoc(reportRef, reportData);
-            loadingStates.setSuccess('saveReport', 'Relatório salvo com sucesso!');
+            loadingStates.setSuccess('saveReport', 'RelatÃ³rio salvo com sucesso!');
         } catch (error) {
-            console.error("Erro ao salvar relatório do Connect:", error);
-            loadingStates.setError('saveReport', 'Erro ao salvar relatório. Tente novamente.');
+            console.error("Erro ao salvar relatÃ³rio do Connect:", error);
+            loadingStates.setError('saveReport', 'Erro ao salvar relatÃ³rio. Tente novamente.');
         }
     };
-    // Funções de atualização de perfil removidas temporariamente (não utilizadas)
+    // FunÃ§Ãµes de atualizaÃ§Ã£o de perfil removidas temporariamente (nÃ£o utilizadas)
     const handleSaveMilestones = async (memberId, milestones, leadershipCourses) => {
-        if (!memberId) throw new Error("ID do membro não fornecido.");
-        const memberRef = doc(db, `artifacts/${appId}/public/data/members`, memberId);
+        if (!memberId) throw new Error("ID do membro nÃ£o fornecido.");
+        const memberRef = doc(db, `artifacts/${getTenantId()}/public/data/members`, memberId);
         const milestonesToSave = { ...milestones };
         Object.keys(milestonesToSave).forEach(key => {
             milestonesToSave[key].completed = !!milestonesToSave[key].date;
@@ -1454,10 +1453,10 @@ function AppContent() {
     };
     const handleFinalizeCourse = async (course) => {
         if (!course || !course.id) return;
-        const confirmation = window.confirm(`Tem certeza que deseja finalizar o curso "${course.name}" e processar os resultados? Esta ação não pode ser desfeita.`);
+        const confirmation = window.confirm(`Tem certeza que deseja finalizar o curso "${course.name}" e processar os resultados? Esta aÃ§Ã£o nÃ£o pode ser desfeita.`);
         if (!confirmation) return;
         try {
-            const attendanceRef = collection(db, `artifacts/${appId}/public/data/courses/${course.id}/attendance`);
+            const attendanceRef = collection(db, `artifacts/${getTenantId()}/public/data/courses/${course.id}/attendance`);
             const attendanceSnapshot = await getDocs(attendanceRef);
             const attendanceRecords = attendanceSnapshot.docs.map(d => d.data());
             let approvedCount = 0;
@@ -1467,7 +1466,7 @@ function AppContent() {
                 if (status === 'Aprovado') {
                     approvedCount++;
                     const finalGrade = calculateFinalGradeForStudent(student, course);
-                    const completedCourseRef = doc(db, `artifacts/${appId}/public/data/members/${student.id}/completedCourses/${course.id}`);
+                    const completedCourseRef = doc(db, `artifacts/${getTenantId()}/public/data/members/${student.id}/completedCourses/${course.id}`);
                     await setDoc(completedCourseRef, {
                         courseName: course.name,
                         completionDate: new Date(),
@@ -1476,7 +1475,7 @@ function AppContent() {
                     });
                 }
             }
-            const courseRef = doc(db, `artifacts/${appId}/public/data/courses`, course.id);
+            const courseRef = doc(db, `artifacts/${getTenantId()}/public/data/courses`, course.id);
             await updateDoc(courseRef, { finalized: true });
             alert(`Curso "${course.name}" finalizado com sucesso! ${approvedCount} de ${students.length} alunos foram aprovados e tiveram seus registros atualizados.`);
         } catch (error) {
@@ -1486,10 +1485,10 @@ function AppContent() {
     };
     const handleReopenCourse = async (course) => {
         if (!course || !course.id) return;
-        const confirmation = window.confirm(`Tem certeza que deseja reabrir o curso "${course.name}"? Isso permitirá novas edições de notas e presenças, mas não removerá os registros do Trilho de Liderança já criados.`);
+        const confirmation = window.confirm(`Tem certeza que deseja reabrir o curso "${course.name}"? Isso permitirÃ¡ novas ediÃ§Ãµes de notas e presenÃ§as, mas nÃ£o removerÃ¡ os registros do Trilho de LideranÃ§a jÃ¡ criados.`);
         if (!confirmation) return;
         try {
-            const courseRef = doc(db, `artifacts/${appId}/public/data/courses`, course.id);
+            const courseRef = doc(db, `artifacts/${getTenantId()}/public/data/courses`, course.id);
             await updateDoc(courseRef, { finalized: false });
             alert(`Curso "${course.name}" foi reaberto com sucesso.`);
         } catch (error) {
@@ -1499,13 +1498,13 @@ function AppContent() {
     };
     const handleReactivateMember = async (member, connectId) => {
         if (!member || !connectId) return;
-        const confirmation = window.confirm(`Tem certeza que deseja reativar ${member.name}? Isso registrará uma presença para este membro na data de hoje.`);
+        const confirmation = window.confirm(`Tem certeza que deseja reativar ${member.name}? Isso registrarÃ¡ uma presenÃ§a para este membro na data de hoje.`);
         if (!confirmation) return;
         try {
             const today = new Date();
             const dateString = today.toISOString().split('T')[0];
             const reportId = `${connectId}_${dateString}`;
-            const reportRef = doc(db, `artifacts/${appId}/public/data/connect_reports`, reportId);
+            const reportRef = doc(db, `artifacts/${getTenantId()}/public/data/connect_reports`, reportId);
             const reportSnap = await getDoc(reportRef);
             let attendanceData = {};
             if (reportSnap.exists()) {
@@ -1537,16 +1536,16 @@ function AppContent() {
         loadingStates.setLoading('delete', 'Excluindo...');
 
         try {
-            let collectionPath = `artifacts/${appId}/public/data/${type}s`;
+            let collectionPath = `artifacts/${getTenantId()}/public/data/${type}s`;
             if (type === 'courseTemplate') {
-                collectionPath = `artifacts/${appId}/public/data/courseTemplates`;
+                collectionPath = `artifacts/${getTenantId()}/public/data/courseTemplates`;
             } else if (type === 'certificateTemplate') {
-                collectionPath = `artifacts/${appId}/public/data/certificate_templates`;
+                collectionPath = `artifacts/${getTenantId()}/public/data/certificate_templates`;
             }
 
             if (type === 'connect') {
                 const batch = writeBatch(db);
-                const membersToUpdateQuery = query(collection(db, `artifacts/${appId}/public/data/members`), where('connectId', '==', id));
+                const membersToUpdateQuery = query(collection(db, `artifacts/${getTenantId()}/public/data/members`), where('connectId', '==', id));
                 const membersSnapshot = await getDocs(membersToUpdateQuery);
                 membersSnapshot.forEach(memberDoc => {
                     batch.update(memberDoc.ref, { connectId: '' });
@@ -1558,7 +1557,7 @@ function AppContent() {
                 await deleteDoc(doc(db, collectionPath, id));
             }
 
-            loadingStates.setSuccess('delete', 'Item excluído com sucesso!');
+            loadingStates.setSuccess('delete', 'Item excluÃ­do com sucesso!');
         } catch (error) {
             console.error(`Erro ao deletar ${type}:`, error);
             loadingStates.setError('delete', 'Erro ao excluir item. Tente novamente.');
@@ -1570,7 +1569,7 @@ function AppContent() {
 
     const handleUpdateDecisionStatus = async (decisionId, newStatus) => {
         try {
-            const ref = doc(db, `artifacts/${appId}/public/data/decisions`, decisionId);
+            const ref = doc(db, `artifacts/${getTenantId()}/public/data/decisions`, decisionId);
             const update = { status: newStatus };
             // Ao marcar como contatado, registra o timestamp para controle dos 7 dias
             if (newStatus === 'contatado') {
@@ -1578,8 +1577,8 @@ function AppContent() {
             }
             await updateDoc(ref, update);
         } catch (error) {
-            console.error('Erro ao atualizar status da decisão:', error);
-            setOperationStatus({ type: 'error', message: 'Erro ao atualizar status do formulário.' });
+            console.error('Erro ao atualizar status da decisÃ£o:', error);
+            setOperationStatus({ type: 'error', message: 'Erro ao atualizar status do formulÃ¡rio.' });
         }
     };
 
@@ -1589,7 +1588,7 @@ function AppContent() {
 
     if (isLoadingAuth) return <LoadingSpinner />;
     if (!user) {
-        // Rotas públicas: Login (default) e Signup
+        // Rotas pÃºblicas: Login (default) e Signup
         return (
             <Routes>
                 <Route path="/signup" element={<SignupPage />} />
@@ -1599,7 +1598,7 @@ function AppContent() {
         );
     }
 
-    // Exibe mensagem de erro de conexão se houver
+    // Exibe mensagem de erro de conexÃ£o se houver
     if (connectionError) {
         return (
             <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -1609,7 +1608,7 @@ function AppContent() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                         </svg>
                     </div>
-                    <h2 className="text-xl font-semibold text-gray-800 mb-4">Erro de Conexão</h2>
+                    <h2 className="text-xl font-semibold text-gray-800 mb-4">Erro de ConexÃ£o</h2>
                     <p className="text-gray-600 mb-6">{connectionError}</p>
                     <div className="space-y-3">
                         <button
@@ -1658,7 +1657,7 @@ function AppContent() {
                     ))}
                 </div>
 
-                {/* Mensagem de status de operação (legacy) */}
+                {/* Mensagem de status de operaÃ§Ã£o (legacy) */}
                 {operationStatus.message && (
                     <div className={`mx-4 md:mx-8 mt-4 p-3 rounded-md ${operationStatus.type === 'success'
                         ? 'bg-green-100 border border-green-400 text-green-700'
@@ -1684,10 +1683,24 @@ function AppContent() {
                                     onClick={() => setOperationStatus({ type: null, message: null })}
                                     className="inline-flex text-sm font-medium hover:opacity-75"
                                 >
-                                    ×
+                                    Ã—
                                 </button>
                             </div>
                         </div>
+                    </div>
+                )}
+                
+                {impersonatedUser && (
+                    <div className="bg-amber-500 text-black px-4 py-2 flex justify-between items-center z-50">
+                        <span className="font-bold">
+                            Visualizando como: {impersonatedUser.name || impersonatedUser.email}
+                        </span>
+                        <button 
+                            onClick={clearImpersonation}
+                            className="bg-black bg-opacity-20 hover:bg-opacity-30 px-3 py-1 rounded text-sm font-semibold transition-colors"
+                        >
+                            Voltar ao meu perfil
+                        </button>
                     </div>
                 )}
                 <main className="flex-1 overflow-y-auto p-4 md:p-8">
@@ -1745,7 +1758,7 @@ function AppContent() {
                         handleSaveSimpleMember={handleSaveSimpleMember}
                         handleDeleteSimpleMember={handleDeleteSimpleMember}
 
-                        // Funções de utilidade
+                        // FunÃ§Ãµes de utilidade
                         calculateFinalGradeForStudent={calculateFinalGradeForStudent}
                         getStudentStatusInfo={getStudentStatusInfo}
                         areNamesSimilar={areNamesSimilar}
@@ -1797,10 +1810,10 @@ function AppContent() {
             </Modal>
             {reportingConnect && <ConnectReportModal isOpen={isReportModalOpen} onClose={closeReportModal} connect={reportingConnect} members={allMembers} onSave={handleSaveConnectReport} isAdmin={isAdmin} onViewMember={openMemberDetails} />}
             {managingCourse && <ManageCourseModal course={managingCourse} members={allMembers} allMembers={allMembers} allSimpleMembers={allSimpleMembers} allCertificateTemplates={allCertificateTemplates} onSaveSimpleMember={handleSaveSimpleMember} areNamesSimilar={areNamesSimilar} isOpen={isManageCourseModalOpen} onClose={closeManageCourseModal} onSaveStudents={handleSaveCourseStudents} onSaveAttendance={handleSaveAttendance} onSkipClassDay={handleSkipClassDay} onViewMember={openMemberDetails} />}
-            <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={handleConfirmDelete} title="Confirmar Exclusão" message={deleteAction?.message} />
+            <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={handleConfirmDelete} title="Confirmar ExclusÃ£o" message={deleteAction?.message} />
             {generatingReportForConnect && <ConnectFullReportModal isOpen={isConnectFullReportModalOpen} onClose={closeConnectFullReportModal} connect={generatingReportForConnect} allMembers={allMembers} allReports={allConnectReports} />}
 
-            {viewingMember && <Modal isOpen={isLeadershipTrackModalOpen} onClose={closeLeadershipTrackModal} size="md" title="Trilho de Liderança">
+            {viewingMember && <Modal isOpen={isLeadershipTrackModalOpen} onClose={closeLeadershipTrackModal} size="md" title="Trilho de LideranÃ§a">
                 <IndividualTrackModal
                     member={viewingMember}
                     completedCourses={completedCourses}
@@ -1834,3 +1847,6 @@ export default function App() {
         </BrowserRouter>
     );
 }
+
+
+

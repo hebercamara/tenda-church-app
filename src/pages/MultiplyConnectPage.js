@@ -4,7 +4,8 @@ import { ArrowLeft, Save, CopyPlus, UserCheck, UserMinus, Plus, Star, User } fro
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
 import { writeBatch, collection, doc } from 'firebase/firestore';
-import { db, appId } from '../firebaseConfig';
+import { db } from '../firebaseConfig';
+import { getTenantId } from '../utils/tenantUtils';
 import { useAuthStore } from '../store/authStore';
 
 const MultiplyConnectPage = ({
@@ -202,7 +203,7 @@ const MultiplyConnectPage = ({
             const batch = writeBatch(db);
 
             // 1. Criar novo Connect
-            const newConnectRef = doc(collection(db, `artifacts/${appId}/public/data/connects`));
+            const newConnectRef = doc(collection(db, `artifacts/${getTenantId()}/public/data/connects`));
             const newConnectId = newConnectRef.id;
 
             const now = new Date().toISOString();
@@ -227,7 +228,7 @@ const MultiplyConnectPage = ({
 
             // 2. Transferir membros para o novo Connect e atualizar connectHistory
             for (const memberId of membersForNewConnect) {
-                const memberRef = doc(db, `artifacts/${appId}/public/data/members`, memberId);
+                const memberRef = doc(db, `artifacts/${getTenantId()}/public/data/members`, memberId);
                 const memberData = originalMembers.find(m => m.id === memberId);
 
                 if (memberData) {
@@ -270,7 +271,7 @@ const MultiplyConnectPage = ({
             // 2.5 Atualizar o e-mail do Líder (se foi recém-adicionado)
             const leaderMember = originalMembers.find(m => m.id === newConnectData.leaderId);
             if (leaderMember && leaderMember.email !== modalLeaderEmail) {
-                const leaderRef = doc(db, `artifacts/${appId}/public/data/members`, newConnectData.leaderId);
+                const leaderRef = doc(db, `artifacts/${getTenantId()}/public/data/members`, newConnectData.leaderId);
                 batch.update(leaderRef, {
                     email: modalLeaderEmail,
                     updatedAt: now,
@@ -279,7 +280,7 @@ const MultiplyConnectPage = ({
             }
 
             // 3. Opcional: Adicionar evento no histórico do Connect antigo (apenas para registro)
-            const oldConnectRef = doc(db, `artifacts/${appId}/public/data/connects`, originalConnect.id);
+            const oldConnectRef = doc(db, `artifacts/${getTenantId()}/public/data/connects`, originalConnect.id);
             const oldConnectHistory = Array.isArray(originalConnect.history) ? [...originalConnect.history] : [];
             oldConnectHistory.push({
                 date: now,

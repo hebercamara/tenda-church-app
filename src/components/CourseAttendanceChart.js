@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, getDocs, orderBy } from 'firebase/firestore';
-import { db, appId } from '../firebaseConfig';
+import { db } from '../firebaseConfig';
+import { getTenantId } from '../utils/tenantUtils';
 import { Line } from 'react-chartjs-2';
 import { formatDateToBrazilian } from '../utils/dateUtils';
 
@@ -21,7 +22,7 @@ import { formatDateToBrazilian } from '../utils/dateUtils';
             const fetchAttendanceData = async () => {
                 setLoading(true);
                 try {
-                    const attendanceRef = collection(db, `artifacts/${appId}/public/data/courses/${courseId}/attendance`);
+                    const attendanceRef = collection(db, `artifacts/${getTenantId()}/public/data/courses/${courseId}/attendance`);
                     const q = query(attendanceRef, orderBy("date", "asc"));
                     const querySnapshot = await getDocs(q);
 

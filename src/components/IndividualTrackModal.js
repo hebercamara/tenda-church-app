@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle2, Circle, Edit, Calendar } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
-import { db, appId } from '../firebaseConfig';
+import { db } from '../firebaseConfig';
+import { getTenantId } from '../utils/tenantUtils';
 
 const IndividualTrackModal = ({ member, completedCourses, memberConnectHistoryDetails, onBack, title }) => {
     const [isEditing, setIsEditing] = useState(false);
@@ -42,7 +43,7 @@ const IndividualTrackModal = ({ member, completedCourses, memberConnectHistoryDe
         if (isEditing) {
             // Salvar os dados no Firebase
             try {
-                const memberRef = doc(db, `artifacts/${appId}/public/data/members`, member.id);
+                const memberRef = doc(db, `artifacts/${getTenantId()}/public/data/members`, member.id);
                 const milestonesToSave = {};
                 
                 Object.keys(milestoneData).forEach(key => {

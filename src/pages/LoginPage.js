@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { Eye, EyeOff } from 'lucide-react'; // Importa os ícones
-import { auth } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 import { useNavigate } from 'react-router-dom';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { useAuthStore } from '../store/authStore';
+import ChurchSelectorModal from '../components/ChurchSelectorModal';
+import { SUPER_ADMIN_EMAIL } from '../utils/tenantUtils';
 
 const LoginPage = () => {
     const [email, setEmail] = useState('');
@@ -12,7 +16,10 @@ const LoginPage = () => {
     const [message, setMessage] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showPassword, setShowPassword] = useState(false); // Novo estado para controlar a visibilidade
+    const [showChurchSelector, setShowChurchSelector] = useState(false);
+    const [userChurches, setUserChurches] = useState([]);
     const navigate = useNavigate();
+    const { setTenant, setSuperAdmin, setAvailableTenants } = useAuthStore();
 
     const getFriendlyErrorMessage = (code) => {
         switch (code) {
@@ -38,17 +45,100 @@ const LoginPage = () => {
         setErrorCode('');
         setIsSubmitting(true);
         try {
-            await signInWithEmailAndPassword(auth, email.trim(), password);
+            const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+            const userEmail = userCredential.user.email?.toLowerCase();
+            
+            // Verifica se é super admin
+            const isSuper = userEmail === SUPER_ADMIN_EMAIL;
+            setSuperAdmin(isSuper);
+
+            // Busca os dados do usuário global
+            const q = query(collection(db, 'global_users'), where('email', '==', userEmail));
+            const querySnapshot = await getDocs(q);
+            
+            let userTenants = [];
+            if (!querySnapshot.empty) {
+                userTenants = querySnapshot.docs[0].data().tenants || [];
+            }
+            
+            setAvailableTenants(userTenants);
+
+            if (isSuper) {
+                // Super admin pode acessar o dashboard mestre direto
+                // Mas precisamos buscar a lista de igrejas se ele quiser logar em alguma específica
+                // Para simplificar, o super admin loga no tenant principal (tenda-church-app) por padrão
+                const defaultTenantRef = doc(db, 'tenants', 'tenda-church-app');
+                const defaultTenantSnap = await getDoc(defaultTenantRef);
+                if (defaultTenantSnap.exists()) {
+                    setTenant('tenda-church-app', defaultTenantSnap.data());
+                } else {
+                    setTenant('tenda-church-app', { name: 'Tenda Church App' });
+                }
+                setIsSubmitting(false);
+                return;
+            }
+
+            if (userTenants.length === 0) {
+                // Usuário sem igreja associada - loga mas fica sem tenant
+                setTenant(null, null);
+                setIsSubmitting(false);
+                return;
+            }
+
+            if (userTenants.length === 1) {
+                // Apenas uma igreja - loga direto nela
+                const tenantId = userTenants[0];
+                const tenantRef = doc(db, 'tenants', tenantId);
+                const tenantSnap = await getDoc(tenantRef);
+                
+                if (tenantSnap.exists() && tenantSnap.data().status === 'inactive') {
+                    setError('O ambiente desta igreja está desativado.');
+                    auth.signOut();
+                    setIsSubmitting(false);
+                    return;
+                }
+                
+                setTenant(tenantId, tenantSnap.exists() ? tenantSnap.data() : { name: tenantId });
+                setIsSubmitting(false);
+            } else {
+                // Múltiplas igrejas - abre o modal de seleção
+                const churchDetails = [];
+                for (const tId of userTenants) {
+                    const tRef = doc(db, 'tenants', tId);
+                    const tSnap = await getDoc(tRef);
+                    if (tSnap.exists() && tSnap.data().status === 'active') {
+                        churchDetails.push({ id: tId, ...tSnap.data() });
+                    }
+                }
+                
+                if (churchDetails.length === 0) {
+                    setError('Nenhuma igreja ativa encontrada para o seu usuário.');
+                    auth.signOut();
+                    setIsSubmitting(false);
+                    return;
+                }
+                
+                if (churchDetails.length === 1) {
+                    setTenant(churchDetails[0].id, churchDetails[0]);
+                    setIsSubmitting(false);
+                } else {
+                    setUserChurches(churchDetails);
+                    setShowChurchSelector(true);
+                    setIsSubmitting(false);
+                }
+            }
         } catch (err) {
             console.error('Login error:', err.code, err.message);
             setError(getFriendlyErrorMessage(err.code));
             setErrorCode(err.code || 'unknown');
-        } finally {
             setIsSubmitting(false);
         }
     };
 
-
+    const handleSelectChurch = (tenantId, tenantData) => {
+        setTenant(tenantId, tenantData);
+        setShowChurchSelector(false);
+    };
 
     const goToSignup = (e) => {
         e.preventDefault();
@@ -146,6 +236,16 @@ const LoginPage = () => {
                     </div>
                 </form>
             </div>
+            
+            <ChurchSelectorModal 
+                isOpen={showChurchSelector} 
+                churches={userChurches} 
+                onSelect={handleSelectChurch} 
+                onClose={() => {
+                    setShowChurchSelector(false);
+                    auth.signOut();
+                }} 
+            />
         </div>
     );
 };

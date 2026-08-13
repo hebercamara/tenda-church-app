@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { collection, writeBatch, doc, getDocs } from 'firebase/firestore';
-import { db, appId } from '../firebaseConfig';
+import { db } from '../firebaseConfig';
+import { getTenantId } from '../utils/tenantUtils';
 import { useAuthStore } from '../store/authStore';
 import { Upload, Download, Users, AlertCircle, CheckCircle, FileText, Plus, Eye, Trash2, X } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -683,7 +684,7 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
           delete memberData.lider;
           delete memberData.milestonesData;
           
-          const docRef = doc(collection(db, `artifacts/${appId}/public/data/members`));
+          const docRef = doc(collection(db, `artifacts/${getTenantId()}/public/data/members`));
           batch.set(docRef, memberData);
           results.success++;
         } catch (error) {
@@ -854,7 +855,7 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
 
     setIsLoading(true);
     try {
-      const membersCollection = collection(db, `artifacts/${appId}/public/data/members`);
+      const membersCollection = collection(db, `artifacts/${getTenantId()}/public/data/members`);
       const querySnapshot = await getDocs(membersCollection);
       const allMembers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
@@ -879,7 +880,7 @@ Maria Santos,Maria,maria@email.com,11888888888,"Av. Principal, 456",Vila Nova,Ri
       if (duplicates.length > 0) {
         const batch = writeBatch(db);
         duplicates.forEach(id => {
-          const docRef = doc(db, `artifacts/${appId}/public/data/members`, id);
+          const docRef = doc(db, `artifacts/${getTenantId()}/public/data/members`, id);
           batch.delete(docRef);
         });
         

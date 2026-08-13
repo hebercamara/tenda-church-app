@@ -3,7 +3,8 @@ import { Plus, Trash2, AlertTriangle, Copy, ArrowRight, UserCheck, ChevronDown, 
 import Modal from './Modal';
 import LoadingButton from './LoadingButton';
 import { doc, updateDoc } from 'firebase/firestore';
-import { db, appId } from '../firebaseConfig';
+import { db } from '../firebaseConfig';
+import { getTenantId } from '../utils/tenantUtils';
 
 
 // Definição dos campos extras disponíveis
@@ -224,7 +225,7 @@ const BatchSimpleMemberModal = ({ isOpen, onClose, onSave, onSaveAndEnroll, allM
                             try {
                                 const isSimple = !(allMembers || []).some(m => m.id === targetId);
                                 const collectionName = isSimple ? 'course_members' : 'members';
-                                const docRef = doc(db, `artifacts/${appId}/public/data/${collectionName}`, targetId);
+                                const docRef = doc(db, `artifacts/${getTenantId()}/public/data/${collectionName}`, targetId);
                                 await updateDoc(docRef, updates);
                             } catch (e) {
                                 console.error('Erro no merge inteligente:', e);

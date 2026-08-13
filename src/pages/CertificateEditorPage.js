@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, collection, addDoc } from 'firebase/firestore';
-import { db, appId } from '../firebaseConfig';
+import { db } from '../firebaseConfig';
+import { getTenantId } from '../utils/tenantUtils';
 import { ArrowLeft, Save, Plus, Trash2, Image as ImageIcon, Type } from 'lucide-react';
 import Draggable from 'react-draggable';
 
@@ -52,7 +53,7 @@ const CertificateEditorPage = ({ loadingStates }) => {
             if (id === 'new') return;
             loadingStates.setLoading('fetchCertTemplate', 'Carregando modelo...');
             try {
-                const docRef = doc(db, `artifacts/${appId}/public/data/certificate_templates`, id);
+                const docRef = doc(db, `artifacts/${getTenantId()}/public/data/certificate_templates`, id);
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists()) {
                     setTemplate({ id: docSnap.id, ...docSnap.data() });
@@ -157,7 +158,7 @@ const CertificateEditorPage = ({ loadingStates }) => {
 
         loadingStates.setLoading('saveCertTemplate', 'Salvando modelo...');
         try {
-            const collectionPath = `artifacts/${appId}/public/data/certificate_templates`;
+            const collectionPath = `artifacts/${getTenantId()}/public/data/certificate_templates`;
             if (id === 'new') {
                 await addDoc(collection(db, collectionPath), template);
             } else {
