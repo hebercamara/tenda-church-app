@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, doc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useAuthStore } from '../store/authStore';
@@ -66,44 +66,49 @@ const MasterAdminPage = ({ onBack }) => {
     try {
       const tenantId = newTenant.id.trim() || generateTenantId(newTenant.name);
       
-      // Verificar se já existe
-      const existing = tenants.find(t => t.id === tenantId);
-      if (existing) {
-        alert('Já existe uma igreja com esse ID!');
-        setSaving(false);
-        return;
-      }
-
-      await addDoc(collection(db, 'tenants'), {
-        id: tenantId,
-        name: newTenant.name.trim(),
-        adminEmail: newTenant.adminEmail.trim() || '',
-        logoUrl: newTenant.logoUrl.trim() || '',
-        status: 'active',
-        createdAt: new Date().toISOString()
-      });
-
-      // Se tem adminEmail, adicionar ao global_users
-      if (newTenant.adminEmail.trim()) {
-        const email = newTenant.adminEmail.trim().toLowerCase();
-        const existingUser = globalUsers.find(u => u.email === email);
-        if (existingUser) {
-          const updatedTenants = [...new Set([...(existingUser.tenants || []), tenantId])];
-          await updateDoc(doc(db, 'global_users', existingUser.docId), { tenants: updatedTenants });
-        } else {
-          await addDoc(collection(db, 'global_users'), {
-            email: email,
-            tenants: [tenantId],
-            isSuperAdmin: false
-          });
+      if (editingTenant) {
+        await updateDoc(doc(db, 'tenants', editingTenant.docId), {
+          name: newTenant.name.trim(),
+          adminEmail: newTenant.adminEmail.trim() || ''
+        });
+        if (newTenant.adminEmail.trim()) {
+            const email = newTenant.adminEmail.trim().toLowerCase();
+            const existingUser = globalUsers.find(u => u.email === email);
+            if (existingUser) {
+              const updatedTenants = [...new Set([...(existingUser.tenants || []), tenantId])];
+              await updateDoc(doc(db, 'global_users', existingUser.docId), { tenants: updatedTenants });
+            } else {
+              await addDoc(collection(db, 'global_users'), { email: email, tenants: [tenantId], isSuperAdmin: false });
+            }
+        }
+      } else {
+        const existing = tenants.find(t => t.id === tenantId);
+        if (existing) {
+          alert('Já existe uma igreja com esse ID!');
+          setSaving(false);
+          return;
+        }
+        await addDoc(collection(db, 'tenants'), {
+          id: tenantId, name: newTenant.name.trim(), adminEmail: newTenant.adminEmail.trim() || '',
+          logoUrl: newTenant.logoUrl.trim() || '', status: 'active', createdAt: new Date().toISOString()
+        });
+        if (newTenant.adminEmail.trim()) {
+          const email = newTenant.adminEmail.trim().toLowerCase();
+          const existingUser = globalUsers.find(u => u.email === email);
+          if (existingUser) {
+            const updatedTenants = [...new Set([...(existingUser.tenants || []), tenantId])];
+            await updateDoc(doc(db, 'global_users', existingUser.docId), { tenants: updatedTenants });
+          } else {
+            await addDoc(collection(db, 'global_users'), { email: email, tenants: [tenantId], isSuperAdmin: false });
+          }
         }
       }
-
       setNewTenant({ name: '', id: '', adminEmail: '', logoUrl: '' });
+      setEditingTenant(null);
       setShowCreateModal(false);
     } catch (error) {
-      console.error('Erro ao criar igreja:', error);
-      alert('Erro ao criar igreja: ' + error.message);
+      console.error('Erro ao salvar igreja:', error);
+      alert('Erro ao salvar igreja: ' + error.message);
     }
     setSaving(false);
   };
@@ -223,7 +228,7 @@ const MasterAdminPage = ({ onBack }) => {
                   className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2 text-sm transition-colors"
                 >
                   <Plus size={16} />
-                  <span>Nova Igreja</span>
+                  <span>{editingTenant ? 'Editar Igreja' : 'Nova Igreja'}</span>
                 </button>
               </div>
             </div>
@@ -262,6 +267,17 @@ const MasterAdminPage = ({ onBack }) => {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2 mt-3 sm:mt-0">
+                        <button
+                          onClick={() => {
+                              setEditingTenant(tenant);
+                              setNewTenant({ name: tenant.name, id: tenant.id, adminEmail: tenant.adminEmail || '', logoUrl: tenant.logoUrl || '' });
+                              setShowCreateModal(true);
+                          }}
+                          className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors mr-1"
+                          title="Editar"
+                        >
+                          <Edit size={20} />
+                        </button>
                         {tenant.status === 'active' && (
                           <button
                             onClick={() => handleSwitchToTenant(tenant.id, tenant)}
@@ -347,7 +363,7 @@ const MasterAdminPage = ({ onBack }) => {
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
             <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center space-x-2">
               <Building2 size={22} />
-              <span>Nova Igreja</span>
+              <span>{editingTenant ? 'Editar Igreja' : 'Nova Igreja'}</span>
             </h2>
             <div className="space-y-4">
               <div>
@@ -370,7 +386,7 @@ const MasterAdminPage = ({ onBack }) => {
                   type="text"
                   value={newTenant.id}
                   onChange={(e) => setNewTenant({ ...newTenant, id: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-600 focus:ring-2 focus:ring-slate-500"
+                  className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-600 focus:ring-2 focus:ring-slate-500" disabled={!!editingTenant}
                   placeholder="gerado-automaticamente"
                 />
               </div>
@@ -387,7 +403,7 @@ const MasterAdminPage = ({ onBack }) => {
             </div>
             <div className="flex justify-end space-x-3 mt-6">
               <button
-                onClick={() => { setShowCreateModal(false); setNewTenant({ name: '', id: '', adminEmail: '', logoUrl: '' }); }}
+                onClick={() => { setShowCreateModal(false); setEditingTenant(null); setNewTenant({ name: '', id: '', adminEmail: '', logoUrl: '' }); }}
                 className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Cancelar
@@ -397,7 +413,7 @@ const MasterAdminPage = ({ onBack }) => {
                 disabled={saving || !newTenant.name.trim()}
                 className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-5 rounded-lg disabled:bg-gray-400 transition-colors"
               >
-                {saving ? 'Criando...' : 'Criar Igreja'}
+                {saving ? 'Salvando...' : (editingTenant ? 'Salvar Igreja' : 'Criar Igreja')}
               </button>
             </div>
           </div>
@@ -408,3 +424,4 @@ const MasterAdminPage = ({ onBack }) => {
 };
 
 export default MasterAdminPage;
+
