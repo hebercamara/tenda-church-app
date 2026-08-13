@@ -202,7 +202,7 @@ const BatchSimpleMemberModal = ({ isOpen, onClose, onSave, onSaveAndEnroll, allM
 
                 if (resolution && resolution.action === 'unify') {
                     const targetId = resolution.targetId;
-                    enrolledMemberIds.push(targetId);
+                    enrolledMemberIds.push({ id: targetId, name: resolution.targetName });
 
                     // --- Merge Inteligente (Atualizar campos vazios) ---
                     const targetMember = (allMembers || []).find(m => m.id === targetId) 
@@ -247,7 +247,8 @@ const BatchSimpleMemberModal = ({ isOpen, onClose, onSave, onSaveAndEnroll, allM
 
                     const newRef = await onSave(simpleMemberData);
                     if (newRef && newRef.id) {
-                        enrolledMemberIds.push(newRef.id);
+                        const fullName = `${simpleMemberData.name} ${simpleMemberData.lastName}`.trim();
+                        enrolledMemberIds.push({ id: newRef.id, name: fullName });
                     }
                 }
             }

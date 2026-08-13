@@ -76,14 +76,17 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
     const [draftEnrolledStudents, setDraftEnrolledStudents] = useState([]);
     const [isBatchModalOpen, setBatchModalOpen] = useState(false);
 
-    const handleEnrollMultiple = (studentIds) => {
+    const handleEnrollMultiple = (studentDataArray) => {
         setDraftEnrolledStudents(prev => {
             const updated = [...prev];
-            studentIds.forEach(id => {
+            studentDataArray.forEach(data => {
+                const id = typeof data === 'string' ? data : data.id;
+                const fallbackName = typeof data === 'string' ? 'Novo Aluno' : data.name;
+                
                 if (!updated.some(s => s && s.id === id)) {
                     // Procura o membro na lista atualizada de membros
                     const student = findStudent(id);
-                    const name = student ? student.name : 'Novo Aluno';
+                    const name = student ? student.name : fallbackName;
                     updated.push({
                         id: id,
                         name: name,
@@ -98,11 +101,30 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
 
     const visibleStudentsInModal = useMemo(() => {
         const cleanList = (draftEnrolledStudents || []).filter(s => s && s.id);
-        if (myGroupStudentsIds === null) {
-            return cleanList;
+        let filtered = cleanList;
+        
+        if (myGroupStudentsIds !== null) {
+            filtered = cleanList.filter(s => myGroupStudentsIds.includes(s.id));
         }
-        return cleanList.filter(s => myGroupStudentsIds.includes(s.id));
-    }, [draftEnrolledStudents, myGroupStudentsIds]);
+        
+        return filtered.map(s => {
+            let trueName = null;
+            // Busca manual inline para não depender de findStudent e evitar lint warnings/re-renders
+            if (Array.isArray(members)) {
+                const m = members.find(m => m && m.id === s.id);
+                if (m && m.name) trueName = m.name;
+            }
+            if (!trueName && Array.isArray(allSimpleMembers)) {
+                const sm = allSimpleMembers.find(m => m && m.id === s.id);
+                if (sm && sm.name) trueName = sm.name;
+            }
+            
+            return {
+                ...s,
+                name: trueName || s.name || 'Novo Aluno'
+            };
+        });
+    }, [draftEnrolledStudents, myGroupStudentsIds, members, allSimpleMembers]);
 
     const [attendanceRecords, setAttendanceRecords] = useState([]);
     const [selectedDate, setSelectedDate] = useState(null);
@@ -637,6 +659,8 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
                             attendanceRecords={attendanceRecords} 
                             visibleStudentsInModal={visibleStudentsInModal} 
                             allCertificateTemplates={allCertificateTemplates}
+                            calculateFinalGrade={calculateFinalGrade}
+                            calculateAttendancePercentage={calculateAttendancePercentage}
                         />
                     )}
                     {activeTab === 'students' && (

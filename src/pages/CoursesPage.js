@@ -311,9 +311,15 @@ const CoursesPage = ({
                     <li key={course.id} className="p-3 flex flex-wrap justify-between items-center">
                       <div>
                         <span className="font-medium text-gray-800">{course.name}</span>
-                        <p className="text-xs text-gray-500">
-                          {new Date(course.startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a {new Date(course.endDate + 'T00:00:00').toLocaleDateString('pt-BR')}
-                        </p>
+                        <div className="text-xs text-gray-500 mt-1 space-y-0.5">
+                          <p>Professor(a): <span className="font-medium">{course.teacherName || 'Não definido'}</span></p>
+                          {course.classDay && !course.isSporadic && (
+                            <p>Aula: <span className="font-medium">{course.classDay}{course.classTime ? ` às ${course.classTime}` : ''}</span></p>
+                          )}
+                          <p>
+                            Período: {new Date(course.startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a {new Date(course.endDate + 'T00:00:00').toLocaleDateString('pt-BR')}
+                          </p>
+                        </div>
                       </div>
                       <div className="flex items-center space-x-3 mt-2 sm:mt-0">
                         {(isAdmin || (currentUserData?.email && (course.teacherEmail?.toLowerCase() === currentUserData.email.toLowerCase() || isActiveSubstitute(course) || isActiveAuxTeacher(course)))) && (
@@ -324,6 +330,9 @@ const CoursesPage = ({
                         )}
                         {isAdmin && (
                           <button onClick={() => onDelete('course', course.id)} className="text-gray-500 hover:text-red-600" title="Excluir"><Trash2 size={18} /></button>
+                        )}
+                        {isAdmin && !course.finalized && (
+                          <button onClick={() => onFinalizeCourse(course)} className="text-gray-500 hover:text-green-600" title="Finalizar"><CheckSquare size={18} /></button>
                         )}
                         {isAdmin && course.finalized && <button onClick={() => onReopenCourse(course)} className="text-gray-500 hover:text-yellow-600" title="Reabrir"><RotateCcw size={18} /></button>}
                       </div>

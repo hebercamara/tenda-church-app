@@ -54,7 +54,7 @@ const calculateFinalGradeForStudent = (student, course) => {
     let total = 0;
     total += (scores.tests || []).reduce((sum, score) => sum + (Number(score) || 0), 0);
     total += (scores.assignments || []).reduce((sum, score) => sum + (Number(score) || 0), 0);
-    total += ((scores.activities || []).filter(done => done).length) * (assessment.activities.value || 0);
+    total += ((scores.activities || []).filter(done => done).length) * (assessment?.activities?.value || 0);
     return parseFloat(total.toFixed(2));
 };
 

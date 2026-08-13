@@ -1,35 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Award, Download, Check, X } from 'lucide-react';
+import { Award, Download, Check, X, FileImage, FileText } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import { jsPDF } from 'jspdf';
 
-const CertificateGenerationTab = ({ course, attendanceRecords, visibleStudentsInModal, allCertificateTemplates }) => {
+const CertificateGenerationTab = ({ course, attendanceRecords, visibleStudentsInModal, allCertificateTemplates, calculateFinalGrade, calculateAttendancePercentage }) => {
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
     const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
     const [approvedStudents, setApprovedStudents] = useState([]);
     const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
     const [generating, setGenerating] = useState(false);
+    const [exportFormat, setExportFormat] = useState('pdf'); // 'pdf' or 'zip'
 
     useEffect(() => {
         // Find approved students based on freq and grade
-        const validRecords = attendanceRecords.filter(r => !r.ignoreAttendance && !r.noClass);
         const approved = visibleStudentsInModal.filter(student => {
-            let presentCount = 0;
-            validRecords.forEach(r => {
-                if (r.statuses?.[student.id] === 'presente') presentCount++;
-            });
-            const freq = validRecords.length > 0 ? (presentCount / validRecords.length) * 100 : 0;
-            
-            let totalGrade = 0;
-            ['tests', 'activities', 'assignments'].forEach(type => {
-                const typeData = course.assessment?.[type];
-                const typeScores = student.scores?.[type] || [];
-                const count = typeData?.count || 0;
-                for (let i = 0; i < count; i++) {
-                    totalGrade += Number(typeScores[i] || 0);
-                }
-            });
+            const freq = calculateAttendancePercentage ? calculateAttendancePercentage(student.id) : 0;
+            const totalGrade = calculateFinalGrade ? calculateFinalGrade(student) : 0;
 
             if (course.passingCriteria) {
                 return freq >= course.passingCriteria.minAttendance && totalGrade >= course.passingCriteria.minGrade;
@@ -39,7 +27,7 @@ const CertificateGenerationTab = ({ course, attendanceRecords, visibleStudentsIn
 
         setApprovedStudents(approved);
         setSelectedStudentIds(new Set(approved.map(s => s.id)));
-    }, [course, attendanceRecords, visibleStudentsInModal]);
+    }, [course, attendanceRecords, visibleStudentsInModal, calculateAttendancePercentage, calculateFinalGrade]);
 
     const handleSelectAll = (e) => {
         if (e.target.checked) {
@@ -79,6 +67,15 @@ const CertificateGenerationTab = ({ course, attendanceRecords, visibleStudentsIn
 
         setGenerating(true);
         const zip = new JSZip();
+        let pdf = null;
+        
+        if (exportFormat === 'pdf') {
+            pdf = new jsPDF({
+                orientation: 'landscape',
+                unit: 'px',
+                format: [1123, 794]
+            });
+        }
         
         // Crie um container oculto para renderizar
         const container = document.createElement('div');
@@ -90,6 +87,7 @@ const CertificateGenerationTab = ({ course, attendanceRecords, visibleStudentsIn
         document.body.appendChild(container);
 
         try {
+            let isFirstPage = true;
             for (const student of studentsToGenerate) {
                 // Monta o DOM do certificado para este aluno
                 container.innerHTML = '';
@@ -127,15 +125,27 @@ const CertificateGenerationTab = ({ course, attendanceRecords, visibleStudentsIn
                     const div = document.createElement('div');
                     div.innerText = text;
                     div.style.position = 'absolute';
-                    div.style.left = `${box.x}%`;
-                    div.style.top = `${box.y}%`;
+                    // We set top and left to 0, then use transform to move it, just like react-draggable does
+                    div.style.top = '0px';
+                    div.style.left = '0px';
+                    const xPx = (box.x / 100) * 1123;
+                    const yPx = (box.y / 100) * 794;
+                    div.style.transform = `translate(${xPx}px, ${yPx}px)`;
+                    
+                    if (box.fullWidth) {
+                        div.style.width = '100%';
+                    } else {
+                        div.style.width = 'auto';
+                        div.style.minWidth = '200px';
+                    }
                     div.style.fontSize = `${box.fontSize}px`;
                     div.style.color = box.color;
                     div.style.textAlign = box.align;
                     div.style.fontWeight = box.fontWeight;
                     div.style.fontFamily = box.fontFamily || 'sans-serif';
                     div.style.whiteSpace = 'pre-wrap';
-                    div.style.minWidth = '200px'; // previne que o texto quebre mal se n tiver width fixa
+                    div.style.lineHeight = '1.25'; // matches 'leading-tight' in the editor
+                    div.style.display = 'inline-block'; // matches 'inline-block' in the editor
                     
                     container.appendChild(div);
                 });
@@ -148,13 +158,26 @@ const CertificateGenerationTab = ({ course, attendanceRecords, visibleStudentsIn
                     logging: false
                 });
 
-                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-                zip.file(`Certificado_${student.name || 'Aluno'}.jpg`, blob);
+                if (exportFormat === 'pdf') {
+                    if (!isFirstPage) {
+                        pdf.addPage();
+                    }
+                    const imgData = canvas.toDataURL('image/jpeg', 0.9);
+                    pdf.addImage(imgData, 'JPEG', 0, 0, 1123, 794);
+                    isFirstPage = false;
+                } else {
+                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+                    zip.file(`Certificado_${student.name || 'Aluno'}.jpg`, blob);
+                }
             }
 
-            // Gerar ZIP e baixar
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            saveAs(zipBlob, `Certificados_${course.name}.zip`);
+            if (exportFormat === 'pdf') {
+                pdf.save(`Certificados_${course.name}.pdf`);
+            } else {
+                // Gerar ZIP e baixar
+                const zipBlob = await zip.generateAsync({ type: 'blob' });
+                saveAs(zipBlob, `Certificados_${course.name}.zip`);
+            }
 
         } catch (error) {
             console.error("Erro ao gerar certificados:", error);
@@ -238,7 +261,23 @@ const CertificateGenerationTab = ({ course, attendanceRecords, visibleStudentsIn
                 </ul>
             </div>
 
-            <div className="flex-shrink-0 pt-4 flex justify-end">
+            <div className="flex-shrink-0 p-4 border-t border-gray-200 flex justify-end items-center gap-4">
+                <div className="flex items-center gap-2 mr-auto">
+                    <button
+                        onClick={() => setExportFormat('pdf')}
+                        className={`flex items-center px-3 py-1.5 rounded text-sm font-medium border ${exportFormat === 'pdf' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                    >
+                        <FileText className="w-4 h-4 mr-1.5" />
+                        PDF Único
+                    </button>
+                    <button
+                        onClick={() => setExportFormat('zip')}
+                        className={`flex items-center px-3 py-1.5 rounded text-sm font-medium border ${exportFormat === 'zip' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                    >
+                        <FileImage className="w-4 h-4 mr-1.5" />
+                        ZIP (Imagens)
+                    </button>
+                </div>
                 <button
                     onClick={generateCertificates}
                     disabled={generating || selectedStudentIds.size === 0}
@@ -247,7 +286,7 @@ const CertificateGenerationTab = ({ course, attendanceRecords, visibleStudentsIn
                     {generating ? (
                         <>Gerando ({selectedStudentIds.size})...</>
                     ) : (
-                        <><Download className="mr-2 -ml-1 h-5 w-5" aria-hidden="true" /> Gerar {selectedStudentIds.size} Certificados (ZIP)</>
+                        <><Download className="mr-2 -ml-1 h-5 w-5" aria-hidden="true" /> Gerar {selectedStudentIds.size} Certificados ({exportFormat === 'pdf' ? 'PDF' : 'ZIP'})</>
                     )}
                 </button>
             </div>

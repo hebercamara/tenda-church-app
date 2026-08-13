@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, Route, Filter, ChevronLeft, ChevronRight, Upload, Table } from 'lucide-react';
+import { Trash2, Plus, Route, Filter, ChevronLeft, ChevronRight, Upload, Table, Edit } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
 import BatchSimpleMemberModal from '../components/BatchSimpleMemberModal';
+import EditSimpleMemberModal from '../components/EditSimpleMemberModal';
 
 // ALTERADO: O componente agora recebe props de usuário para fazer sua própria filtragem
 const MembersPage = ({
@@ -22,6 +23,8 @@ const MembersPage = ({
 }) => {
   const [activeTab, setActiveTab] = useState('full');
   const [isBatchModalOpen, setBatchModalOpen] = useState(false);
+  const [isEditSimpleModalOpen, setEditSimpleModalOpen] = useState(false);
+  const [editingSimpleMember, setEditingSimpleMember] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedConnect, setSelectedConnect] = useState(''); // NOVO: Filtro por Connect
   const [currentPage, setCurrentPage] = useState(1); // NOVO: Página atual
@@ -79,6 +82,11 @@ const MembersPage = ({
       return;
     }
     onEditMember(member);
+  };
+
+  const handleEditSimple = (member) => {
+    setEditingSimpleMember(member);
+    setEditSimpleModalOpen(true);
   };
 
   const handleDeleteSimple = (id, name, lastName) => {
@@ -322,13 +330,22 @@ const MembersPage = ({
                           </span>
                         </td>
                         <td className="p-3">
-                          <button
-                            onClick={() => handleDeleteSimple(member.id, member.name, member.lastName)}
-                            className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
-                            title="Excluir Cadastro"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => handleEditSimple(member)}
+                              className="text-gray-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-colors"
+                              title="Editar Cadastro"
+                            >
+                              <Edit size={18} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSimple(member.id, member.name, member.lastName)}
+                              className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                              title="Excluir Cadastro"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -406,6 +423,16 @@ const MembersPage = ({
         allMembers={allMembers}
         allSimpleMembers={allSimpleMembers}
         areNamesSimilar={areNamesSimilar}
+      />
+
+      <EditSimpleMemberModal
+        isOpen={isEditSimpleModalOpen}
+        onClose={() => {
+          setEditSimpleModalOpen(false);
+          setEditingSimpleMember(null);
+        }}
+        member={editingSimpleMember}
+        onSave={onSaveSimpleMember}
       />
     </div>
   );
