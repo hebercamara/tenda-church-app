@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Edit, Trash2, Plus, ClipboardList, GraduationCap, Users, CheckSquare, RotateCcw, LayoutTemplate, ChevronDown, ChevronUp, BarChart3, X, Award } from 'lucide-react';
 // NOVO: Importando o store
@@ -9,7 +9,7 @@ const CourseCard = React.memo(({ course, isAdmin, onEditCourse, onDelete, onMana
   const [showReportModal, setShowReportModal] = useState(false);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const isFinished = new Date(course.endDate + 'T00:00:00') < today;
+  const isFinished = new Date(course.endDate + 'T00:00:00') <= today;
   
   const handleCardClick = (e) => {
     // Verifica se o clique foi em um botão
@@ -419,3 +419,4 @@ const CoursesPage = ({
 };
 
 export default CoursesPage;
+

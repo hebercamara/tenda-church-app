@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 // eslint-disable-next-line no-unused-vars
 import { db } from '../firebaseConfig';
@@ -243,7 +243,9 @@ const ManageCourseModal = ({ course, members, allMembers, allSimpleMembers, onSa
         const { passingCriteria } = course;
         if (!passingCriteria) return { text: 'Cursando', color: 'bg-red-500' };
 
-        const isFinished = new Date(course.endDate + 'T00:00:00') < new Date();
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const isFinished = new Date(course.endDate + 'T00:00:00') <= today;
 
         if (isFinished) {
             if (attendance < passingCriteria.minAttendance) return { text: 'Reprovado por Falta', color: 'bg-orange-500' };
