@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
@@ -210,7 +210,7 @@ const CertificateEditorPage = ({ loadingStates }) => {
                         <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md relative overflow-hidden">
                             {template.backgroundImage ? (
                                 <div className="absolute inset-0">
-                                    <img src={template.backgroundImage} alt="Fundo" className="w-full h-full object-cover opacity-30" />
+                                    <img src={template.backgroundImage} alt="Fundo" className="w-full h-full object-contain opacity-30" />
                                 </div>
                             ) : null}
                             <div className="space-y-1 text-center relative z-10">
@@ -326,7 +326,7 @@ const CertificateEditorPage = ({ loadingStates }) => {
                         }}
                     >
                         {template.backgroundImage && (
-                            <img src={template.backgroundImage} alt="Template" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+                            <img src={template.backgroundImage} alt="Template" className="absolute inset-0 w-full h-full object-fill pointer-events-none" />
                         )}
 
                         {template.textBoxes?.map(box => (
@@ -382,3 +382,4 @@ const DraggableBox = ({ box, selectedBoxId, setSelectedBoxId, handleDragStop, sc
 };
 
 export default CertificateEditorPage;
+

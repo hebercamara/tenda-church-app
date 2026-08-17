@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Award, Download, Check, X, FileImage, FileText } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import JSZip from 'jszip';
@@ -98,7 +98,7 @@ const CertificateGenerationTab = ({ course, attendanceRecords, visibleStudentsIn
                 img.style.position = 'absolute';
                 img.style.width = '100%';
                 img.style.height = '100%';
-                img.style.objectFit = 'cover';
+                img.style.objectFit = 'fill';
                 container.appendChild(img);
 
                 // Aguarda a imagem carregar
@@ -295,3 +295,4 @@ const CertificateGenerationTab = ({ course, attendanceRecords, visibleStudentsIn
 };
 
 export default CertificateGenerationTab;
+
