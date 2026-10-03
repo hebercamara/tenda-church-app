@@ -1,3 +1,148 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
+/* ============================================
+   TENDA KIDS - Design System Temático Infantil
+   ============================================ */
+
+/* Import Nunito (fonte infantil e clean) */
+@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap");
+
+/* Variaveis CSS */
+:root {
+  --kids-primary: #6C63FF;
+  --kids-primary-dark: #5A52E0;
+  --kids-accent: #FF6B6B;
+  --kids-green: #2DD4BF;
+  --kids-yellow: #FBBF24;
+  --kids-bg: #F0EFFF;
+  --kids-card-bg: #FFFFFF;
+  --kids-shadow: 0 4px 20px rgba(108,99,255,0.08);
+}
+
+/* Utility classes para o modulo kids */
+.kids-min-h-screen {
+  min-height: 100vh;
+  font-family: "Nunito", sans-serif;
+}
+
+.kids-bg {
+  background: var(--kids-bg);
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(108,99,255,0.06) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(45,212,191,0.06) 0%, transparent 50%);
+}
+
+.kids-header {
+  background: linear-gradient(135deg, var(--kids-primary) 0%, #8B5CF6 100%);
+  box-shadow: 0 4px 20px rgba(108,99,255,0.3);
+}
+
+.kids-card {
+  background: var(--kids-card-bg);
+  border-radius: 20px;
+  box-shadow: var(--kids-shadow);
+  padding: 1.25rem;
+  transition: box-shadow 0.2s ease;
+}
+
+.kids-card:hover {
+  box-shadow: 0 6px 28px rgba(108,99,255,0.12);
+}
+
+.kids-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 2px solid #E5E3FF;
+  border-radius: 14px;
+  font-family: "Nunito", sans-serif;
+  font-size: 0.925rem;
+  font-weight: 600;
+  color: #374151;
+  background: #FAFAFE;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.kids-input:focus {
+  border-color: var(--kids-primary);
+  box-shadow: 0 0 0 3px rgba(108,99,255,0.12);
+  background: #fff;
+}
+
+.kids-btn-primary {
+  background: linear-gradient(135deg, var(--kids-primary) 0%, #8B5CF6 100%);
+  color: white;
+  font-family: "Nunito", sans-serif;
+  font-weight: 800;
+  padding: 0.85rem 1.5rem;
+  border-radius: 14px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s;
+  box-shadow: 0 4px 15px rgba(108,99,255,0.35);
+}
+
+.kids-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(108,99,255,0.45);
+}
+
+.kids-btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.kids-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Color tokens como classes utilitarias */
+.text-kids-primary { color: var(--kids-primary); }
+.text-kids-accent { color: var(--kids-accent); }
+.text-kids-green { color: var(--kids-green); }
+.text-kids-yellow { color: var(--kids-yellow); }
+.bg-kids-primary { background-color: var(--kids-primary); }
+.bg-kids-accent { background-color: var(--kids-accent); }
+.bg-kids-green { background-color: var(--kids-green); }
+.bg-kids-yellow { background-color: var(--kids-yellow); }
+.border-l-kids-green { border-left-color: var(--kids-green); }
+.border-l-kids-primary { border-left-color: var(--kids-primary); }
+.border-l-kids-yellow { border-left-color: var(--kids-yellow); }
+.border-kids-primary { border-color: var(--kids-primary); }
+.border-kids-accent { border-color: var(--kids-accent); }
+.bg-kids-primary\/5 { background-color: rgba(108,99,255,0.05); }
+.bg-kids-primary\/10 { background-color: rgba(108,99,255,0.10); }
+.bg-kids-primary\/20 { background-color: rgba(108,99,255,0.20); }
+.bg-kids-primary\/30 { background-color: rgba(108,99,255,0.30); }
+.bg-kids-accent\/10 { background-color: rgba(255,107,107,0.10); }
+.bg-kids-green\/10 { background-color: rgba(45,212,191,0.10); }
+.bg-kids-green\/20 { background-color: rgba(45,212,191,0.20); }
+.bg-kids-green\/40 { background-color: rgba(45,212,191,0.40); }
+.bg-kids-yellow\/10 { background-color: rgba(251,191,36,0.10); }
+.bg-kids-yellow\/20 { background-color: rgba(251,191,36,0.20); }
+.text-kids-primary\/30 { color: rgba(108,99,255,0.30); }
+.hover\:bg-kids-primary\/10:hover { background-color: rgba(108,99,255,0.10); }
+.hover\:bg-kids-primary\/5:hover { background-color: rgba(108,99,255,0.05); }
+.hover\:bg-kids-accent:hover { background-color: var(--kids-accent); }
+.hover\:bg-kids-accent\/10:hover { background-color: rgba(255,107,107,0.10); }
+.hover\:bg-kids-green\/40:hover { background-color: rgba(45,212,191,0.40); }
+.hover\:border-kids-primary:hover { border-color: var(--kids-primary); }
+.from-kids-primary { --tw-gradient-from: var(--kids-primary); }
+.from-kids-green { --tw-gradient-from: var(--kids-green); }
+.from-kids-accent { --tw-gradient-to: var(--kids-accent); }
+.border-l-4 { border-left-width: 4px; }
+.accent-kids-primary { accent-color: var(--kids-primary); }
+
+/* Animacao suave para cards de check-in */
+@keyframes kids-pulse-in {
+  0% { transform: scale(0.97); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.kids-card { animation: kids-pulse-in 0.2s ease; }
+
+/* Scrollbar customizada para o modulo kids */
+.kids-min-h-screen *::-webkit-scrollbar { width: 4px; }
+.kids-min-h-screen *::-webkit-scrollbar-track { background: transparent; }
+.kids-min-h-screen *::-webkit-scrollbar-thumb { background: rgba(108,99,255,0.3); border-radius: 10px; }

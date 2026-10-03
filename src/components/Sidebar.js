@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Home, BookOpen, X, Network, GraduationCap, User, UserPlus, Eye, FileText, Settings } from 'lucide-react';
+import { LayoutDashboard, Users, Home, BookOpen, X, Network, GraduationCap, User, UserPlus, Eye, FileText, Settings, Baby } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
 const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMembers = [] }) => {
@@ -111,6 +111,9 @@ const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMemb
       
       // Configurações Globais
       ...((realIsAdmin || isSuperAdmin) ? [{ id: 'master-admin', label: 'Config. Globais', icon: Settings, path: '/master-admin' }] : []),
+
+      // Ministerio Infantil
+      ...((realIsAdmin || isSuperAdmin) ? [{ id: 'kids', label: 'Ministerio Infantil', icon: Baby, path: '/kids' }] : []),
     ]),
 
     // Nova Decisão - Visível para todos os usuários logados

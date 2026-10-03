@@ -28,6 +28,7 @@ const MasterAdminPage = React.lazy(() => import('./pages/MasterAdminPage'));
 const ImpersonatePage = React.lazy(() => import('./pages/ImpersonatePage'));
 const ConnectReportsHistoryPage = React.lazy(() => import('./pages/ConnectReportsHistoryPage'));
 const ConnectReportDetailsPage = React.lazy(() => import('./pages/ConnectReportDetailsPage'));
+const KidsApp = React.lazy(() => import('./kids/KidsApp'));
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -238,7 +239,9 @@ const AppRouter = ({
                     }
                 />
 
-                
+                {/* Ministerio Infantil - Kids Check-in (rota publica com auth propria) */}
+                <Route path="/kids/*" element={<KidsApp />} />
+
                 {(isAdmin || isSuperAdmin) && (
                     <Route
                         path="/visualizar-como"
