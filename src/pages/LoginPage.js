@@ -63,17 +63,28 @@ const LoginPage = () => {
             
             setAvailableTenants(userTenants);
 
+            const fetchTenantDetails = async (tId) => {
+                try {
+                    const tRef = doc(db, 'tenants', tId);
+                    const tSnap = await getDoc(tRef);
+                    if (tSnap.exists()) {
+                        return { id: tId, ...tSnap.data() };
+                    }
+                    const q = query(collection(db, 'tenants'), where('id', '==', tId));
+                    const qSnap = await getDocs(q);
+                    if (!qSnap.empty) {
+                        return { id: tId, ...qSnap.docs[0].data() };
+                    }
+                } catch (e) {
+                    console.error('Erro ao buscar dados da igreja:', e);
+                }
+                return { id: tId, name: tId };
+            };
+
             if (isSuper) {
                 // Super admin pode acessar o dashboard mestre direto
-                // Mas precisamos buscar a lista de igrejas se ele quiser logar em alguma específica
-                // Para simplificar, o super admin loga no tenant principal (tenda-church-app) por padrão
-                const defaultTenantRef = doc(db, 'tenants', 'tenda-church-app');
-                const defaultTenantSnap = await getDoc(defaultTenantRef);
-                if (defaultTenantSnap.exists()) {
-                    setTenant('tenda-church-app', defaultTenantSnap.data());
-                } else {
-                    setTenant('tenda-church-app', { name: 'Tenda Church App' });
-                }
+                const defaultTenantData = await fetchTenantDetails('tenda-church-app');
+                setTenant('tenda-church-app', defaultTenantData);
                 setIsSubmitting(false);
                 return;
             }
@@ -88,26 +99,24 @@ const LoginPage = () => {
             if (userTenants.length === 1) {
                 // Apenas uma igreja - loga direto nela
                 const tenantId = userTenants[0];
-                const tenantRef = doc(db, 'tenants', tenantId);
-                const tenantSnap = await getDoc(tenantRef);
+                const tenantData = await fetchTenantDetails(tenantId);
                 
-                if (tenantSnap.exists() && tenantSnap.data().status === 'inactive') {
+                if (tenantData && tenantData.status === 'inactive') {
                     setError('O ambiente desta igreja está desativado.');
                     auth.signOut();
                     setIsSubmitting(false);
                     return;
                 }
                 
-                setTenant(tenantId, tenantSnap.exists() ? tenantSnap.data() : { name: tenantId });
+                setTenant(tenantId, tenantData);
                 setIsSubmitting(false);
             } else {
                 // Múltiplas igrejas - abre o modal de seleção
                 const churchDetails = [];
                 for (const tId of userTenants) {
-                    const tRef = doc(db, 'tenants', tId);
-                    const tSnap = await getDoc(tRef);
-                    if (tSnap.exists() && tSnap.data().status === 'active') {
-                        churchDetails.push({ id: tId, ...tSnap.data() });
+                    const tData = await fetchTenantDetails(tId);
+                    if (tData && tData.status === 'active') {
+                        churchDetails.push(tData);
                     }
                 }
                 

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, Suspense, useMemo } from 'react';
+import React, { useState, useEffect, useRef, Suspense, useMemo } from 'react';
 import { Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { collection, getDocs } from 'firebase/firestore';
@@ -26,6 +26,8 @@ const DecisionFormPage = React.lazy(() => import('./pages/DecisionFormPage'));
 const DecisionsHistoryPage = React.lazy(() => import('./pages/DecisionsHistoryPage'));
 const MasterAdminPage = React.lazy(() => import('./pages/MasterAdminPage'));
 const ImpersonatePage = React.lazy(() => import('./pages/ImpersonatePage'));
+const ConnectReportsHistoryPage = React.lazy(() => import('./pages/ConnectReportsHistoryPage'));
+const ConnectReportDetailsPage = React.lazy(() => import('./pages/ConnectReportDetailsPage'));
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -244,6 +246,24 @@ const AppRouter = ({
                             <ImpersonatePage allMembers={allMembers} />
                         }
                     />
+                )}
+                {(isAdmin || isSuperAdmin) && (
+                    <>
+                        <Route
+                            path="/historico-relatorios"
+                            element={<ConnectReportsHistoryPage allConnects={allConnects} />}
+                        />
+                        <Route
+                            path="/historico-relatorios/:connectId"
+                            element={
+                                <ConnectReportDetailsPage
+                                    allConnects={allConnects}
+                                    allConnectReports={allConnectReports}
+                                    allMembers={allMembers}
+                                />
+                            }
+                        />
+                    </>
                 )}
                 {/* Dashboard */}
                 <Route

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Home, BookOpen, X, Network, GraduationCap, User, UserPlus, Eye } from 'lucide-react';
+import { LayoutDashboard, Users, Home, BookOpen, X, Network, GraduationCap, User, UserPlus, Eye, FileText, Settings } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
 const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMembers = [] }) => {
@@ -103,8 +103,14 @@ const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMemb
       // Hierarquia - Visível para Admins, Líderes e Supervisores
       ...((isAdmin || isLeader || isSupervisor) ? [{ id: 'hierarchy', label: 'Hierarquia', icon: Network, path: '/hierarquia-lideranca' }] : []),
 
+      // Histórico de Relatórios - Visível apenas para Admins
+      ...((isAdmin || isSuperAdmin) ? [{ id: 'reports-history', label: 'Relatórios Connect', icon: FileText, path: '/historico-relatorios' }] : []),
+
       // Impersonate
       ...((realIsAdmin || isSuperAdmin) && !impersonatedUser ? [{ id: 'impersonate', label: 'Visualizar como...', icon: Eye, path: '/visualizar-como' }] : []),
+      
+      // Configurações Globais
+      ...(isSuperAdmin ? [{ id: 'master-admin', label: 'Config. Globais', icon: Settings, path: '/master-admin' }] : []),
     ]),
 
     // Nova Decisão - Visível para todos os usuários logados

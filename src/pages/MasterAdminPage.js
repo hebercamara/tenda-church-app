@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import { collection, getDocs, addDoc, doc, updateDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useAuthStore } from '../store/authStore';
 import { SUPER_ADMIN_EMAIL } from '../utils/tenantUtils';
@@ -65,14 +65,15 @@ const MasterAdminPage = ({ onBack }) => {
     setSaving(true);
     try {
       const tenantId = newTenant.id.trim() || generateTenantId(newTenant.name);
+      const normalizedAdminEmail = newTenant.adminEmail.trim().toLowerCase();
       
       if (editingTenant) {
         await updateDoc(doc(db, 'tenants', editingTenant.docId), {
           name: newTenant.name.trim(),
-          adminEmail: newTenant.adminEmail.trim() || ''
+          adminEmail: normalizedAdminEmail
         });
-        if (newTenant.adminEmail.trim()) {
-            const email = newTenant.adminEmail.trim().toLowerCase();
+        if (normalizedAdminEmail) {
+            const email = normalizedAdminEmail;
             const existingUser = globalUsers.find(u => u.email === email);
             if (existingUser) {
               const updatedTenants = [...new Set([...(existingUser.tenants || []), tenantId])];
@@ -88,12 +89,12 @@ const MasterAdminPage = ({ onBack }) => {
           setSaving(false);
           return;
         }
-        await addDoc(collection(db, 'tenants'), {
-          id: tenantId, name: newTenant.name.trim(), adminEmail: newTenant.adminEmail.trim() || '',
+        await setDoc(doc(db, 'tenants', tenantId), {
+          id: tenantId, name: newTenant.name.trim(), adminEmail: normalizedAdminEmail,
           logoUrl: newTenant.logoUrl.trim() || '', status: 'active', createdAt: new Date().toISOString()
         });
-        if (newTenant.adminEmail.trim()) {
-          const email = newTenant.adminEmail.trim().toLowerCase();
+        if (normalizedAdminEmail) {
+          const email = normalizedAdminEmail;
           const existingUser = globalUsers.find(u => u.email === email);
           if (existingUser) {
             const updatedTenants = [...new Set([...(existingUser.tenants || []), tenantId])];
@@ -198,7 +199,7 @@ const MasterAdminPage = ({ onBack }) => {
                         const tenantId = 'tenda-church-app';
                         const adminEmail = 'tendachurchgbi@batistavida.com.br';
                         
-                        await addDoc(collection(db, 'tenants'), {
+                        await setDoc(doc(db, 'tenants', tenantId), {
                           id: tenantId,
                           name: 'Tenda Church Guanambi',
                           adminEmail: adminEmail,

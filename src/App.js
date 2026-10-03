@@ -110,7 +110,7 @@ const areNamesSimilar = (nameA, nameB, threshold) => {
 };
 
 function AppContent() {
-    const { user, isAdmin, currentUserData, setAuthData, clearAuthData, impersonatedUser, clearImpersonation } = useAuthStore();
+    const { user, isAdmin, currentUserData, setAuthData, clearAuthData, impersonatedUser, clearImpersonation, tenantData } = useAuthStore();
     const [isLoadingAuth, setIsLoadingAuth] = useState(true);
     const navigate = useNavigate();
 
@@ -175,6 +175,43 @@ function AppContent() {
         return () => authUnsub();
     }, [setAuthData]);
 
+    // useEffect para escutar alterações no tenant ativo em tempo real
+    useEffect(() => {
+        const tenantId = getTenantId();
+        if (!tenantId) return;
+
+        let qUnsub = null;
+        const tenantRef = doc(db, 'tenants', tenantId);
+        const mainUnsub = onSnapshot(
+            tenantRef,
+            (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = { id: docSnap.id, ...docSnap.data() };
+                    useAuthStore.getState().setTenant(tenantId, data);
+                } else {
+                    // Fallback: busca por campo id (para tenants criados com addDoc/autoId)
+                    const q = query(collection(db, 'tenants'), where('id', '==', tenantId));
+                    if (!qUnsub) {
+                        qUnsub = onSnapshot(q, (qSnap) => {
+                            if (!qSnap.empty) {
+                                const d = qSnap.docs[0];
+                                const data = { docId: d.id, ...d.data() };
+                                useAuthStore.getState().setTenant(tenantId, data);
+                            }
+                        });
+                    }
+                }
+            },
+            (err) => {
+                console.warn('Erro ao escutar tenant:', err);
+            }
+        );
+        return () => {
+            mainUnsub();
+            if (qUnsub) qUnsub();
+        };
+    }, [user]);
+
     // CORRIGIDO: useEffect 2 - Para buscar todos os membros e encontrar o dado do usuÃ¡rio logado
     useEffect(() => {
         if (!user) {
@@ -183,34 +220,90 @@ function AppContent() {
         }
         const membersUnsub = onSnapshot(
             collection(db, `artifacts/${getTenantId()}/public/data/members`),
-            (snapshot) => {
+            async (snapshot) => {
                 const membersList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
-                // Se nÃ£o hÃ¡ dados no Firebase, usa dados de exemplo
                 const finalMembersList = membersList;
                 setAllMembers(finalMembersList);
 
-                // Encontra e atualiza os dados do usuÃ¡rio logado no store
-                const realMemberData = finalMembersList.find(m => m.email?.toLowerCase() === user.email?.toLowerCase());
-                const realIsAdmin = isAdminEmail(user.email) || (realMemberData?.isAdmin === true);
+                // Dados do tenant atual e usuário logado
+                const currentTenantData = useAuthStore.getState().tenantData;
+                const tenantAdminEmail = currentTenantData?.adminEmail?.toLowerCase()?.trim() || null;
+                const userEmail = user.email?.toLowerCase()?.trim() || '';
+
+                // Encontra e atualiza os dados do usuário logado no store
+                const realMemberData = finalMembersList.find(m => m.email?.toLowerCase()?.trim() === userEmail);
+                const isTenantAdmin = !!(tenantAdminEmail && tenantAdminEmail === userEmail);
+                const realIsAdmin = isAdminEmail(user.email) || isTenantAdmin || (realMemberData?.isAdmin === true);
+
+                // Se o membro existe na igreja mas a flag isAdmin ainda não está true e ele é o admin
+                if (realMemberData && isTenantAdmin && !realMemberData.isAdmin) {
+                    try {
+                        await updateDoc(doc(db, `artifacts/${getTenantId()}/public/data/members`, realMemberData.id), {
+                            isAdmin: true
+                        });
+                    } catch (err) {
+                        console.warn('Erro ao atualizar flag isAdmin do membro:', err);
+                    }
+                }
+
+                // Fallback de dados do usuário para Administradores que ainda não têm registro de membro
+                const fallbackUserData = realIsAdmin ? {
+                    id: realMemberData?.id || 'admin-user',
+                    email: user.email,
+                    name: user.displayName || user.email?.split('@')[0] || 'Administrador',
+                    isAdmin: true,
+                    role: 'Administrador',
+                    status: 'Ativo'
+                } : null;
 
                 if (impersonatedUser) {
                     setAuthData({ user, isAdmin: (impersonatedUser.isAdmin === true), currentUserData: impersonatedUser });
                 } else {
-                    setAuthData({ user, isAdmin: realIsAdmin, currentUserData: realMemberData || null });
+                    setAuthData({ user, isAdmin: realIsAdmin, currentUserData: realMemberData || fallbackUserData });
                 }
             },
             (error) => {
                 console.error('Erro ao carregar membros:', error);
-                setConnectionError('Erro de conexÃ£o: NÃ£o foi possÃ­vel carregar os dados dos membros. ');
-                setAllMembers([]); // Usa dados de exemplo em caso de erro
-                // Em caso de erro, mantÃ©m apenas o admin principal
-                const userIsAdmin = isAdminEmail(user.email);
-                setAuthData({ user, isAdmin: userIsAdmin, currentUserData: null });
+                setConnectionError('Erro de conexão: Não foi possível carregar os dados dos membros.');
+                setAllMembers([]);
+                const currentTenantData = useAuthStore.getState().tenantData;
+                const tenantAdminEmail = currentTenantData?.adminEmail?.toLowerCase()?.trim() || null;
+                const userEmail = user.email?.toLowerCase()?.trim() || '';
+                const userIsAdmin = isAdminEmail(user.email) || (tenantAdminEmail && tenantAdminEmail === userEmail);
+                setAuthData({
+                    user,
+                    isAdmin: userIsAdmin,
+                    currentUserData: userIsAdmin ? { email: user.email, name: 'Administrador', isAdmin: true } : null
+                });
             }
         );
         return () => membersUnsub();
-    }, [user, setAuthData, impersonatedUser]); // Depende do 'user' do store
+    }, [user, setAuthData, impersonatedUser]);
+
+    // useEffect extra: Recalcula isAdmin quando tenantData muda (resolve race condition)
+    // O tenantData pode carregar DEPOIS do snapshot de membros, então precisamos recalcular.
+    useEffect(() => {
+        if (!user || !tenantData?.adminEmail) return;
+        const tenantAdminEmail = tenantData.adminEmail.toLowerCase().trim();
+        const userEmail = user.email?.toLowerCase()?.trim() || '';
+        const isTenantAdmin = tenantAdminEmail === userEmail;
+        
+        if (isTenantAdmin && !isAdmin) {
+            // O usuário É o admin da igreja mas isAdmin ainda está false — recalcula
+            const realMemberData = allMembers.find(m => m.email?.toLowerCase()?.trim() === userEmail);
+            const fallbackUserData = {
+                id: realMemberData?.id || 'admin-user',
+                email: user.email,
+                name: realMemberData?.name || user.displayName || user.email?.split('@')[0] || 'Administrador',
+                isAdmin: true,
+                role: realMemberData?.role || 'Administrador',
+                status: 'Ativo'
+            };
+            if (impersonatedUser) return;
+            setAuthData({ user, isAdmin: true, currentUserData: realMemberData ? { ...realMemberData, isAdmin: true } : fallbackUserData });
+        }
+    }, [tenantData, user, isAdmin, allMembers, setAuthData, impersonatedUser]);
 
     // CORRIGIDO: useEffect 3 - Para buscar os outros dados (Connects, Cursos, etc.)
     useEffect(() => {
