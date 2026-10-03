@@ -110,7 +110,7 @@ const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMemb
       ...((realIsAdmin || isSuperAdmin) && !impersonatedUser ? [{ id: 'impersonate', label: 'Visualizar como...', icon: Eye, path: '/visualizar-como' }] : []),
       
       // Configurações Globais
-      ...(isSuperAdmin ? [{ id: 'master-admin', label: 'Config. Globais', icon: Settings, path: '/master-admin' }] : []),
+      ...((realIsAdmin || isSuperAdmin) ? [{ id: 'master-admin', label: 'Config. Globais', icon: Settings, path: '/master-admin' }] : []),
     ]),
 
     // Nova Decisão - Visível para todos os usuários logados

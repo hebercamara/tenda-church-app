@@ -6,7 +6,7 @@ import { SUPER_ADMIN_EMAIL } from '../utils/tenantUtils';
 import { Plus, Building2, ToggleLeft, ToggleRight, Edit, ChevronLeft, Users, Settings, Shield } from 'lucide-react';
 
 const MasterAdminPage = ({ onBack }) => {
-  const { user, isSuperAdmin } = useAuthStore();
+  const { user, isSuperAdmin, isAdmin, tenantId } = useAuthStore();
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -38,17 +38,19 @@ const MasterAdminPage = ({ onBack }) => {
   }, []);
 
   // Verificação de segurança
-  if (!isSuperAdmin) {
+  if (!isSuperAdmin && !isAdmin) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <Shield size={48} className="mx-auto text-red-500 mb-4" />
           <h2 className="text-xl font-bold text-gray-800">Acesso Negado</h2>
-          <p className="text-gray-500 mt-2">Apenas o Super Admin pode acessar esta página.</p>
+          <p className="text-gray-500 mt-2">Apenas Administradores podem acessar esta página.</p>
         </div>
       </div>
     );
   }
+
+  const visibleTenants = isSuperAdmin ? tenants : tenants.filter(t => t.id === tenantId);
 
   const generateTenantId = (name) => {
     return name
@@ -154,13 +156,16 @@ const MasterAdminPage = ({ onBack }) => {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <span className="text-xs bg-amber-500 text-black font-bold px-3 py-1 rounded-full">SUPER ADMIN</span>
+              <span className="text-xs bg-amber-500 text-black font-bold px-3 py-1 rounded-full">
+                {isSuperAdmin ? 'SUPER ADMIN' : 'ADMIN IGREJA'}
+              </span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
+      {isSuperAdmin && (
       <div className="max-w-6xl mx-auto mt-6 px-4">
         <div className="flex space-x-1 bg-white rounded-lg shadow p-1">
           <button
@@ -170,7 +175,7 @@ const MasterAdminPage = ({ onBack }) => {
             }`}
           >
             <Building2 size={16} />
-            <span>Igrejas ({tenants.length})</span>
+            <span>Igrejas ({visibleTenants.length})</span>
           </button>
           <button
             onClick={() => setActiveTab('users')}
@@ -183,6 +188,7 @@ const MasterAdminPage = ({ onBack }) => {
           </button>
         </div>
       </div>
+      )}
 
       {/* Content */}
       <div className="max-w-6xl mx-auto mt-6 px-4 pb-8">
@@ -192,7 +198,7 @@ const MasterAdminPage = ({ onBack }) => {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold text-gray-700">Igrejas Cadastradas</h2>
               <div className="flex items-center space-x-2">
-                {!tenants.find(t => t.id === 'tenda-church-app') && (
+                {isSuperAdmin && !tenants.find(t => t.id === 'tenda-church-app') && (
                   <button
                     onClick={async () => {
                       try {
@@ -224,6 +230,7 @@ const MasterAdminPage = ({ onBack }) => {
                     <span>Configurar Base Original</span>
                   </button>
                 )}
+                {isSuperAdmin && (
                 <button
                   onClick={() => setShowCreateModal(true)}
                   className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2 text-sm transition-colors"
@@ -231,13 +238,14 @@ const MasterAdminPage = ({ onBack }) => {
                   <Plus size={16} />
                   <span>{editingTenant ? 'Editar Igreja' : 'Nova Igreja'}</span>
                 </button>
+                )}
               </div>
             </div>
 
             {/* Churches List */}
             {loading ? (
               <div className="text-center py-12 text-gray-500">Carregando igrejas...</div>
-            ) : tenants.length === 0 ? (
+            ) : visibleTenants.length === 0 ? (
               <div className="text-center py-12">
                 <Building2 size={48} className="mx-auto text-gray-300 mb-4" />
                 <p className="text-gray-500">Nenhuma igreja cadastrada ainda.</p>
@@ -245,7 +253,7 @@ const MasterAdminPage = ({ onBack }) => {
               </div>
             ) : (
               <div className="grid gap-4">
-                {tenants.map(tenant => (
+                {visibleTenants.map(tenant => (
                   <div key={tenant.docId} className={`bg-white rounded-xl shadow-md border-l-4 p-5 transition-all ${
                     tenant.status === 'active' ? 'border-l-green-500' : 'border-l-gray-300 opacity-70'
                   }`}>
@@ -279,7 +287,7 @@ const MasterAdminPage = ({ onBack }) => {
                         >
                           <Edit size={20} />
                         </button>
-                        {tenant.status === 'active' && (
+                        {isSuperAdmin && tenant.status === 'active' && (
                           <button
                             onClick={() => handleSwitchToTenant(tenant.id, tenant)}
                             className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 px-3 rounded-lg transition-colors"
@@ -287,6 +295,7 @@ const MasterAdminPage = ({ onBack }) => {
                             Acessar
                           </button>
                         )}
+                        {isSuperAdmin && (
                         <button
                           onClick={() => handleToggleTenantStatus(tenant)}
                           className={`p-2 rounded-lg transition-colors ${
@@ -298,6 +307,7 @@ const MasterAdminPage = ({ onBack }) => {
                         >
                           {tenant.status === 'active' ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
                         </button>
+                        )}
                       </div>
                     </div>
                   </div>
