@@ -1,7 +1,6 @@
-import React, { Suspense } from "react";
+﻿import React, { Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { KidsAuthProvider, useKidsAuth } from "./KidsAuthContext";
-import { useKidsStore } from "./store/kidsStore";
 import LoadingSpinner from "../components/LoadingSpinner";
 
 // Pages
@@ -17,25 +16,40 @@ import KidsEquipePage from "./pages/KidsEquipePage";
 import KidsRelatoriosPage from "./pages/KidsRelatoriosPage";
 
 function KidsRouterInner() {
-  const { loading, kidsRole } = useKidsAuth();
-  const { guardian } = useKidsStore();
+  const { loading, kidsRole, kidsUser, guardian } = useKidsAuth();
 
-  if (loading) return <div className="kids-min-h-screen kids-bg flex items-center justify-center"><LoadingSpinner /></div>;
+  if (loading) {
+    return (
+      <div className="kids-min-h-screen kids-bg flex items-center justify-center">
+        <LoadingSpinner />
+      </div>
+    );
+  }
 
   const isStaff = ["monitor", "supervisor", "admin"].includes(kidsRole);
   const isSupervisorOrAdmin = ["supervisor", "admin"].includes(kidsRole);
+  const isGuardian = kidsRole === "guardian" || !!guardian;
+
+  // Determina onde redirecionar quando o usuario esta logado mas sem role kids
+  // (membro do app principal que ainda nao fez cadastro no modulo kids)
+  const loggedInButNoKidsRole = kidsUser && !kidsRole && !guardian;
 
   return (
     <Routes>
+      {/* Rotas publicas - sempre acessiveis */}
       <Route path="login" element={<KidsLoginPage />} />
       <Route path="cadastro" element={<KidsCadastroPage />} />
-      
+
       {/* Responsavel */}
       <Route path="painel" element={
-        (kidsRole === "guardian" || guardian) ? <KidsPainelPage /> : <Navigate to="/kids/login" replace />
+        isGuardian ? <KidsPainelPage /> :
+        isStaff ? <Navigate to="/kids/supervisor" replace /> :
+        <Navigate to="/kids/login" replace />
       } />
       <Route path="filhos" element={
-        (kidsRole === "guardian" || guardian) ? <KidsFilhosPage /> : <Navigate to="/kids/login" replace />
+        isGuardian ? <KidsFilhosPage /> :
+        isStaff ? <Navigate to="/kids/supervisor" replace /> :
+        <Navigate to="/kids/login" replace />
       } />
 
       {/* Monitor */}
@@ -62,9 +76,10 @@ function KidsRouterInner() {
 
       {/* Landing: redireciona baseado no role */}
       <Route path="" element={
-        kidsRole === "admin" || kidsRole === "supervisor" ? <Navigate to="/kids/supervisor" replace /> :
+        isSupervisorOrAdmin ? <Navigate to="/kids/supervisor" replace /> :
         kidsRole === "monitor" ? <Navigate to="/kids/monitor" replace /> :
-        kidsRole === "guardian" || guardian ? <Navigate to="/kids/painel" replace /> :
+        isGuardian ? <Navigate to="/kids/painel" replace /> :
+        loggedInButNoKidsRole ? <Navigate to="/kids/cadastro" replace /> :
         <Navigate to="/kids/login" replace />
       } />
       <Route path="*" element={<Navigate to="/kids" replace />} />
@@ -75,7 +90,11 @@ function KidsRouterInner() {
 export default function KidsApp() {
   return (
     <KidsAuthProvider>
-      <Suspense fallback={<div className="kids-min-h-screen kids-bg flex items-center justify-center"><LoadingSpinner /></div>}>
+      <Suspense fallback={
+        <div className="kids-min-h-screen kids-bg flex items-center justify-center">
+          <LoadingSpinner />
+        </div>
+      }>
         <KidsRouterInner />
       </Suspense>
     </KidsAuthProvider>

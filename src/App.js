@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { BrowserRouter, useNavigate, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, useNavigate, Routes, Route, useLocation } from 'react-router-dom';
 import damerau from 'damerau-levenshtein';
 import { useAuthStore } from './store/authStore';
 import { useMultipleLoadingStates } from './hooks/useLoadingState';
@@ -113,7 +113,8 @@ function AppContent() {
     const { user, isAdmin, currentUserData, setAuthData, clearAuthData, impersonatedUser, clearImpersonation, tenantData } = useAuthStore();
     const [isLoadingAuth, setIsLoadingAuth] = useState(true);
     const navigate = useNavigate();
-
+    const location = useLocation();
+    const isKidsRoute = location.pathname.startsWith('/kids');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [allMembers, setAllMembers] = useState([]);
     const [allConnects, setAllConnects] = useState([]);
@@ -1680,16 +1681,39 @@ function AppContent() {
 
 
     if (isLoadingAuth) return <LoadingSpinner />;
+
     if (!user) {
-        // Rotas pÃºblicas: Login (default) e Signup
+        // Rotas públicas: Login (default) e Signup
+        // O modulo /kids tem auth propria — sempre acessivel
         return (
             <Routes>
                 <Route path="/signup" element={<SignupPage />} />
                 <Route path="/nova-decisao" element={<DecisionFormPage />} />
+                <Route path="/kids/*" element={<AppRouter
+                    allMembers={[]} allConnects={[]} allCourses={[]} allCourseTemplates={[]}
+                    allCertificateTemplates={[]} allConnectReports={[]} allDecisions={[]}
+                    allSimpleMembers={[]} combinedMembers={[]} membersWithCourses={[]}
+                    completedCourses={[]} memberConnectHistoryDetails={[]} loadingStates={loadingStates}
+                    operationStatus={operationStatus} setOperationStatus={setOperationStatus}
+                    handleAddMember={() => {}} handleEditMember={() => {}} handleDeleteMember={() => {}}
+                    handleReactivateMember={() => {}} handleAddConnect={() => {}} handleEditConnect={() => {}}
+                    handleDeleteConnect={() => {}} handleAddCourse={() => {}} handleEditCourse={() => {}}
+                    handleDeleteCourse={() => {}} handleManageCourse={() => {}} handleAddCourseTemplate={() => {}}
+                    handleEditCourseTemplate={() => {}} handleDeleteCourseTemplate={() => {}}
+                    handleDeleteCertificateTemplate={() => {}} handleGenerateReport={() => {}}
+                    handleGenerateFullReport={() => {}} handleViewMember={() => {}} handleViewConnectTrack={() => {}}
+                    handleLeadershipTrack={() => {}} handleSetAuxLeader={() => {}} handleRemoveAuxLeader={() => {}}
+                    handleSetAuxTeacher={() => {}} handleFinalizeCourse={() => {}} handleReopenCourse={() => {}}
+                    handleUpdateDecisionStatus={() => {}} handleSaveCourseGroups={() => {}}
+                    handleSaveSimpleMember={() => {}} handleDeleteSimpleMember={() => {}}
+                    calculateFinalGradeForStudent={() => {}} getStudentStatusInfo={() => {}}
+                    areNamesSimilar={() => {}} attendanceAlerts={[]} getConnectName={() => ''}
+                />} />
                 <Route path="*" element={<LoginPage />} />
             </Routes>
         );
     }
+
 
     // Exibe mensagem de erro de conexÃ£o se houver
     if (connectionError) {
@@ -1726,7 +1750,8 @@ function AppContent() {
     }
 
     return (
-        <div className="flex h-screen bg-gray-100">
+        <div className={`flex h-screen ${isKidsRoute ? '' : 'bg-gray-100'}`}>
+            {!isKidsRoute && (
             <Sidebar
                 isOpen={isSidebarOpen}
                 setIsOpen={setIsSidebarOpen}
@@ -1734,11 +1759,14 @@ function AppContent() {
                 allCourses={allCourses}
                 allMembers={allMembers}
             />
+            )}
             <div className="flex-1 flex flex-col overflow-hidden">
+                {!isKidsRoute && (
                 <Header
                     onLogout={handleLogout}
                     onMenuClick={() => setIsSidebarOpen(true)}
                 />
+                )}
                 {/* Mensagens de loading states */}
                 <div className="mx-4 md:mx-8 mt-4 space-y-2">
                     {Object.entries(loadingStates.states).map(([operation, state]) => (
@@ -1783,7 +1811,7 @@ function AppContent() {
                     </div>
                 )}
                 
-                {impersonatedUser && (
+                {impersonatedUser && !isKidsRoute && (
                     <div className="bg-amber-500 text-black px-4 py-2 flex justify-between items-center z-50">
                         <span className="font-bold">
                             Visualizando como: {impersonatedUser.name || impersonatedUser.email}
@@ -1796,7 +1824,7 @@ function AppContent() {
                         </button>
                     </div>
                 )}
-                <main className="flex-1 overflow-y-auto p-4 md:p-8">
+                <main className={`flex-1 overflow-y-auto ${isKidsRoute ? '' : 'p-4 md:p-8'}`}>
                     <AppRouter
                         // Props para dados
                         allMembers={allMembers}
