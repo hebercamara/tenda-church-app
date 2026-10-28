@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { getTenantId } from '../utils/tenantUtils';
-import { useAuthStore } from '../store/authStore';
 import Modal from './Modal';
 import { formatDateToBrazilian } from '../utils/dateUtils';
 import { Calendar, CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react';
@@ -21,13 +20,7 @@ const getConnectWeekdayIndex = (weekday) => {
 };
 
 const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, isAdmin, onViewMember }) => {
-    const { isAdmin: storeIsAdmin, isSuperAdmin } = useAuthStore();
-    const userIsAdmin = !!(isAdmin || storeIsAdmin || isSuperAdmin);
-
-    const [reportDates, setReportDates] = useState([]);
     const [selectedDate, setSelectedDate] = useState('');
-    const [isCustomDate, setIsCustomDate] = useState(false);
-    const [customDateValue, setCustomDateValue] = useState('');
     const [attendance, setAttendance] = useState({});
     const [guests, setGuests] = useState('');
     const [offering, setOffering] = useState('');
@@ -106,7 +99,7 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
         });
     }, [members, connect, selectedDate]);
 
-    // Geração das opções de datas de reunião
+    // Define estritamente e exclusivamente a data da última reunião realizada do Connect
     useEffect(() => {
         if (!connect) return;
 
@@ -125,43 +118,9 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
         lastMeetingDate.setDate(today.getDate() - baseDiff);
         const lastMeetingIso = lastMeetingDate.toISOString().split('T')[0];
 
-        if (!userIsAdmin) {
-            // Líderes comuns: acesso estritamente restrito apenas à última reunião realizada
-            setReportDates([
-                {
-                    label: `Última Reunião (${formatDateToBrazilian(lastMeetingDate)})`,
-                    value: lastMeetingIso
-                }
-            ]);
-            setSelectedDate(lastMeetingIso);
-            setIsCustomDate(false);
-        } else {
-            // Administradores: acesso às últimas 4 semanas e opção personalizada
-            const dates = [];
-            const labels = [
-                'Última Reunião / Semana Atual',
-                'Semana Anterior',
-                '2 semanas atrás',
-                '3 semanas atrás'
-            ];
-
-            for (let i = 0; i < 4; i++) {
-                const meetingDate = new Date(today);
-                meetingDate.setDate(today.getDate() - baseDiff - (i * 7));
-                const iso = meetingDate.toISOString().split('T')[0];
-                dates.push({
-                    label: `${labels[i]} (${formatDateToBrazilian(meetingDate)})`,
-                    value: iso
-                });
-            }
-
-            setReportDates(dates);
-            if (!selectedDate || !dates.some(d => d.value === selectedDate)) {
-                setSelectedDate(dates[0].value);
-            }
-        }
+        setSelectedDate(lastMeetingIso);
         setSaveError('');
-    }, [connect, userIsAdmin]);
+    }, [connect]);
 
     // Busca o relatório existente quando a data ou connect mudam (sem resetar por re-renders de members!)
     useEffect(() => {
@@ -232,34 +191,9 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
         });
     };
 
-    const handleDateSelectChange = (e) => {
-        const val = e.target.value;
-        if (val === 'custom') {
-            setIsCustomDate(true);
-            if (!customDateValue) {
-                const todayIso = new Date().toISOString().split('T')[0];
-                setCustomDateValue(todayIso);
-                setSelectedDate(todayIso);
-            } else {
-                setSelectedDate(customDateValue);
-            }
-        } else {
-            setIsCustomDate(false);
-            setSelectedDate(val);
-        }
-    };
-
-    const handleCustomDateChange = (e) => {
-        const val = e.target.value;
-        setCustomDateValue(val);
-        if (val) {
-            setSelectedDate(val);
-        }
-    };
-
     const handleSave = async () => {
         if (!selectedDate) {
-            setSaveError("Por favor, selecione uma data para a reunião.");
+            setSaveError("Data da reunião não identificada.");
             return;
         }
 
@@ -311,7 +245,7 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
     return (
         <Modal isOpen={isOpen} onClose={isSaving ? () => {} : onClose} size="2xl" title={`Relatório do Connect ${connect?.number || ''}`}>
             <div className="flex flex-col space-y-4">
-                {/* Header e Seleção de Data */}
+                {/* Header e Exibição Fixa da Última Reunião */}
                 <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
                     <div className="flex justify-between items-center mb-2">
                         <p className="font-semibold text-gray-800 text-base">{connect?.name || `Connect ${connect?.number || ''}`}</p>
@@ -323,51 +257,20 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
                     </div>
 
                     <div>
-                        <label htmlFor="reportDate" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1 flex items-center gap-1">
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1 flex items-center gap-1">
                             <Calendar size={14} className="text-gray-500" />
-                            Data da Reunião {userIsAdmin ? '' : '(Última Reunião)'}
+                            Data da Reunião
                         </label>
 
-                        {!userIsAdmin ? (
-                            /* Líder comum: apenas exibição da última reunião sem permissão para mudar a data */
-                            <div className="bg-white text-gray-800 rounded-md p-2.5 text-sm font-semibold border border-gray-300 flex items-center justify-between shadow-xs">
-                                <span>
-                                    {selectedDate ? formatDateToBrazilian(new Date(selectedDate + 'T12:00:00Z')) : 'Carregando...'}
-                                </span>
-                                <span className="text-xs bg-red-100 text-[#DC2626] font-semibold px-2 py-0.5 rounded-full border border-red-200">
-                                    Última Reunião
-                                </span>
-                            </div>
-                        ) : (
-                            /* Administrador: acesso ao seletor completo */
-                            <>
-                                <select
-                                    id="reportDate"
-                                    value={isCustomDate ? 'custom' : selectedDate}
-                                    onChange={handleDateSelectChange}
-                                    disabled={isSaving}
-                                    className="w-full bg-white text-gray-900 rounded-md p-2 text-sm border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:outline-none"
-                                >
-                                    {reportDates.map(date => (
-                                        <option key={date.value} value={date.value}>{date.label}</option>
-                                    ))}
-                                    <option value="custom">📅 Outra Data (Personalizada)...</option>
-                                </select>
-
-                                {isCustomDate && (
-                                    <div className="mt-2">
-                                        <label className="block text-xs text-gray-600 mb-1">Informe a data específica:</label>
-                                        <input
-                                            type="date"
-                                            value={customDateValue}
-                                            onChange={handleCustomDateChange}
-                                            disabled={isSaving}
-                                            className="w-full bg-white text-gray-900 rounded-md p-2 text-sm border border-gray-300 focus:ring-2 focus:ring-[#DC2626]"
-                                        />
-                                    </div>
-                                )}
-                            </>
-                        )}
+                        {/* Exclusivamente a última reunião - sem dropdown de várias semanas */}
+                        <div className="bg-white text-gray-800 rounded-md p-2.5 text-sm font-semibold border border-gray-300 flex items-center justify-between shadow-xs">
+                            <span>
+                                {selectedDate ? formatDateToBrazilian(new Date(selectedDate + 'T12:00:00Z')) : 'Carregando data...'}
+                            </span>
+                            <span className="text-xs bg-red-100 text-[#DC2626] font-semibold px-2.5 py-0.5 rounded-full border border-red-200">
+                                Última Reunião
+                            </span>
+                        </div>
                     </div>
                 </div>
 
