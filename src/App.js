@@ -1517,18 +1517,59 @@ function AppContent() {
         }
     };
     const handleSaveConnectReport = async (reportData) => {
-        const dateString = reportData.reportDate.toISOString().split('T')[0];
-        const reportId = `${reportData.connectId}_${dateString}`;
-        const reportRef = doc(db, `artifacts/${getTenantId()}/public/data/connect_reports`, reportId);
-
-        loadingStates.setLoading('saveReport', 'Salvando relatÃ³rio...');
-
         try {
-            await setDoc(reportRef, reportData);
-            loadingStates.setSuccess('saveReport', 'RelatÃ³rio salvo com sucesso!');
+            const dateObj = reportData.reportDate instanceof Date
+                ? reportData.reportDate
+                : (reportData.reportDate?.toDate ? reportData.reportDate.toDate() : new Date(reportData.reportDate));
+            const dateString = !isNaN(dateObj.getTime()) ? dateObj.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+            const reportId = `${reportData.connectId}_${dateString}`;
+            const reportRef = doc(db, `artifacts/${getTenantId()}/public/data/connect_reports`, reportId);
+
+            loadingStates.setLoading('saveReport', 'Salvando relatório...');
+
+            // Sanitiza todos os campos para garantir que nenhum undefined chegue ao Firestore
+            const safeAttendance = {};
+            if (reportData.attendance && typeof reportData.attendance === 'object') {
+                Object.entries(reportData.attendance).forEach(([k, v]) => {
+                    if (k && typeof v === 'string') safeAttendance[k] = v;
+                });
+            }
+
+            const cleanPayload = {
+                connectId: String(reportData.connectId || ''),
+                connectName: String(reportData.connectName || ''),
+                leaderId: String(reportData.leaderId || ''),
+                leaderName: String(reportData.leaderName || ''),
+                reportDate: dateObj,
+                guests: Math.max(0, Number(reportData.guests) || 0),
+                offering: Math.max(0, Number(reportData.offering) || 0),
+                attendance: safeAttendance,
+                updatedAt: new Date()
+            };
+
+            await retryFirestoreOperation(async () => {
+                await setDoc(reportRef, cleanPayload, { merge: true });
+            });
+
+            // Atualização otimista no estado local para refletir imediatamente na UI
+            setAllConnectReports(prev => {
+                const list = Array.isArray(prev) ? prev : [];
+                const idx = list.findIndex(r => r.id === reportId || (String(r.connectId) === cleanPayload.connectId && (r.reportDate?.toDate ? r.reportDate.toDate().toISOString().split('T')[0] : new Date(r.reportDate).toISOString().split('T')[0]) === dateString));
+                const item = { id: reportId, ...cleanPayload };
+                if (idx >= 0) {
+                    const next = [...list];
+                    next[idx] = { ...next[idx], ...item };
+                    return next;
+                }
+                return [item, ...list];
+            });
+
+            loadingStates.setSuccess('saveReport', 'Relatório salvo com sucesso!');
+            return { success: true, reportId };
         } catch (error) {
-            console.error("Erro ao salvar relatÃ³rio do Connect:", error);
-            loadingStates.setError('saveReport', 'Erro ao salvar relatÃ³rio. Tente novamente.');
+            console.error("Erro ao salvar relatório do Connect:", error);
+            loadingStates.setError('saveReport', 'Erro ao salvar relatório. Tente novamente.');
+            throw error;
         }
     };
     // FunÃ§Ãµes de atualizaÃ§Ã£o de perfil removidas temporariamente (nÃ£o utilizadas)
