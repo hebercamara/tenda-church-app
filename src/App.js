@@ -1577,34 +1577,35 @@ function AppContent() {
             throw error;
         }
     };
-    const handleSaveMilestones = async (memberId, milestones, leadershipCourses) => {
+    const handleSaveMilestones = async (memberId, milestones) => {
         if (!memberId) throw new Error("ID do membro não fornecido.");
         const memberRef = doc(db, `artifacts/${getTenantId()}/public/data/members`, memberId);
-        const todayIso = new Date().toISOString().split('T')[0];
-        const milestonesToSave = {};
 
+        // Salva exatamente o que foi passado — completed e date são independentes
+        // date pode ser null se o usuário não preencheu — isso é válido
+        const milestonesToSave = {};
         Object.keys(milestones || {}).forEach(key => {
             const m = milestones[key] || {};
-            const isCompleted = Boolean(m.completed || m.date);
             milestonesToSave[key] = {
-                completed: isCompleted,
-                date: isCompleted ? (m.date || todayIso) : null
+                completed: Boolean(m.completed),
+                date: m.date || null,
             };
         });
 
-        const updateData = { milestones: milestonesToSave };
-        if (leadershipCourses) {
-            updateData.leadershipCourses = leadershipCourses;
-        }
-
         await retryFirestoreOperation(async () => {
-            await updateDoc(memberRef, updateData);
+            await updateDoc(memberRef, { milestones: milestonesToSave });
         });
 
-        // Atualização otimista no estado local
-        setAllMembers(prev => prev.map(m => m.id === memberId ? { ...m, milestones: milestonesToSave } : m));
-        setViewingMember(prev => prev && prev.id === memberId ? { ...prev, milestones: milestonesToSave } : prev);
-        setEditingMember(prev => prev && prev.id === memberId ? { ...prev, milestones: milestonesToSave } : prev);
+        // Atualização otimista no estado local para reflexo imediato sem re-fetch
+        setAllMembers(prev => prev.map(m =>
+            m.id === memberId ? { ...m, milestones: milestonesToSave } : m
+        ));
+        setViewingMember(prev =>
+            prev && prev.id === memberId ? { ...prev, milestones: milestonesToSave } : prev
+        );
+        setEditingMember(prev =>
+            prev && prev.id === memberId ? { ...prev, milestones: milestonesToSave } : prev
+        );
     };
     const handleFinalizeCourse = async (course) => {
         if (!course || !course.id) return;
