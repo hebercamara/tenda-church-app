@@ -621,7 +621,8 @@ function AppContent() {
 
     const openLeadershipTrackModal = async (member) => {
         if (!member) return;
-        setViewingMember(member);
+        const currentMember = allMembers.find(m => m.id === member.id) || member;
+        setViewingMember(currentMember);
 
         try {
             const coursesRef = collection(db, `artifacts/${getTenantId()}/public/data/members/${member.id}/completedCourses`);
@@ -723,6 +724,10 @@ function AppContent() {
 
             if (editingMember || originalMember) {
                 const memberId = editingMember?.id || originalMember?.id;
+                const currentMemberInState = allMembers.find(m => m.id === memberId);
+                if (!dataToSave.milestones && currentMemberInState?.milestones) {
+                    dataToSave.milestones = currentMemberInState.milestones;
+                }
                 await setDoc(doc(db, collectionPath, memberId), dataToSave);
             } else {
                 await addDoc(collection(db, collectionPath), dataToSave);
@@ -1572,13 +1577,19 @@ function AppContent() {
             throw error;
         }
     };
-    // FunÃ§Ãµes de atualizaÃ§Ã£o de perfil removidas temporariamente (nÃ£o utilizadas)
     const handleSaveMilestones = async (memberId, milestones, leadershipCourses) => {
-        if (!memberId) throw new Error("ID do membro nÃ£o fornecido.");
+        if (!memberId) throw new Error("ID do membro não fornecido.");
         const memberRef = doc(db, `artifacts/${getTenantId()}/public/data/members`, memberId);
-        const milestonesToSave = { ...milestones };
-        Object.keys(milestonesToSave).forEach(key => {
-            milestonesToSave[key].completed = !!milestonesToSave[key].date;
+        const todayIso = new Date().toISOString().split('T')[0];
+        const milestonesToSave = {};
+
+        Object.keys(milestones || {}).forEach(key => {
+            const m = milestones[key] || {};
+            const isCompleted = Boolean(m.completed || m.date);
+            milestonesToSave[key] = {
+                completed: isCompleted,
+                date: isCompleted ? (m.date || todayIso) : null
+            };
         });
 
         const updateData = { milestones: milestonesToSave };
@@ -1586,7 +1597,14 @@ function AppContent() {
             updateData.leadershipCourses = leadershipCourses;
         }
 
-        await updateDoc(memberRef, updateData);
+        await retryFirestoreOperation(async () => {
+            await updateDoc(memberRef, updateData);
+        });
+
+        // Atualização otimista no estado local
+        setAllMembers(prev => prev.map(m => m.id === memberId ? { ...m, milestones: milestonesToSave } : m));
+        setViewingMember(prev => prev && prev.id === memberId ? { ...prev, milestones: milestonesToSave } : prev);
+        setEditingMember(prev => prev && prev.id === memberId ? { ...prev, milestones: milestonesToSave } : prev);
     };
     const handleFinalizeCourse = async (course) => {
         if (!course || !course.id) return;
@@ -1982,12 +2000,13 @@ function AppContent() {
             <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={handleConfirmDelete} title="Confirmar ExclusÃ£o" message={deleteAction?.message} />
             {generatingReportForConnect && <ConnectFullReportModal isOpen={isConnectFullReportModalOpen} onClose={closeConnectFullReportModal} connect={generatingReportForConnect} allMembers={allMembers} allReports={allConnectReports} />}
 
-            {viewingMember && <Modal isOpen={isLeadershipTrackModalOpen} onClose={closeLeadershipTrackModal} size="md" title="Trilho de LideranÃ§a">
+            {viewingMember && <Modal isOpen={isLeadershipTrackModalOpen} onClose={closeLeadershipTrackModal} size="md" title="Trilho de Liderança">
                 <IndividualTrackModal
                     member={viewingMember}
                     completedCourses={completedCourses}
                     memberConnectHistoryDetails={memberConnectHistoryDetails}
                     onBack={closeLeadershipTrackModal}
+                    onSave={handleSaveMilestones}
                 />
             </Modal>}
 

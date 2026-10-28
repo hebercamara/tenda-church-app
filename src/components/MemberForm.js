@@ -233,15 +233,12 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
                 finalData.knownBy = finalData.name.split(' ')[0];
             }
             
-            // Converte datas dos marcos para ISO e marca como completados
-            Object.keys(finalData.milestones).forEach(key => {
-                if (finalData.milestones[key].date) {
-                    finalData.milestones[key].date = convertBrazilianDateToISO(finalData.milestones[key].date);
-                    finalData.milestones[key].completed = true;
-                } else {
-                    finalData.milestones[key].completed = false;
-                }
-            });
+            // Preservar os marcos do membro intactos (gerenciados exclusivamente pelo Trilho de Liderança)
+            if (editingMember?.milestones) {
+                finalData.milestones = editingMember.milestones;
+            } else {
+                delete finalData.milestones;
+            }
 
             if (!editingMember) {
                 await onCheckDuplicate(finalData);

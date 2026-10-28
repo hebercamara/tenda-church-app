@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { CheckCircle2, Circle, RotateCcw, Calendar, Edit, ArrowLeft } from 'lucide-react';
+import { CheckCircle2, Circle, RotateCcw, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const ConnectTrackPage = ({ connect, membersInConnect, allCourses, allConnects, onBack, attendanceAlerts, onReactivateMember, onEditMember }) => {
@@ -50,17 +50,32 @@ const ConnectTrackPage = ({ connect, membersInConnect, allCourses, allConnects, 
         }));
     };
 
+    const formatMilestoneDate = (dateVal) => {
+        if (!dateVal) return '';
+        try {
+            if (typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+                const [year, month, day] = dateVal.split('-');
+                return `${day}/${month}/${year}`;
+            }
+            const d = new Date(dateVal);
+            return isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR');
+        } catch (e) {
+            return '';
+        }
+    };
+
     const getMilestoneStatus = (member, milestoneId) => {
-        // Verificar se o membro tem marcos definidos
-        if (!member.milestones || !member.milestones[milestoneId]) {
-            return { completed: false };
+        if (!member?.milestones || !member.milestones[milestoneId]) {
+            return { completed: false, date: null };
         }
         
         const milestone = member.milestones[milestoneId];
-        const hasDate = milestone.date && milestone.date !== null;
+        const hasDate = Boolean(milestone.date && milestone.date !== null && milestone.date !== '');
+        const isCompleted = Boolean(milestone.completed || hasDate);
         
         return {
-            completed: hasDate,
+            completed: isCompleted,
+            pending: Boolean(milestone.pending),
             date: hasDate ? milestone.date : null
         };
     };
@@ -88,7 +103,7 @@ const ConnectTrackPage = ({ connect, membersInConnect, allCourses, allConnects, 
                     <CheckCircle2 size={16} className="text-green-500" />
                     {status.date && (
                         <span className="text-xs text-gray-500 mt-1">
-                            {new Date(status.date).toLocaleDateString('pt-BR')}
+                            {formatMilestoneDate(status.date)}
                         </span>
                     )}
                 </div>
