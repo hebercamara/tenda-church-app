@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { getTenantId } from '../utils/tenantUtils';
+import { useAuthStore } from '../store/authStore';
 import Modal from './Modal';
 import { formatDateToBrazilian } from '../utils/dateUtils';
 import { Calendar, CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react';
@@ -20,6 +21,9 @@ const getConnectWeekdayIndex = (weekday) => {
 };
 
 const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, isAdmin, onViewMember }) => {
+    const { isAdmin: storeIsAdmin, isSuperAdmin } = useAuthStore();
+    const userIsAdmin = !!(isAdmin || storeIsAdmin || isSuperAdmin);
+
     const [reportDates, setReportDates] = useState([]);
     const [selectedDate, setSelectedDate] = useState('');
     const [isCustomDate, setIsCustomDate] = useState(false);
@@ -110,38 +114,54 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
         const today = new Date();
         const todayWeekday = today.getDay();
 
-        // Se o dia do Connect é conhecido, calcula o dia mais recente
+        // Se o dia do Connect é conhecido, calcula o dia da última reunião realizada
         let baseDiff = 0;
         if (connectWeekday !== null) {
             baseDiff = todayWeekday - connectWeekday;
             if (baseDiff < 0) baseDiff += 7;
         }
 
-        const dates = [];
-        const labels = [
-            'Semana Atual',
-            'Semana Anterior',
-            '2 semanas atrás',
-            '3 semanas atrás'
-        ];
+        const lastMeetingDate = new Date(today);
+        lastMeetingDate.setDate(today.getDate() - baseDiff);
+        const lastMeetingIso = lastMeetingDate.toISOString().split('T')[0];
 
-        for (let i = 0; i < 4; i++) {
-            const meetingDate = new Date(today);
-            meetingDate.setDate(today.getDate() - baseDiff - (i * 7));
-            const iso = meetingDate.toISOString().split('T')[0];
-            dates.push({
-                label: `${labels[i]} (${formatDateToBrazilian(meetingDate)})`,
-                value: iso
-            });
-        }
+        if (!userIsAdmin) {
+            // Líderes comuns: acesso estritamente restrito apenas à última reunião realizada
+            setReportDates([
+                {
+                    label: `Última Reunião (${formatDateToBrazilian(lastMeetingDate)})`,
+                    value: lastMeetingIso
+                }
+            ]);
+            setSelectedDate(lastMeetingIso);
+            setIsCustomDate(false);
+        } else {
+            // Administradores: acesso às últimas 4 semanas e opção personalizada
+            const dates = [];
+            const labels = [
+                'Última Reunião / Semana Atual',
+                'Semana Anterior',
+                '2 semanas atrás',
+                '3 semanas atrás'
+            ];
 
-        setReportDates(dates);
-        if (dates.length > 0 && !selectedDate) {
-            setSelectedDate(dates[0].value);
+            for (let i = 0; i < 4; i++) {
+                const meetingDate = new Date(today);
+                meetingDate.setDate(today.getDate() - baseDiff - (i * 7));
+                const iso = meetingDate.toISOString().split('T')[0];
+                dates.push({
+                    label: `${labels[i]} (${formatDateToBrazilian(meetingDate)})`,
+                    value: iso
+                });
+            }
+
+            setReportDates(dates);
+            if (!selectedDate || !dates.some(d => d.value === selectedDate)) {
+                setSelectedDate(dates[0].value);
+            }
         }
-        setIsCustomDate(false);
         setSaveError('');
-    }, [connect]);
+    }, [connect, userIsAdmin]);
 
     // Busca o relatório existente quando a data ou connect mudam (sem resetar por re-renders de members!)
     useEffect(() => {
@@ -182,7 +202,7 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
         return () => { isCancelled = true; };
     }, [selectedDate, connect?.id]);
 
-    // Mescla novos membros na presença sem sobrescrever as escolhas do usuário
+    // Mescla novos membros na presença sem sobrescrever as escolhas já feitas
     useEffect(() => {
         if (!connectMembers || connectMembers.length === 0) return;
         setAttendance(prev => {
@@ -305,32 +325,48 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
                     <div>
                         <label htmlFor="reportDate" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1 flex items-center gap-1">
                             <Calendar size={14} className="text-gray-500" />
-                            Data da Reunião
+                            Data da Reunião {userIsAdmin ? '' : '(Última Reunião)'}
                         </label>
-                        <select
-                            id="reportDate"
-                            value={isCustomDate ? 'custom' : selectedDate}
-                            onChange={handleDateSelectChange}
-                            disabled={isSaving}
-                            className="w-full bg-white text-gray-900 rounded-md p-2 text-sm border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:outline-none"
-                        >
-                            {reportDates.map(date => (
-                                <option key={date.value} value={date.value}>{date.label}</option>
-                            ))}
-                            <option value="custom">📅 Outra Data (Personalizada)...</option>
-                        </select>
 
-                        {isCustomDate && (
-                            <div className="mt-2">
-                                <label className="block text-xs text-gray-600 mb-1">Informe a data específica:</label>
-                                <input
-                                    type="date"
-                                    value={customDateValue}
-                                    onChange={handleCustomDateChange}
-                                    disabled={isSaving}
-                                    className="w-full bg-white text-gray-900 rounded-md p-2 text-sm border border-gray-300 focus:ring-2 focus:ring-[#DC2626]"
-                                />
+                        {!userIsAdmin ? (
+                            /* Líder comum: apenas exibição da última reunião sem permissão para mudar a data */
+                            <div className="bg-white text-gray-800 rounded-md p-2.5 text-sm font-semibold border border-gray-300 flex items-center justify-between shadow-xs">
+                                <span>
+                                    {selectedDate ? formatDateToBrazilian(new Date(selectedDate + 'T12:00:00Z')) : 'Carregando...'}
+                                </span>
+                                <span className="text-xs bg-red-100 text-[#DC2626] font-semibold px-2 py-0.5 rounded-full border border-red-200">
+                                    Última Reunião
+                                </span>
                             </div>
+                        ) : (
+                            /* Administrador: acesso ao seletor completo */
+                            <>
+                                <select
+                                    id="reportDate"
+                                    value={isCustomDate ? 'custom' : selectedDate}
+                                    onChange={handleDateSelectChange}
+                                    disabled={isSaving}
+                                    className="w-full bg-white text-gray-900 rounded-md p-2 text-sm border border-gray-300 focus:ring-2 focus:ring-[#DC2626] focus:outline-none"
+                                >
+                                    {reportDates.map(date => (
+                                        <option key={date.value} value={date.value}>{date.label}</option>
+                                    ))}
+                                    <option value="custom">📅 Outra Data (Personalizada)...</option>
+                                </select>
+
+                                {isCustomDate && (
+                                    <div className="mt-2">
+                                        <label className="block text-xs text-gray-600 mb-1">Informe a data específica:</label>
+                                        <input
+                                            type="date"
+                                            value={customDateValue}
+                                            onChange={handleCustomDateChange}
+                                            disabled={isSaving}
+                                            className="w-full bg-white text-gray-900 rounded-md p-2 text-sm border border-gray-300 focus:ring-2 focus:ring-[#DC2626]"
+                                        />
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
                 </div>
@@ -361,7 +397,7 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
                 ) : (
                     <>
                         {/* Seção de Presença dos Membros */}
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
                                 <div className="flex items-center gap-2">
                                     <span className="font-semibold text-gray-800 text-sm sm:text-base">Presença dos Membros</span>
@@ -374,28 +410,45 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
                                         type="button"
                                         onClick={() => handleMarkAll('presente')}
                                         disabled={isSaving}
-                                        className="text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 px-2 py-1 rounded transition-colors font-medium"
+                                        className="text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 px-2 py-1 rounded transition-colors font-medium flex items-center gap-1"
                                     >
-                                        Todos Presentes
+                                        <span className="inline sm:hidden font-bold">Todos P</span>
+                                        <span className="hidden sm:inline">Todos Presentes</span>
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => handleMarkAll('ausente')}
                                         disabled={isSaving}
-                                        className="text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-1 rounded transition-colors font-medium"
+                                        className="text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-1 rounded transition-colors font-medium flex items-center gap-1"
                                     >
-                                        Todos Ausentes
+                                        <span className="inline sm:hidden font-bold">Todos A</span>
+                                        <span className="hidden sm:inline">Todos Ausentes</span>
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
+                            {/* Legenda visível APENAS no mobile */}
+                            <div className="flex sm:hidden items-center justify-between text-xs py-1.5 px-2 bg-gray-100 rounded-md border border-gray-200">
+                                <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Legenda:</span>
+                                <div className="flex items-center gap-3">
+                                    <span className="flex items-center gap-1.5">
+                                        <span className="w-5 h-5 rounded bg-green-600 text-white font-bold flex items-center justify-center text-xs shadow-xs">P</span>
+                                        <span className="font-medium text-gray-700">Presente</span>
+                                    </span>
+                                    <span className="flex items-center gap-1.5">
+                                        <span className="w-5 h-5 rounded bg-red-600 text-white font-bold flex items-center justify-center text-xs shadow-xs">A</span>
+                                        <span className="font-medium text-gray-700">Ausente</span>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1 pt-1">
                                 {connectMembers.map(member => {
                                     const isPresent = attendance[member.id] === 'presente';
                                     return (
                                         <div
                                             key={member.id}
-                                            className={`flex justify-between items-center p-2.5 rounded-lg border transition-all ${
+                                            className={`flex justify-between items-center p-2 sm:p-2.5 rounded-lg border transition-all ${
                                                 isPresent
                                                     ? 'bg-green-50/60 border-green-200'
                                                     : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
@@ -416,27 +469,31 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
                                                     type="button"
                                                     onClick={() => handleAttendanceChange(member.id, 'presente')}
                                                     disabled={isSaving}
-                                                    className={`px-3 py-1.5 text-xs font-semibold rounded-md flex items-center gap-1 transition-all ${
+                                                    className={`px-3 sm:px-3 py-1.5 text-xs font-semibold rounded-md flex items-center justify-center gap-1 transition-all ${
                                                         isPresent
                                                             ? 'bg-green-600 text-white shadow-sm ring-2 ring-green-400'
-                                                            : 'bg-white text-gray-700 border border-gray-300 hover:bg-green-100'
+                                                            : 'bg-white text-gray-700 border border-gray-300 hover:bg-green-100 active:bg-green-200'
                                                     }`}
+                                                    title="Presente"
                                                 >
-                                                    <CheckCircle2 size={13} />
-                                                    <span>Presente</span>
+                                                    <CheckCircle2 size={13} className="hidden sm:inline" />
+                                                    <span className="inline sm:hidden font-bold text-sm w-4 text-center">P</span>
+                                                    <span className="hidden sm:inline">Presente</span>
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => handleAttendanceChange(member.id, 'ausente')}
                                                     disabled={isSaving}
-                                                    className={`px-3 py-1.5 text-xs font-semibold rounded-md flex items-center gap-1 transition-all ${
+                                                    className={`px-3 sm:px-3 py-1.5 text-xs font-semibold rounded-md flex items-center justify-center gap-1 transition-all ${
                                                         !isPresent
                                                             ? 'bg-red-600 text-white shadow-sm ring-2 ring-red-400'
-                                                            : 'bg-white text-gray-700 border border-gray-300 hover:bg-red-100'
+                                                            : 'bg-white text-gray-700 border border-gray-300 hover:bg-red-100 active:bg-red-200'
                                                     }`}
+                                                    title="Ausente"
                                                 >
-                                                    <XCircle size={13} />
-                                                    <span>Ausente</span>
+                                                    <XCircle size={13} className="hidden sm:inline" />
+                                                    <span className="inline sm:hidden font-bold text-sm w-4 text-center">A</span>
+                                                    <span className="hidden sm:inline">Ausente</span>
                                                 </button>
                                             </div>
                                         </div>
