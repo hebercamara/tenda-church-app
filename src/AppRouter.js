@@ -104,30 +104,88 @@ const AppRouter = ({
         allConnects.some(c => c.auxLeaderId === currentUserData.id) ||
         allConnects.some(c => (c.auxLeaderEmail || '').toLowerCase() === userEmail)
     ));
+    // Helper: verificar se curso foi realizado nos últimos 12 meses (ou está em andamento/futuro)
+    const isCourseInLast12Months = (course) => {
+        if (!course) return false;
+        const now = new Date();
+        const twelveMonthsAgo = new Date();
+        twelveMonthsAgo.setFullYear(now.getFullYear() - 1);
+        twelveMonthsAgo.setHours(0, 0, 0, 0);
+
+        const parseDate = (val) => {
+            if (!val) return null;
+            if (val.toDate && typeof val.toDate === 'function') return val.toDate();
+            if (val instanceof Date) return val;
+            if (typeof val === 'string') {
+                const d = new Date(val.includes('T') ? val : `${val}T00:00:00`);
+                return !isNaN(d.getTime()) ? d : null;
+            }
+            const d = new Date(val);
+            return !isNaN(d.getTime()) ? d : null;
+        };
+
+        const endDate = parseDate(course.endDate);
+        if (endDate) return endDate >= twelveMonthsAgo;
+
+        const startDate = parseDate(course.startDate);
+        if (startDate) return startDate >= twelveMonthsAgo;
+
+        if (Array.isArray(course.sporadicClasses) && course.sporadicClasses.length > 0) {
+            const hasRecentClass = course.sporadicClasses.some(sc => {
+                const scDate = parseDate(sc?.date || sc?.startDate);
+                return scDate && scDate >= twelveMonthsAgo;
+            });
+            if (hasRecentClass) return true;
+        }
+
+        const createdAt = parseDate(course.createdAt);
+        if (createdAt) return createdAt >= twelveMonthsAgo;
+
+        return !course.finalized;
+    };
+
     const isTeacher = !!(currentUserData && (
-        allCourses.some(course => (course.teacherEmail || '').toLowerCase() === userEmail) ||
         allCourses.some(course => {
+            if (!isCourseInLast12Months(course)) return false;
+            const isTitular = (course.teacherEmail || '').toLowerCase() === userEmail || (currentUserData.id && course.teacherId === currentUserData.id);
+            if (isTitular) return true;
+
             if (!course.substituteTeacher || !course.substituteTeacher.teacherId) return false;
             const substituteMember = allMembers.find(m => m.id === course.substituteTeacher.teacherId);
-            if (!substituteMember || (substituteMember.email || '').toLowerCase() !== userEmail) return false;
+            const subEmail = (substituteMember?.email || '').toLowerCase();
+            const isSubUser = (subEmail && subEmail === userEmail) || course.substituteTeacher.teacherId === currentUserData.id;
+            if (!isSubUser) return false;
+
             const today = new Date();
-            const startDate = new Date(course.substituteTeacher.startDate);
+            const startDate = course.substituteTeacher.startDate ? new Date(course.substituteTeacher.startDate) : null;
             if (course.substituteTeacher.isIndefinite) {
-                return today >= startDate;
+                return !startDate || today >= startDate;
             }
-            const endDate = new Date(course.substituteTeacher.endDate);
-            return today >= startDate && today <= endDate;
+            if (course.substituteTeacher.endDate) {
+                const endDate = new Date(course.substituteTeacher.endDate);
+                const twelveMonthsAgo = new Date();
+                twelveMonthsAgo.setFullYear(today.getFullYear() - 1);
+                twelveMonthsAgo.setHours(0, 0, 0, 0);
+                return endDate >= twelveMonthsAgo;
+            }
+            return true;
         })
     ));
 
     const isAuxTeacher = !!(currentUserData && (
-        allCourses.some(course => (course.auxTeacherEmail || '').toLowerCase() === userEmail) ||
-        allCourses.some(course => course.auxTeacherId === currentUserData.id) ||
-        allCourses.some(course => Array.isArray(course.groups) && course.groups.some(g => g && (
-            g.assistantId === currentUserData.id || 
-            (g.assistantEmail || '').toLowerCase() === userEmail ||
-            (Array.isArray(g.assistants) && g.assistants.some(a => a.id === currentUserData.id || (a.email || '').toLowerCase() === userEmail))
-        )))
+        allCourses.some(course => {
+            if (!isCourseInLast12Months(course)) return false;
+            const userId = currentUserData.id;
+            if ((course.auxTeacherEmail || '').toLowerCase() === userEmail || (course.auxiliaryTeacherEmail || '').toLowerCase() === userEmail) return true;
+            if (course.auxTeacherId === userId || course.auxiliaryTeacherId === userId) return true;
+            if (Array.isArray(course.auxiliaryTeachers) && course.auxiliaryTeachers.some(a => a.id === userId || (a.email || '').toLowerCase() === userEmail)) return true;
+            if (Array.isArray(course.groups) && course.groups.some(g => g && (
+                g.assistantId === userId || 
+                (g.assistantEmail || '').toLowerCase() === userEmail ||
+                (Array.isArray(g.assistants) && g.assistants.some(a => a.id === userId || (a.email || '').toLowerCase() === userEmail))
+            ))) return true;
+            return false;
+        })
     ));
 
     // Conjunto de Connects que o usuário pode ver (lidera, supervisiona ou é auxiliar)
@@ -468,8 +526,8 @@ const AppRouter = ({
                     />
                 )}
 
-                {/* Meus Alunos - Professores e Líderes */}
-                {(isTeacher || isLeader) && (
+                {/* Meus Alunos - Apenas Professores dos últimos 12 meses */}
+                {isTeacher && (
                     <Route
                         path="/meus-alunos"
                         element={

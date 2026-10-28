@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { Eye, EyeOff } from 'lucide-react'; // Importa os ícones
+import { Eye, EyeOff, Baby } from 'lucide-react'; // Importa os ícones
 import { auth, db } from '../firebaseConfig';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { useAuthStore } from '../store/authStore';
 import ChurchSelectorModal from '../components/ChurchSelectorModal';
@@ -242,6 +242,15 @@ const LoginPage = () => {
                         <button onClick={handlePasswordReset} disabled={isSubmitting} className="w-full text-center text-sm text-white/70 hover:text-white transition-colors">
                             Esqueci minha senha
                         </button>
+                        <div className="pt-2 border-t border-white/20">
+                            <Link
+                                to="/kids"
+                                className="relative flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-semibold text-white bg-white/10 border border-white/20 rounded-md hover:bg-white/20 transition-all"
+                            >
+                                <Baby className="h-4 w-4" />
+                                Ministério Infantil (Kids Check-in)
+                            </Link>
+                        </div>
                     </div>
                 </form>
             </div>

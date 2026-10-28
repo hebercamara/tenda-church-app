@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
 import { BrowserRouter, useNavigate, Routes, Route, useLocation } from 'react-router-dom';
 import damerau from 'damerau-levenshtein';
 import { useAuthStore } from './store/authStore';
@@ -19,8 +19,6 @@ import SignupPage from './pages/SignupPage';
 import DecisionFormPage from './pages/DecisionFormPage';
 import LoadingSpinner from './components/LoadingSpinner';
 import AppRouter from './AppRouter';
-
-
 import Modal from './components/Modal';
 import ConfirmationModal from './components/ConfirmationModal';
 import MemberForm from './components/MemberForm';
@@ -34,6 +32,8 @@ import IndividualTrackModal from './components/IndividualTrackModal';
 import DuplicateMemberModal from './components/DuplicateMemberModal';
 import ConnectTrackPage from './pages/ConnectTrackPage';
 import MemberDetailsModal from './components/MemberDetailsModal';
+
+const KidsApp = React.lazy(() => import('./kids/KidsApp'));
 
 // Admin Ã© determinado pelo campo isAdmin do membro OU por ser o Super Admin
 const isAdminEmail = (email) => {
@@ -177,7 +177,9 @@ function AppContent() {
     }, [setAuthData]);
 
     // useEffect para escutar alterações no tenant ativo em tempo real
+    // Ignorado no módulo Kids e para usuários não autenticados (evita erro de permissão)
     useEffect(() => {
+        if (isKidsRoute || !user) return;
         const tenantId = getTenantId();
         if (!tenantId) return;
 
@@ -211,12 +213,12 @@ function AppContent() {
             mainUnsub();
             if (qUnsub) qUnsub();
         };
-    }, [user]);
+    }, [user, isKidsRoute]);
 
     // CORRIGIDO: useEffect 2 - Para buscar todos os membros e encontrar o dado do usuÃ¡rio logado
     useEffect(() => {
-        if (!user) {
-            setAllMembers([]); // Usa dados de exemplo se nÃ£o houver usuÃ¡rio
+        if (!user || isKidsRoute) {
+            setAllMembers([]); // Usa dados de exemplo se nÃ£o houver usuÃ¡rio ou em rota Kids
             return;
         }
         const membersUnsub = onSnapshot(
@@ -308,9 +310,9 @@ function AppContent() {
 
     // CORRIGIDO: useEffect 3 - Para buscar os outros dados (Connects, Cursos, etc.)
     useEffect(() => {
-        if (!user) {
+        if (!user || isKidsRoute) {
             setLoadingData(false);
-            // MantÃ©m dados de exemplo se o usuÃ¡rio fizer logout
+            // Mantém dados de exemplo se o usuário fizer logout ou estiver no Kids
             setAllConnects([]);
             setAllCourses([]);
             setAllCourseTemplates([]);
@@ -1680,37 +1682,31 @@ function AppContent() {
 
 
 
+    // Acesso direto ao módulo Kids antes de verificar auth (rota pública independente)
+    if (isKidsRoute) {
+        return (
+            <Suspense fallback={<LoadingSpinner />}>
+                <Routes>
+                    <Route path="/kids/*" element={<KidsApp />} />
+                </Routes>
+            </Suspense>
+        );
+    }
+
     if (isLoadingAuth) return <LoadingSpinner />;
 
     if (!user) {
         // Rotas públicas: Login (default) e Signup
         // O modulo /kids tem auth propria — sempre acessivel
         return (
-            <Routes>
-                <Route path="/signup" element={<SignupPage />} />
-                <Route path="/nova-decisao" element={<DecisionFormPage />} />
-                <Route path="/kids/*" element={<AppRouter
-                    allMembers={[]} allConnects={[]} allCourses={[]} allCourseTemplates={[]}
-                    allCertificateTemplates={[]} allConnectReports={[]} allDecisions={[]}
-                    allSimpleMembers={[]} combinedMembers={[]} membersWithCourses={[]}
-                    completedCourses={[]} memberConnectHistoryDetails={[]} loadingStates={loadingStates}
-                    operationStatus={operationStatus} setOperationStatus={setOperationStatus}
-                    handleAddMember={() => {}} handleEditMember={() => {}} handleDeleteMember={() => {}}
-                    handleReactivateMember={() => {}} handleAddConnect={() => {}} handleEditConnect={() => {}}
-                    handleDeleteConnect={() => {}} handleAddCourse={() => {}} handleEditCourse={() => {}}
-                    handleDeleteCourse={() => {}} handleManageCourse={() => {}} handleAddCourseTemplate={() => {}}
-                    handleEditCourseTemplate={() => {}} handleDeleteCourseTemplate={() => {}}
-                    handleDeleteCertificateTemplate={() => {}} handleGenerateReport={() => {}}
-                    handleGenerateFullReport={() => {}} handleViewMember={() => {}} handleViewConnectTrack={() => {}}
-                    handleLeadershipTrack={() => {}} handleSetAuxLeader={() => {}} handleRemoveAuxLeader={() => {}}
-                    handleSetAuxTeacher={() => {}} handleFinalizeCourse={() => {}} handleReopenCourse={() => {}}
-                    handleUpdateDecisionStatus={() => {}} handleSaveCourseGroups={() => {}}
-                    handleSaveSimpleMember={() => {}} handleDeleteSimpleMember={() => {}}
-                    calculateFinalGradeForStudent={() => {}} getStudentStatusInfo={() => {}}
-                    areNamesSimilar={() => {}} attendanceAlerts={[]} getConnectName={() => ''}
-                />} />
-                <Route path="*" element={<LoginPage />} />
-            </Routes>
+            <Suspense fallback={<LoadingSpinner />}>
+                <Routes>
+                    <Route path="/signup" element={<SignupPage />} />
+                    <Route path="/nova-decisao" element={<DecisionFormPage />} />
+                    <Route path="/kids/*" element={<KidsApp />} />
+                    <Route path="*" element={<LoginPage />} />
+                </Routes>
+            </Suspense>
         );
     }
 
@@ -1749,8 +1745,19 @@ function AppContent() {
         );
     }
 
+    // Logado mas em rota Kids: renderiza KidsApp sem o layout principal
+    if (isKidsRoute) {
+        return (
+            <Suspense fallback={<LoadingSpinner />}>
+                <Routes>
+                    <Route path="/kids/*" element={<KidsApp />} />
+                </Routes>
+            </Suspense>
+        );
+    }
+
     return (
-        <div className={`flex h-screen ${isKidsRoute ? '' : 'bg-gray-100'}`}>
+        <div className={`flex h-screen bg-gray-100`}>
             {!isKidsRoute && (
             <Sidebar
                 isOpen={isSidebarOpen}

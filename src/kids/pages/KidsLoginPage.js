@@ -19,7 +19,8 @@ export default function KidsLoginPage() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      navigate("/kids/painel");
+      // Redireciona para /kids para que o router interno encaminhe para supervisor, monitor ou painel conforme o role
+      navigate("/kids");
     } catch (err) {
       const codes = {
         "auth/invalid-credential": "E-mail ou senha incorretos.",
@@ -99,6 +100,12 @@ export default function KidsLoginPage() {
               </Link>
             </p>
           </div>
+        </div>
+
+        <div className="mt-6 text-center">
+          <Link to="/" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+            Ir para o App Principal da Igreja
+          </Link>
         </div>
       </div>
     </div>

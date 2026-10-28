@@ -7,35 +7,71 @@ const MyStudentsPage = ({ allCourses, allMembers, allConnects }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCourse, setSelectedCourse] = useState('');
 
-  // Filtrar cursos do professor atual (incluindo como substituto)
+  // Filtrar cursos do professor atual nos últimos 12 meses (incluindo como substituto)
   const myCourses = useMemo(() => {
     if (!currentUserData || !allCourses || !allMembers) return [];
     
     const userEmail = currentUserData.email?.toLowerCase();
-    
-    // Função para verificar se o usuário é professor substituto ativo
+    const userId = currentUserData.id;
+    const now = new Date();
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setFullYear(now.getFullYear() - 1);
+    twelveMonthsAgo.setHours(0, 0, 0, 0);
+
+    const parseDate = (val) => {
+      if (!val) return null;
+      if (val.toDate && typeof val.toDate === 'function') return val.toDate();
+      if (val instanceof Date) return val;
+      if (typeof val === 'string') {
+        const d = new Date(val.includes('T') ? val : `${val}T00:00:00`);
+        return !isNaN(d.getTime()) ? d : null;
+      }
+      const d = new Date(val);
+      return !isNaN(d.getTime()) ? d : null;
+    };
+
+    const isCourseInLast12Months = (course) => {
+      if (!course) return false;
+      const endDate = parseDate(course.endDate);
+      if (endDate) return endDate >= twelveMonthsAgo;
+      const startDate = parseDate(course.startDate);
+      if (startDate) return startDate >= twelveMonthsAgo;
+      if (Array.isArray(course.sporadicClasses) && course.sporadicClasses.length > 0) {
+        return course.sporadicClasses.some(sc => {
+          const scDate = parseDate(sc?.date || sc?.startDate);
+          return scDate && scDate >= twelveMonthsAgo;
+        });
+      }
+      const createdAt = parseDate(course.createdAt);
+      if (createdAt) return createdAt >= twelveMonthsAgo;
+      return !course.finalized;
+    };
+
+    // Função para verificar se o usuário é professor substituto ativo/recente
     const isActiveSubstitute = (course) => {
       if (!course.substituteTeacher || !course.substituteTeacher.teacherId) return false;
       
       const substituteTeacher = allMembers.find(m => m.id === course.substituteTeacher.teacherId);
-      if (!substituteTeacher || substituteTeacher.email?.toLowerCase() !== userEmail) return false;
+      const subEmail = (substituteTeacher?.email || '').toLowerCase();
+      const isSubUser = (subEmail && subEmail === userEmail) || course.substituteTeacher.teacherId === userId;
+      if (!isSubUser) return false;
       
-      const today = new Date();
-      const startDate = new Date(course.substituteTeacher.startDate);
-      
-      // Se é indefinido, verifica apenas se já começou
+      const startDate = course.substituteTeacher.startDate ? new Date(course.substituteTeacher.startDate) : null;
       if (course.substituteTeacher.isIndefinite) {
-        return today >= startDate;
+        return !startDate || now >= startDate;
       }
-      
-      // Se tem data de fim, verifica se está no período
-      const endDate = new Date(course.substituteTeacher.endDate);
-      return today >= startDate && today <= endDate;
+      if (course.substituteTeacher.endDate) {
+        const endDate = new Date(course.substituteTeacher.endDate);
+        return endDate >= twelveMonthsAgo;
+      }
+      return true;
     };
     
-    return allCourses.filter(course => 
-      course.teacherEmail?.toLowerCase() === userEmail || isActiveSubstitute(course)
-    );
+    return allCourses.filter(course => {
+      if (!isCourseInLast12Months(course)) return false;
+      const isTitular = course.teacherEmail?.toLowerCase() === userEmail || (userId && course.teacherId === userId);
+      return isTitular || isActiveSubstitute(course);
+    });
   }, [allCourses, currentUserData, allMembers]);
 
   // Obter todos os alunos dos cursos do professor

@@ -27,43 +27,99 @@ const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMemb
     allConnects.some(c => (c.auxLeaderEmail || '').toLowerCase() === userEmail)
   );
 
-  // Verificar se é professor (titular ou substituto ativo)
+  // Helper: verificar se curso foi realizado nos últimos 12 meses (ou está em andamento/futuro)
+  const isCourseInLast12Months = (course) => {
+    if (!course) return false;
+    const now = new Date();
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setFullYear(now.getFullYear() - 1);
+    twelveMonthsAgo.setHours(0, 0, 0, 0);
+
+    const parseDate = (val) => {
+      if (!val) return null;
+      if (val.toDate && typeof val.toDate === 'function') return val.toDate();
+      if (val instanceof Date) return val;
+      if (typeof val === 'string') {
+        const d = new Date(val.includes('T') ? val : `${val}T00:00:00`);
+        return !isNaN(d.getTime()) ? d : null;
+      }
+      const d = new Date(val);
+      return !isNaN(d.getTime()) ? d : null;
+    };
+
+    const endDate = parseDate(course.endDate);
+    if (endDate) return endDate >= twelveMonthsAgo;
+
+    const startDate = parseDate(course.startDate);
+    if (startDate) return startDate >= twelveMonthsAgo;
+
+    if (Array.isArray(course.sporadicClasses) && course.sporadicClasses.length > 0) {
+      const hasRecentClass = course.sporadicClasses.some(sc => {
+        const scDate = parseDate(sc?.date || sc?.startDate);
+        return scDate && scDate >= twelveMonthsAgo;
+      });
+      if (hasRecentClass) return true;
+    }
+
+    const createdAt = parseDate(course.createdAt);
+    if (createdAt) return createdAt >= twelveMonthsAgo;
+
+    return !course.finalized;
+  };
+
+  // Verificar se é professor nos últimos 12 meses (titular ou substituto ativo/recente)
   const isTeacher = currentUserData && allCourses.some(course => {
+    if (!isCourseInLast12Months(course)) return false;
+
     const email = userEmail;
+    const userId = currentUserData.id;
+
     // Verificar se é professor titular
     if ((course.teacherEmail || '').toLowerCase() === email) return true;
+    if (userId && course.teacherId === userId) return true;
 
-    // Verificar se é professor substituto ativo
+    // Verificar se é professor substituto ativo/recente
     if (!course.substituteTeacher || !course.substituteTeacher.teacherId) return false;
 
     const substituteTeacher = allMembers.find(m => m.id === course.substituteTeacher.teacherId);
-    if (!substituteTeacher || (substituteTeacher.email || '').toLowerCase() !== email) return false;
+    const subEmail = (substituteTeacher?.email || '').toLowerCase();
+    const isSubUser = (subEmail && subEmail === email) || course.substituteTeacher.teacherId === userId;
+    if (!isSubUser) return false;
 
     const today = new Date();
-    const startDate = new Date(course.substituteTeacher.startDate);
+    const startDate = course.substituteTeacher.startDate ? new Date(course.substituteTeacher.startDate) : null;
 
-    // Se é indefinido, verifica apenas se já começou
     if (course.substituteTeacher.isIndefinite) {
-      return today >= startDate;
+      return !startDate || today >= startDate;
     }
 
-    // Se tem data de fim, verifica se está no período
-    const endDate = new Date(course.substituteTeacher.endDate);
-    return today >= startDate && today <= endDate;
+    if (course.substituteTeacher.endDate) {
+      const endDate = new Date(course.substituteTeacher.endDate);
+      const twelveMonthsAgo = new Date();
+      twelveMonthsAgo.setFullYear(today.getFullYear() - 1);
+      twelveMonthsAgo.setHours(0, 0, 0, 0);
+      return endDate >= twelveMonthsAgo;
+    }
+
+    return true;
   });
 
   const isCourseAssistant = currentUserData && allCourses.some(course => {
+      if (!isCourseInLast12Months(course)) return false;
+
       const email = userEmail;
+      const userId = currentUserData.id;
       
       // Auxiliar da turma inteira
-      if (course.auxiliaryTeacherId === currentUserData.id || (course.auxiliaryTeacherEmail || '').toLowerCase() === email) return true;
-      if (Array.isArray(course.auxiliaryTeachers) && course.auxiliaryTeachers.some(a => a.id === currentUserData.id || (a.email || '').toLowerCase() === email)) return true;
+      if (course.auxiliaryTeacherId === userId || course.auxTeacherId === userId) return true;
+      if ((course.auxiliaryTeacherEmail || '').toLowerCase() === email || (course.auxTeacherEmail || '').toLowerCase() === email) return true;
+      if (Array.isArray(course.auxiliaryTeachers) && course.auxiliaryTeachers.some(a => a.id === userId || (a.email || '').toLowerCase() === email)) return true;
 
       // Auxiliar de grupo
       if (Array.isArray(course.groups)) {
           return course.groups.some(g => {
-              if (g.assistantId === currentUserData.id || (g.assistantEmail || '').toLowerCase() === email) return true;
-              if (Array.isArray(g.assistants) && g.assistants.some(a => a.id === currentUserData.id || (a.email || '').toLowerCase() === email)) return true;
+              if (g && (g.assistantId === userId || (g.assistantEmail || '').toLowerCase() === email)) return true;
+              if (g && Array.isArray(g.assistants) && g.assistants.some(a => a.id === userId || (a.email || '').toLowerCase() === email)) return true;
               return false;
           });
       }
@@ -91,12 +147,12 @@ const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMemb
       ...((isAdmin || isLeader || isSupervisor || isAuxLeader) ?
         [{ id: 'connects', label: 'Connects', icon: Home, path: '/connects' }] : []),
 
-      // Cursos - Visível para Admins e Professores
+      // Cursos - Visível para Admins e Professores dos últimos 12 meses
       ...((isAdmin || isTeacher || isCourseAssistant) ?
         [{ id: 'courses', label: 'Cursos', icon: BookOpen, path: '/cursos' }] : []),
 
-      // Meus Alunos - Visível para Professores e Líderes
-      ...((isTeacher || isLeader) && !isAdmin ? [{ id: 'my-students', label: 'Meus Alunos', icon: GraduationCap, path: '/meus-alunos' }] : []),
+      // Meus Alunos - Visível apenas para Professores dos últimos 12 meses
+      ...(isTeacher && !isAdmin ? [{ id: 'my-students', label: 'Meus Alunos', icon: GraduationCap, path: '/meus-alunos' }] : []),
 
       // Hierarquia - Visível para Admins, Líderes e Supervisores
       
@@ -111,10 +167,10 @@ const Sidebar = ({ isOpen, setIsOpen, allConnects = [], allCourses = [], allMemb
       
       // Configurações Globais
       ...((realIsAdmin || isSuperAdmin) ? [{ id: 'master-admin', label: 'Config. Globais', icon: Settings, path: '/master-admin' }] : []),
-
-      // Ministerio Infantil
-      ...((realIsAdmin || isSuperAdmin) ? [{ id: 'kids', label: 'Ministerio Infantil', icon: Baby, path: '/kids' }] : []),
     ]),
+
+    // Ministerio Infantil - Visível para todos os usuários logados
+    { id: 'kids', label: 'Ministério Infantil', icon: Baby, path: '/kids' },
 
     // Nova Decisão - Visível para todos os usuários logados
     { id: 'new-decision', label: 'Nova Decisão', icon: UserPlus, path: '/nova-decisao' },

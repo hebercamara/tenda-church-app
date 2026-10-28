@@ -28,8 +28,8 @@ const DuplicateMemberModal = React.memo(({ isOpen, onClose, onConfirm, onReject,
         : existingMember.email;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl text-left">
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-start z-50 p-4 overflow-y-auto">
+            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl text-left my-auto">
                 <div className="flex items-center text-orange-600 mb-4">
                     <AlertTriangle className="h-8 w-8 mr-3" />
                     <h3 className="text-xl font-bold">Possível Duplicidade Encontrada</h3>

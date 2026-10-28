@@ -1,4 +1,4 @@
-﻿import React, { Suspense } from "react";
+import React, { Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { KidsAuthProvider, useKidsAuth } from "./KidsAuthContext";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -43,12 +43,12 @@ function KidsRouterInner() {
       {/* Responsavel */}
       <Route path="painel" element={
         isGuardian ? <KidsPainelPage /> :
-        isStaff ? <Navigate to="/kids/supervisor" replace /> :
+        kidsUser ? <Navigate to="/kids/cadastro" replace /> :
         <Navigate to="/kids/login" replace />
       } />
       <Route path="filhos" element={
         isGuardian ? <KidsFilhosPage /> :
-        isStaff ? <Navigate to="/kids/supervisor" replace /> :
+        kidsUser ? <Navigate to="/kids/cadastro" replace /> :
         <Navigate to="/kids/login" replace />
       } />
 
@@ -59,19 +59,29 @@ function KidsRouterInner() {
 
       {/* Supervisor */}
       <Route path="supervisor" element={
-        isSupervisorOrAdmin ? <KidsSupervisorPage /> : <Navigate to="/kids/login" replace />
+        isSupervisorOrAdmin ? <KidsSupervisorPage /> :
+        kidsRole === "monitor" ? <Navigate to="/kids/monitor" replace /> :
+        <Navigate to="/kids/login" replace />
       } />
       <Route path="supervisor/salas" element={
-        isSupervisorOrAdmin ? <KidsSalasPage /> : <Navigate to="/kids/login" replace />
+        isSupervisorOrAdmin ? <KidsSalasPage /> :
+        kidsRole === "monitor" ? <Navigate to="/kids/monitor" replace /> :
+        <Navigate to="/kids/login" replace />
       } />
       <Route path="supervisor/agenda" element={
-        isSupervisorOrAdmin ? <KidsAgendaPage /> : <Navigate to="/kids/login" replace />
+        isSupervisorOrAdmin ? <KidsAgendaPage /> :
+        kidsRole === "monitor" ? <Navigate to="/kids/monitor" replace /> :
+        <Navigate to="/kids/login" replace />
       } />
       <Route path="supervisor/equipe" element={
-        isSupervisorOrAdmin ? <KidsEquipePage /> : <Navigate to="/kids/login" replace />
+        isSupervisorOrAdmin ? <KidsEquipePage /> :
+        kidsRole === "monitor" ? <Navigate to="/kids/monitor" replace /> :
+        <Navigate to="/kids/login" replace />
       } />
       <Route path="supervisor/relatorios" element={
-        isSupervisorOrAdmin ? <KidsRelatoriosPage /> : <Navigate to="/kids/login" replace />
+        isSupervisorOrAdmin ? <KidsRelatoriosPage /> :
+        kidsRole === "monitor" ? <Navigate to="/kids/monitor" replace /> :
+        <Navigate to="/kids/login" replace />
       } />
 
       {/* Landing: redireciona baseado no role */}

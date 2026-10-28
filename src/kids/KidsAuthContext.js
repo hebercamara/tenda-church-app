@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebaseConfig";
@@ -30,6 +30,25 @@ export function KidsAuthProvider({ children }) {
     const tenantId = getTenantId();
     const email = firebaseUser.email?.toLowerCase() || "";
 
+    // Busca se existe registro de responsavel (guardian) para o usuario
+    let foundGuardian = null;
+    try {
+      const guardianSnap = await getDocs(
+        query(
+          collection(db, `artifacts/${tenantId}/public/data/kids_guardians`),
+          where("email", "==", email)
+        )
+      );
+      if (!guardianSnap.empty) {
+        foundGuardian = { id: guardianSnap.docs[0].id, ...guardianSnap.docs[0].data() };
+        setGuardian(foundGuardian);
+        setLocalGuardian(foundGuardian);
+      } else {
+        setGuardian(null);
+        setLocalGuardian(null);
+      }
+    } catch (e) { /* ignora erro de permissao */ }
+
     // 1. SuperAdmin hardcoded
     if (email === SUPER_ADMIN_EMAIL.toLowerCase()) {
       setKidsRole("admin");
@@ -38,7 +57,7 @@ export function KidsAuthProvider({ children }) {
       return;
     }
 
-    // 2. Verifica se e admin da igreja no tenant (via tenantData persistido ou members)
+    // 2. Verifica se e admin da igreja no tenant (via tenantData persistido ou doc tenant)
     try {
       const tenantDoc = await getDoc(doc(db, "tenants", tenantId));
       if (tenantDoc.exists()) {
@@ -89,24 +108,13 @@ export function KidsAuthProvider({ children }) {
       }
     } catch (e) { /* ignora */ }
 
-    // 5. Verifica se e responsavel (guardian)
-    try {
-      const guardianSnap = await getDocs(
-        query(
-          collection(db, `artifacts/${tenantId}/public/data/kids_guardians`),
-          where("email", "==", email)
-        )
-      );
-      if (!guardianSnap.empty) {
-        const gData = { id: guardianSnap.docs[0].id, ...guardianSnap.docs[0].data() };
-        setGuardian(gData);
-        setLocalGuardian(gData);
-        setKidsRole("guardian");
-        setLocalKidsRole("guardian");
-        setLoading(false);
-        return;
-      }
-    } catch (e) { /* ignora */ }
+    // 5. Se encontrou guardian, define role como guardian
+    if (foundGuardian) {
+      setKidsRole("guardian");
+      setLocalKidsRole("guardian");
+      setLoading(false);
+      return;
+    }
 
     // 6. Logado mas sem registro kids — redireciona para cadastro de responsavel
     setKidsRole(null);

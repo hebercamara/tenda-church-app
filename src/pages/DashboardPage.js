@@ -85,7 +85,7 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
         const validReports = visibleReports.filter(r => r && r.reportDate && typeof r.attendance === 'object');
 
         if (!validReports || validReports.length === 0) {
-            return { avgAttendance: 0, totalGuests: 0, totalOffering: 0 };
+            return { avgAttendance: 0, totalGuests: 0, totalOffering: 0, membersLastWeek: 0 };
         }
 
         const reportsByWeek = validReports.reduce((acc, report) => {
@@ -97,34 +97,38 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
             return acc;
         }, {});
 
-        const recentWeeks = Object.keys(reportsByWeek)
-            .sort((a, b) => new Date(b) - new Date(a))
-            .slice(0, 4);
+        // Última semana com relatório (mais recente)
+        const lastWeek = Object.keys(reportsByWeek).sort((a, b) => new Date(b) - new Date(a))[0];
+        const lastWeekReports = lastWeek ? reportsByWeek[lastWeek] : [];
 
-        let totalPresentLastWeeks = 0;
-        let totalReportsLastWeeks = 0;
-        
-        recentWeeks.forEach(week => {
-            totalReportsLastWeeks += reportsByWeek[week].length;
-            reportsByWeek[week].forEach(report => {
-                totalPresentLastWeeks += Object.values(report.attendance).filter(s => s === 'presente').length;
+        // Média de presentes por Connect na última semana
+        let totalPresentLastWeek = 0;
+        const presentIds = new Set();
+        lastWeekReports.forEach(report => {
+            Object.entries(report.attendance || {}).forEach(([memberId, status]) => {
+                if (status === 'presente') {
+                    totalPresentLastWeek++;
+                    presentIds.add(memberId);
+                }
             });
         });
+        const avgAttendance = lastWeekReports.length > 0
+            ? Math.round(totalPresentLastWeek / lastWeekReports.length)
+            : 0;
+        const membersLastWeek = presentIds.size;
 
-        // Frequência média por Connect (total de presentes dividido pela quantidade de relatórios)
-        const avgAttendance = totalReportsLastWeeks > 0 ? Math.round(totalPresentLastWeeks / totalReportsLastWeeks) : 0;
+        // Convidados da última semana
+        const totalGuests = lastWeekReports.reduce((sum, r) => sum + (Number(r.guests) || 0), 0);
 
+        // Ofertas do mês atual (acumulado mensal faz mais sentido financeiro)
         const currentMonth = new Date().getMonth();
         const monthlyReports = validReports.filter(r => {
             const dateObj = r.reportDate.toDate ? r.reportDate.toDate() : r.reportDate;
             return dateObj.getMonth() === currentMonth;
         });
-
-        // Total de convidados e ofertas (apenas dos Connects visíveis)
-        const totalGuests = monthlyReports.reduce((sum, r) => sum + (Number(r.guests) || 0), 0);
         const totalOffering = monthlyReports.reduce((sum, r) => sum + (Number(r.offering) || 0), 0);
 
-        return { avgAttendance, totalGuests, totalOffering };
+        return { avgAttendance, totalGuests, totalOffering, membersLastWeek };
 
     }, [visibleReports]);
 
@@ -136,14 +140,15 @@ const DashboardPage = ({ members = [], connects = [], reports = [], courses = []
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-6 sm:mb-8">
-                <MetricCard icon={TrendingUp} title="Média de Presentes (Semana)" value={dashboardMetrics.avgAttendance} color="#3B82F6" />
-                <MetricCard icon={UserPlus} title="Convidados (Mês)" value={dashboardMetrics.totalGuests} color="#22C55E" />
+                <MetricCard icon={TrendingUp} title="Média por Connect (Semana)" value={dashboardMetrics.avgAttendance} color="#3B82F6" />
+                <MetricCard icon={UserPlus} title="Convidados (Semana)" value={dashboardMetrics.totalGuests} color="#22C55E" />
                 <MetricCard icon={DollarSign} title="Ofertas (Mês)" value={dashboardMetrics.totalOffering.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} color="#EAB308" />
-                <MetricCard icon={Users} title="Total de Membros" value={visibleMembers.length} color="#EF4444" />
+                <MetricCard icon={Users} title="Presentes (Semana)" value={dashboardMetrics.membersLastWeek} color="#EF4444" />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 items-start">
-                <div className="lg:col-span-2 bg-white p-3 sm:p-4 md:p-6 rounded-xl shadow-md">
+                {/* Gráfico: oculto em mobile para evitar esmagamento */}
+                <div className="hidden sm:block lg:col-span-2 bg-white p-3 sm:p-4 md:p-6 rounded-xl shadow-md">
                     <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-between items-start sm:items-center mb-4">
                         <select
                             value={chartType}

@@ -4,10 +4,13 @@ import { db } from "../../firebaseConfig";
 import { getTenantId } from "../../utils/tenantUtils";
 import { useKidsStore } from "../store/kidsStore";
 import { CheckCircle, Clock, ArrowLeftRight, LogOut, Users, ChevronDown, AlertTriangle, Baby, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { signOut } from "firebase/auth";
+import { auth } from "../../firebaseConfig";
 
 export default function KidsMonitorPage() {
-  const { activeRoomId, setActiveRoomId } = useKidsStore();
+  const { activeRoomId, setActiveRoomId, kidsRole, setKidsRole, clearGuardian } = useKidsStore();
+  const navigate = useNavigate();
   const [rooms, setRooms] = useState([]);
   const [events, setEvents] = useState([]);
   const [checkins, setCheckins] = useState([]);
@@ -17,6 +20,13 @@ export default function KidsMonitorPage() {
   const [massConfirm, setMassConfirm] = useState("");
   const [processing, setProcessing] = useState(false);
   const tenantId = getTenantId();
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    clearGuardian();
+    setKidsRole(null);
+    navigate("/kids/login");
+  };
 
   useEffect(() => {
     const unsubs = [
@@ -120,14 +130,24 @@ export default function KidsMonitorPage() {
       {/* Header */}
       <div className="kids-header">
         <div className="max-w-2xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
               <p className="text-white/70 text-xs uppercase tracking-wider">Monitor</p>
               <h1 className="text-xl font-extrabold text-white">{activeRoom?.name || "Selecione uma Sala"}</h1>
             </div>
-            <Link to="/kids/supervisor" className="bg-white/20 hover:bg-white/30 text-white px-3 py-2 rounded-xl text-sm transition-colors">
-              Supervisao
-            </Link>
+            <div className="flex items-center gap-2">
+              {["supervisor", "admin"].includes(kidsRole) && (
+                <Link to="/kids/supervisor" className="bg-white/20 hover:bg-white/30 text-white px-3 py-2 rounded-xl text-sm font-bold transition-colors">
+                  Supervisao
+                </Link>
+              )}
+              <Link to="/kids/painel" className="bg-white/20 hover:bg-white/30 text-white px-3 py-2 rounded-xl text-sm font-bold transition-colors">
+                Área Pais
+              </Link>
+              <button onClick={handleLogout} className="bg-white/10 hover:bg-white/20 text-white p-2 rounded-xl transition-colors" title="Sair do Kids">
+                <LogOut size={18} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -240,7 +260,7 @@ export default function KidsMonitorPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4">
           <div className="kids-card w-full max-w-sm">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-extrabold text-gray-800">Transferir � {transferModal.childName}</h3>
+              <h3 className="font-extrabold text-gray-800">Transferir  {transferModal.childName}</h3>
               <button onClick={() => setTransferModal(null)}><X size={20} className="text-gray-400" /></button>
             </div>
             <div className="space-y-2">

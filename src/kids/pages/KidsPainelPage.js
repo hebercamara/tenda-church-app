@@ -77,7 +77,7 @@ export default function KidsPainelPage() {
     setCheckinState((s) => ({ ...s, [child.id]: "loading" }));
 
     try {
-      // Geolocalização
+      // GeolocalizaÃ§Ã£o
       const position = await getCurrentPosition();
       const { latitude: lat, longitude: lng } = position.coords;
       const { locationLat, locationLng, locationRadiusMeters } = selectedEvent;

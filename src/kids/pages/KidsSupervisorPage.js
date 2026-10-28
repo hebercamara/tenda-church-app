@@ -1,12 +1,22 @@
 import React from "react";
-import { Link } from "react-router-dom";
-import { Layers, CalendarDays, Users, BarChart3, ChevronRight, Baby, Shield } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Layers, CalendarDays, Users, BarChart3, ChevronRight, Baby, Shield, LogOut } from "lucide-react";
+import { signOut } from "firebase/auth";
+import { auth } from "../../firebaseConfig";
 import { useKidsStore } from "../store/kidsStore";
 import { useAuthStore } from "../../store/authStore";
 
 export default function KidsSupervisorPage() {
-  const { kidsRole } = useKidsStore();
+  const { kidsRole, clearGuardian, setKidsRole } = useKidsStore();
   const { isAdmin, isSuperAdmin } = useAuthStore();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    clearGuardian();
+    setKidsRole(null);
+    navigate("/kids/login");
+  };
 
   const cards = [
     { icon: <Layers size={28} />, label: "Gerenciar Salas", desc: "Criar, editar e organizar as salas do ministerio", to: "/kids/supervisor/salas", color: "from-kids-primary to-purple-500" },
@@ -15,20 +25,35 @@ export default function KidsSupervisorPage() {
     { icon: <BarChart3 size={28} />, label: "Relatorios", desc: "Historico de presencas e check-ins", to: "/kids/supervisor/relatorios", color: "from-blue-500 to-indigo-500" },
   ];
 
+  const hasMainAppAccess = isAdmin || isSuperAdmin || kidsRole === "admin";
+
   return (
     <div className="kids-min-h-screen kids-bg">
       <div className="kids-header">
         <div className="max-w-2xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <p className="text-white/70 text-xs uppercase tracking-wider mb-1">Ministerio Infantil</p>
               <h1 className="text-2xl font-extrabold text-white flex items-center gap-2">
                 <Shield size={24} /> Supervisao
               </h1>
             </div>
-            <Link to="/kids/monitor" className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors">
-              Modo Monitor
-            </Link>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Link to="/kids/monitor" className="bg-white/20 hover:bg-white/30 text-white px-3 py-2 rounded-xl text-sm font-bold transition-colors">
+                Modo Monitor
+              </Link>
+              <Link to="/kids/painel" className="bg-white/20 hover:bg-white/30 text-white px-3 py-2 rounded-xl text-sm font-bold transition-colors">
+                Área Pais
+              </Link>
+              {hasMainAppAccess && (
+                <Link to="/dashboard" className="bg-white text-kids-primary hover:bg-white/90 px-3 py-2 rounded-xl text-sm font-bold transition-colors shadow-sm">
+                  App Principal
+                </Link>
+              )}
+              <button onClick={handleLogout} className="bg-white/10 hover:bg-white/20 text-white p-2 rounded-xl transition-colors" title="Sair do Kids">
+                <LogOut size={18} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
