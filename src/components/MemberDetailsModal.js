@@ -1,4 +1,10 @@
 import React from 'react';
+import {
+  getMembershipType,
+  getMembershipTypeBadge,
+  hasBaptismCompleted,
+  hasMembershipCompleted
+} from '../utils/memberUtils';
 
 // Utilitário simples para formatar datas brasileiras e idade
 const formatBrazilianDate = (isoDate) => {
@@ -42,18 +48,67 @@ const MemberDetailsModal = ({ member, allConnects = [], allMembers = [] }) => {
     </div>
   );
 
+  const membershipType = getMembershipType(member);
+  const membershipBadge = getMembershipTypeBadge(membershipType);
+  const isBaptized = hasBaptismCompleted(member);
+  const isMemberCourseDone = hasMembershipCompleted(member);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center space-x-3">
         <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center text-red-700 font-bold text-lg">
           {(member.knownBy || member.name || 'M')[0]}
         </div>
-        <div>
-          <h2 className="text-lg font-semibold text-gray-800">{member.knownBy || member.name}</h2>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-lg font-semibold text-gray-800">{member.knownBy || member.name}</h2>
+            <span
+              className={`text-xs font-bold px-2 py-0.5 rounded border ${membershipBadge.bg} ${membershipBadge.color} ${membershipBadge.border}`}
+              title={membershipBadge.title}
+            >
+              {membershipBadge.label}
+            </span>
+          </div>
           {member.name && member.knownBy && (
             <p className="text-xs text-gray-500">Nome completo: {member.name}</p>
           )}
         </div>
+      </div>
+
+      {/* Card de Classificação Eclesiástica / Connect */}
+      <div className="bg-gray-50 rounded-lg p-3.5 border border-gray-200">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+            <span>Classificação:</span>
+            <span
+              className={`text-xs font-bold px-2 py-0.5 rounded border ${membershipBadge.bg} ${membershipBadge.color} ${membershipBadge.border}`}
+            >
+              {membershipBadge.label}
+            </span>
+            <span className="text-xs text-gray-600 font-medium">({membershipBadge.name})</span>
+          </h3>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+          <div className="flex items-center gap-2 bg-white p-2 rounded border border-gray-200">
+            <span className="w-4 h-4 rounded flex items-center justify-center text-[11px] font-bold bg-gray-100 text-gray-700">
+              {isBaptized ? '✓' : '—'}
+            </span>
+            <span className="text-gray-700">
+              Batismo: <strong className="text-gray-800">{isBaptized ? 'Concluído' : 'Não registrado'}</strong>
+            </span>
+          </div>
+          <div className="flex items-center gap-2 bg-white p-2 rounded border border-gray-200">
+            <span className="w-4 h-4 rounded flex items-center justify-center text-[11px] font-bold bg-gray-100 text-gray-700">
+              {isMemberCourseDone ? '✓' : '—'}
+            </span>
+            <span className="text-gray-700">
+              Aliança de Membresia: <strong className="text-gray-800">{isMemberCourseDone ? 'Concluído' : 'Não registrado'}</strong>
+            </span>
+          </div>
+        </div>
+        <p className="text-[11px] text-gray-500 mt-2">
+          * Para ser <strong>MI (Membro de Igreja)</strong>, a pessoa precisa ter Batismo e Aliança de Membresia anotados no Trilho de Liderança. Demais cadastrados são <strong>MC (Membro de Connect)</strong>.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

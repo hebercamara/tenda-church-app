@@ -3,6 +3,7 @@ import { Trash2, Plus, Route, Filter, ChevronLeft, ChevronRight, Upload, Table, 
 import LoadingSpinner from '../components/LoadingSpinner';
 import BatchSimpleMemberModal from '../components/BatchSimpleMemberModal';
 import EditSimpleMemberModal from '../components/EditSimpleMemberModal';
+import { getMembershipType, getMembershipTypeBadge } from '../utils/memberUtils';
 
 // ALTERADO: O componente agora recebe props de usuário para fazer sua própria filtragem
 const MembersPage = ({
@@ -260,7 +261,21 @@ const MembersPage = ({
                         title="Clique para editar este membro"
                       >
                         <td className="p-3">
-                          <div className="font-bold text-gray-800">{member.name}</div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-gray-800">{member.name}</span>
+                            {(() => {
+                              const type = getMembershipType(member);
+                              const badge = getMembershipTypeBadge(type);
+                              return (
+                                <span
+                                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${badge.bg} ${badge.color} ${badge.border}`}
+                                  title={badge.title}
+                                >
+                                  {badge.label}
+                                </span>
+                              );
+                            })()}
+                          </div>
                           <div className="text-gray-500 text-sm md:hidden">{member.email}</div>
                         </td>
                         <td className="p-3 text-gray-600 hidden md:table-cell">{member.email}</td>

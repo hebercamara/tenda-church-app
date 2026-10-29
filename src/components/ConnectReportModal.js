@@ -5,6 +5,7 @@ import { getTenantId } from '../utils/tenantUtils';
 import Modal from './Modal';
 import { formatDateToBrazilian } from '../utils/dateUtils';
 import { Calendar, CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { getMembershipType, getMembershipTypeBadge } from '../utils/memberUtils';
 
 const getConnectWeekdayIndex = (weekday) => {
     if (!weekday) return null;
@@ -330,7 +331,7 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
                                 </div>
                             </div>
 
-                            {/* Legenda visível APENAS no mobile */}
+                            {/* Legenda visível APENAS no mobile (apenas Presença P / A) */}
                             <div className="flex sm:hidden items-center justify-between text-xs py-1.5 px-2 bg-gray-100 rounded-md border border-gray-200">
                                 <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Legenda:</span>
                                 <div className="flex items-center gap-3">
@@ -357,15 +358,27 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
                                                     : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
                                             }`}
                                         >
-                                            <div className="flex-1 pr-2">
+                                            <div className="flex-1 pr-2 flex items-center gap-2 min-w-0">
                                                 <button
                                                     type="button"
-                                                    className="text-left font-medium text-gray-800 hover:text-[#DC2626] hover:underline text-sm truncate block"
+                                                    className="text-left font-medium text-gray-800 hover:text-[#DC2626] hover:underline text-sm truncate"
                                                     title="Ver cadastro"
                                                     onClick={() => onViewMember && onViewMember(member)}
                                                 >
                                                     {getMemberKnownName(member, connectMembers)}
                                                 </button>
+                                                {(() => {
+                                                    const type = getMembershipType(member);
+                                                    const badge = getMembershipTypeBadge(type);
+                                                    return (
+                                                        <span
+                                                            className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${badge.bg} ${badge.color} ${badge.border}`}
+                                                            title={badge.title}
+                                                        >
+                                                            {badge.label}
+                                                        </span>
+                                                    );
+                                                })()}
                                             </div>
                                             <div className="flex space-x-1.5 flex-shrink-0">
                                                 <button

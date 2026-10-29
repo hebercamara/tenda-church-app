@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import Modal from './Modal';
 import { Users, Clipboard, Calendar, UserPlus } from 'lucide-react';
 import { formatDateToBrazilian } from '../utils/dateUtils';
+import { getMembershipType, getMembershipTypeBadge } from '../utils/memberUtils';
 
 const ConnectFullReportModal = ({ isOpen, onClose, connect, allMembers, allReports }) => {
 
@@ -131,9 +132,20 @@ const ConnectFullReportModal = ({ isOpen, onClose, connect, allMembers, allRepor
                     {/* Membros */}
                     <div className="mb-6">
                         <h3 className="text-lg font-semibold mb-2">Membros ({connectMembers.length})</h3>
-                        <ul className="space-y-1 text-sm list-disc list-inside">
-                            {connectMembers.map(member => <li key={member.id}>{getMemberKnownName(member, connectMembers)}</li>)}
-                        </ul>
+                        <div className="flex flex-wrap gap-2">
+                            {connectMembers.map(member => {
+                                const type = getMembershipType(member);
+                                const badge = getMembershipTypeBadge(type);
+                                return (
+                                    <div key={member.id} className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-md text-sm">
+                                        <span className="font-medium text-gray-800">{getMemberKnownName(member, connectMembers)}</span>
+                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${badge.bg} ${badge.color} ${badge.border}`} title={badge.title}>
+                                            {badge.label}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                     
                     {/* Histórico */}

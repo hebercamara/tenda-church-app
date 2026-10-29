@@ -6,6 +6,7 @@ import { useAuthStore } from '../store/authStore';
 import { useLoadingState } from '../hooks/useLoadingState';
 import LoadingButton from './LoadingButton';
 import { convertBrazilianDateToISO, convertISOToBrazilianDate } from '../utils/dateUtils';
+import { getMembershipType, getMembershipTypeBadge } from '../utils/memberUtils';
 
 // ALTERADO: O componente não recebe mais `isAdmin`
 const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, onCheckDuplicate, onOpenLeadershipTrack }) => {
@@ -259,6 +260,25 @@ const MemberForm = ({ onClose, onSave, connects, editingMember, leaderConnects, 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             {error && <p className="text-red-600 bg-red-100 p-2 rounded-md">{error}</p>}
+
+            {editingMember && (() => {
+                const type = getMembershipType(editingMember);
+                const badge = getMembershipTypeBadge(type);
+                return (
+                    <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Classificação:</span>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded border ${badge.bg} ${badge.color} ${badge.border}`}>
+                                {badge.label}
+                            </span>
+                            <span className="text-xs text-gray-700 font-medium">({badge.name})</span>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                            {type === 'MI' ? 'Batismo e Aliança de Membresia no Trilho' : 'Membro cadastrado no Connect'}
+                        </span>
+                    </div>
+                );
+            })()}
             
             <fieldset className="border p-4 rounded-md">
                 <legend className="px-2 font-semibold">Dados Pessoais</legend>
