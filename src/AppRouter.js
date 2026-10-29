@@ -62,6 +62,7 @@ const AppRouter = ({
     handleManageCourse,
     handleAddCourseTemplate,
     handleEditCourseTemplate,
+    handleReorderCourseTemplates,
     handleDeleteCourseTemplate,
     handleDeleteCertificateTemplate,
     handleGenerateReport,
@@ -423,6 +424,7 @@ const AppRouter = ({
                                 allConnects={allConnects}
                                 allMembers={allMembers}
                                 allCourses={allCourses}
+                                allCourseTemplates={allCourseTemplates}
                                 attendanceAlerts={attendanceAlerts}
                                 handleViewMember={handleViewMember}
                                 handleReactivateMember={handleReactivateMember}
@@ -453,6 +455,7 @@ const AppRouter = ({
                                 onReopenCourse={handleReopenCourse}
                                 onAddCourseTemplate={handleAddCourseTemplate}
                                 onEditCourseTemplate={handleEditCourseTemplate}
+                                onReorderCourseTemplates={handleReorderCourseTemplates}
                                 loadingStates={loadingStates}
                                 operationStatus={operationStatus}
                                 setOperationStatus={setOperationStatus}
@@ -608,7 +611,7 @@ const AppRouter = ({
 };
 
 // Componente wrapper para ConnectTrackPage que usa useParams
-const ConnectTrackWrapper = ({ allConnects, allMembers, allCourses, attendanceAlerts, handleViewMember, handleReactivateMember }) => {
+const ConnectTrackWrapper = ({ allConnects, allMembers, allCourses, allCourseTemplates, attendanceAlerts, handleViewMember, handleReactivateMember }) => {
     const { connectId } = useParams();
     const [membersWithCourses, setMembersWithCourses] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -620,10 +623,12 @@ const ConnectTrackWrapper = ({ allConnects, allMembers, allCourses, attendanceAl
             if (!connect || !allMembers) return;
 
             setLoading(true);
-            const connectMembers = allMembers.filter(m => m.connectId === connect.id);
+            const connectMembers = allMembers.filter(m =>
+                m.connectId === connect.id ||
+                m.connectHistory?.some(entry => entry.connectId === connect.id)
+            );
             const membersWithCoursesPromises = connectMembers.map(async (member) => {
                 try {
-                    const appId = getTenantId();
                     const coursesRef = collection(db, `artifacts/${getTenantId()}/public/data/members/${member.id}/completedCourses`);
                     const querySnapshot = await getDocs(coursesRef);
                     const completedCourses = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -659,6 +664,7 @@ const ConnectTrackWrapper = ({ allConnects, allMembers, allCourses, attendanceAl
             connect={connect}
             membersInConnect={membersWithCourses}
             allCourses={allCourses}
+            courseTemplates={allCourseTemplates}
             allConnects={allConnects}
             attendanceAlerts={attendanceAlerts}
             onEditMember={handleViewMember}

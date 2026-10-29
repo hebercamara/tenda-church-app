@@ -21,6 +21,26 @@ export const isMilestoneCompleted = (milestone) => {
 };
 
 /**
+ * Definição dos marcos do Trilho de Liderança.
+ */
+export const leadershipMilestones = [
+    { id: 'salvation', label: '1. Aceitou a Jesus', shortLabel: 'Aceitou Jesus' },
+    { id: 'initialDiscipleship', label: '2. Discipulado Inicial', shortLabel: 'Discipulado' },
+    { id: 'baptism', label: '3. Batismo', shortLabel: 'Batismo' },
+    { id: 'membership', label: '4. Aliança de Membresia', shortLabel: 'Membresia' },
+    { id: 'connectTraining', label: '5. Treinamento no Connect', shortLabel: 'Treinamento' },
+    { id: 'connectLeader', label: '6. Líder de Connect', shortLabel: 'Líder Connect' },
+];
+
+/**
+ * Retorna o rótulo legível de um marco.
+ */
+export const getMilestoneLabel = (milestoneId) => {
+    const found = leadershipMilestones.find(m => m.id === milestoneId);
+    return found ? found.label : milestoneId;
+};
+
+/**
  * Verifica se o membro tem batismo concluído.
  */
 export const hasBaptismCompleted = (member) => {
@@ -31,16 +51,21 @@ export const hasBaptismCompleted = (member) => {
 
 /**
  * Verifica se o membro tem Aliança de Membresia / Membresia concluída.
- * Checa o marco no trilho e cursos concluídos como suporte.
+ * Checa o marco no trilho, templates de cursos vinculados e cursos concluídos como suporte.
  */
-export const hasMembershipCompleted = (member) => {
+export const hasMembershipCompleted = (member, courseTemplates = []) => {
     if (!member) return false;
     const milestones = member.milestones || {};
     if (isMilestoneCompleted(milestones.membership)) return true;
 
-    // Fallback: verificar se possui curso concluído relacionado à Aliança de Membresia
+    // Verificar se possui curso concluído relacionado à Aliança de Membresia
     if (Array.isArray(member.completedCourses) && member.completedCourses.length > 0) {
         return member.completedCourses.some(c => {
+            // Verificar pelo templateId vinculado ao milestone 'membership'
+            if (c.templateId && Array.isArray(courseTemplates)) {
+                const tmpl = courseTemplates.find(t => t.id === c.templateId);
+                if (tmpl && tmpl.linkedMilestoneId === 'membership') return true;
+            }
             const name = (c?.name || c?.courseName || '').toLowerCase();
             return name.includes('aliança') || name.includes('alianca') || name.includes('membresia');
         });
@@ -56,12 +81,13 @@ export const hasMembershipCompleted = (member) => {
  * MC (Membro de Connect): qualquer outra pessoa cadastrada.
  *
  * @param {object} member - Objeto do membro com campo milestones
+ * @param {Array} [courseTemplates] - Lista opcional de modelos de cursos
  * @returns {'MI'|'MC'}
  */
-export const getMembershipType = (member) => {
+export const getMembershipType = (member, courseTemplates = []) => {
     if (!member) return 'MC';
     const hasBaptism = hasBaptismCompleted(member);
-    const hasMembership = hasMembershipCompleted(member);
+    const hasMembership = hasMembershipCompleted(member, courseTemplates);
     return hasBaptism && hasMembership ? 'MI' : 'MC';
 };
 

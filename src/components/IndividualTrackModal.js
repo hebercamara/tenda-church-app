@@ -232,7 +232,7 @@ const IndividualTrackModal = ({ member, completedCourses, memberConnectHistoryDe
                             <div key={course.id} className="flex items-center gap-3 p-3 rounded-lg border bg-blue-50/60 border-blue-200">
                                 <CheckCircle2 size={20} className="text-blue-600 flex-shrink-0" />
                                 <span className="text-gray-700 text-sm font-medium flex-1">
-                                    {index + 1}. {course.name}
+                                    {index + 1}. {course.name || course.courseName}
                                 </span>
                                 {course.completionDate && (
                                     <div className="flex items-center gap-1 text-xs text-gray-500 font-medium ml-auto">

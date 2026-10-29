@@ -351,14 +351,47 @@ function AppContent() {
             ),
             onSnapshot(
                 query(collection(db, `artifacts/${getTenantId()}/public/data/courseTemplates`)),
-                (s) => {
+                async (s) => {
                     const templatesList = s.docs.map(d => ({ id: d.id, ...d.data() }));
-                    const finalTemplatesList = templatesList;
-                    setAllCourseTemplates(finalTemplatesList);
+                    setAllCourseTemplates(templatesList);
+
+                    // Garantir que o modelo padrão de Aliança de Membresia existe e está associado ao marco 'membership'
+                    const hasMembershipTemplate = templatesList.some(t =>
+                        t.linkedMilestoneId === 'membership' ||
+                        (t.name && (t.name.toLowerCase().includes('aliança') || t.name.toLowerCase().includes('alianca')) && t.name.toLowerCase().includes('membresia'))
+                    );
+
+                    if (!hasMembershipTemplate && s.docs !== undefined) {
+                        try {
+                            const defaultTemplate = {
+                                name: 'Aliança de Membresia',
+                                description: 'Curso de Aliança de Membresia associado ao Trilho de Liderança.',
+                                linkedMilestoneId: 'membership',
+                                order: 1,
+                                assessment: {
+                                    tests: { count: 0, value: 0 },
+                                    assignments: { count: 0, value: 0 },
+                                    activities: { count: 0, value: 0 }
+                                },
+                                passingCriteria: { minGrade: 7, minAttendance: 75 },
+                                lessonsCount: 4,
+                                lessonPlan: [
+                                    { activityIndex: null, testIndex: null, assignmentIndex: null, notes: 'Aula 1: A Igreja e sua Visão', considerAttendance: true },
+                                    { activityIndex: null, testIndex: null, assignmentIndex: null, notes: 'Aula 2: Valores e Princípios Bíblicos', considerAttendance: true },
+                                    { activityIndex: null, testIndex: null, assignmentIndex: null, notes: 'Aula 3: Compromisso e Aliança', considerAttendance: true },
+                                    { activityIndex: null, testIndex: null, assignmentIndex: null, notes: 'Aula 4: Ministérios e Próximos Passos', considerAttendance: true }
+                                ],
+                                createdAt: new Date().toISOString()
+                            };
+                            await setDoc(doc(db, `artifacts/${getTenantId()}/public/data/courseTemplates`, 'template_alianca_membresia'), defaultTemplate, { merge: true });
+                        } catch (err) {
+                            console.warn('Não foi possível inicializar o modelo de Aliança de Membresia:', err);
+                        }
+                    }
                 },
                 (error) => {
                     console.error('Erro ao carregar templates de curso:', error);
-                    setConnectionError('Erro de conexÃ£o: NÃ£o foi possÃ­vel carregar os templates de curso. ');
+                    setConnectionError('Erro de conexão: Não foi possível carregar os templates de curso. ');
                     setAllCourseTemplates([]);
                 }
             ),
@@ -1322,7 +1355,38 @@ function AppContent() {
             loadingStates.setError('saveCourse', 'Erro ao salvar curso. Tente novamente.');
         }
     };
-    const handleSaveCourseTemplate = async (templateData) => { const collectionPath = `artifacts/${getTenantId()}/public/data/courseTemplates`; try { if (editingCourseTemplate) { await setDoc(doc(db, collectionPath, editingCourseTemplate.id), templateData); } else { await addDoc(collection(db, collectionPath), templateData); } closeCourseTemplateModal(); } catch (error) { console.error("Erro ao salvar modelo de curso:", error); } };
+
+    const handleSaveCourseTemplate = async (templateData) => {
+        const collectionPath = `artifacts/${getTenantId()}/public/data/courseTemplates`;
+        try {
+            const orderVal = typeof templateData.order === 'number' && !isNaN(templateData.order)
+                ? templateData.order
+                : (Number(templateData.order) || (allCourseTemplates.length + 1));
+            const dataToSave = { ...templateData, order: orderVal };
+            if (editingCourseTemplate) {
+                await setDoc(doc(db, collectionPath, editingCourseTemplate.id), dataToSave, { merge: true });
+            } else {
+                await addDoc(collection(db, collectionPath), dataToSave);
+            }
+            closeCourseTemplateModal();
+        } catch (error) {
+            console.error("Erro ao salvar modelo de curso:", error);
+        }
+    };
+
+    const handleReorderCourseTemplates = async (newTemplatesList) => {
+        try {
+            const batch = writeBatch(db);
+            const collectionPath = `artifacts/${getTenantId()}/public/data/courseTemplates`;
+            newTemplatesList.forEach((template, index) => {
+                const templateRef = doc(db, collectionPath, template.id);
+                batch.update(templateRef, { order: index + 1 });
+            });
+            await batch.commit();
+        } catch (error) {
+            console.error("Erro ao reordenar modelos de cursos:", error);
+        }
+    };
     const handleSaveCourseStudents = async (courseId, students) => {
         try {
             const course = allCourses.find(c => c.id === courseId);
@@ -1629,6 +1693,27 @@ function AppContent() {
                         finalGrade: finalGrade,
                         templateId: course.templateId || null,
                     });
+
+                    // Se a turma pertencer a um modelo vinculado ao Trilho de Liderança, atualizar o marco do membro
+                    if (course.templateId) {
+                        const tmpl = allCourseTemplates.find(t => t.id === course.templateId);
+                        if (tmpl?.linkedMilestoneId) {
+                            try {
+                                const memberRef = doc(db, `artifacts/${getTenantId()}/public/data/members`, student.id);
+                                const memberSnap = await getDoc(memberRef);
+                                if (memberSnap.exists()) {
+                                    const curMilestones = memberSnap.data().milestones || {};
+                                    const curMilestone = curMilestones[tmpl.linkedMilestoneId] || {};
+                                    await updateDoc(memberRef, {
+                                        [`milestones.${tmpl.linkedMilestoneId}.completed`]: true,
+                                        [`milestones.${tmpl.linkedMilestoneId}.date`]: curMilestone.date || new Date().toISOString().split('T')[0]
+                                    });
+                                }
+                            } catch (mErr) {
+                                console.warn(`Erro ao atualizar marco vinculado do membro ${student.id}:`, mErr);
+                            }
+                        }
+                    }
                 }
             }
             const courseRef = doc(db, `artifacts/${getTenantId()}/public/data/courses`, course.id);
@@ -1929,6 +2014,7 @@ function AppContent() {
                         handleManageCourse={openManageCourseModal}
                         handleAddCourseTemplate={openCourseTemplateModal}
                         handleEditCourseTemplate={openCourseTemplateModal}
+                        handleReorderCourseTemplates={handleReorderCourseTemplates}
                         handleDeleteCourseTemplate={triggerDelete}
                         handleDeleteCertificateTemplate={triggerDelete}
                         handleGenerateReport={openReportModal}
@@ -1994,6 +2080,7 @@ function AppContent() {
                     onClose={closeCourseTemplateModal}
                     onSave={handleSaveCourseTemplate}
                     editingTemplate={editingCourseTemplate}
+                    courseTemplatesCount={allCourseTemplates.length}
                 />
             </Modal>
             {reportingConnect && <ConnectReportModal isOpen={isReportModalOpen} onClose={closeReportModal} connect={reportingConnect} members={allMembers} onSave={handleSaveConnectReport} isAdmin={isAdmin} onViewMember={openMemberDetails} />}

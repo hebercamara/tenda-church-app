@@ -295,9 +295,25 @@ export const sampleConnectReports = [
 
 export const sampleCourseTemplates = [
   {
+    id: 'template_alianca_membresia',
+    name: 'Aliança de Membresia',
+    description: 'Curso padrão de Aliança de Membresia para integração de membros.',
+    linkedMilestoneId: 'membership',
+    order: 1,
+    duration: '4 semanas',
+    category: 'Membresia',
+    lessons: [
+      'A Igreja e sua Visão',
+      'Valores e Princípios Bíblicos',
+      'Compromisso e Aliança',
+      'Ministérios e Próximos Passos'
+    ]
+  },
+  {
     id: 'template1',
     name: 'Template Discipulado Básico',
     description: 'Template para cursos de discipulado básico',
+    order: 2,
     duration: '8 semanas',
     category: 'Discipulado',
     lessons: [
@@ -315,6 +331,7 @@ export const sampleCourseTemplates = [
     id: 'template2',
     name: 'Template Liderança',
     description: 'Template para desenvolvimento de líderes',
+    order: 3,
     duration: '12 semanas',
     category: 'Liderança',
     lessons: [

@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { leadershipMilestones } from '../utils/memberUtils';
 
-const CourseTemplateForm = ({ onClose, onSave, editingTemplate }) => {
+const CourseTemplateForm = ({ onClose, onSave, editingTemplate, courseTemplatesCount = 0 }) => {
     const initialData = {
         name: '',
+        order: courseTemplatesCount ? courseTemplatesCount + 1 : 1,
+        linkedMilestoneId: '',
         assessment: { tests: { count: 0, value: 0 }, activities: { count: 0, value: 0 }, assignments: { count: 0, value: 0 } },
         passingCriteria: { minGrade: 7, minAttendance: 75 },
         lessonsCount: 0,
@@ -16,6 +19,10 @@ const CourseTemplateForm = ({ onClose, onSave, editingTemplate }) => {
         if (editingTemplate) {
             setFormData({
                 name: editingTemplate.name || '',
+                order: (editingTemplate.order !== undefined && editingTemplate.order !== null)
+                    ? editingTemplate.order
+                    : (courseTemplatesCount ? courseTemplatesCount + 1 : 1),
+                linkedMilestoneId: editingTemplate.linkedMilestoneId || '',
                 assessment: {
                     tests: editingTemplate.assessment?.tests || initialData.assessment.tests,
                     assignments: editingTemplate.assessment?.assignments || initialData.assessment.assignments,
@@ -31,7 +38,7 @@ const CourseTemplateForm = ({ onClose, onSave, editingTemplate }) => {
         } else {
             setFormData(initialData);
         }
-    }, [editingTemplate]);
+    }, [editingTemplate, courseTemplatesCount]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -92,6 +99,8 @@ const CourseTemplateForm = ({ onClose, onSave, editingTemplate }) => {
         }
         onSave({
             ...formData,
+            order: Number(formData.order) || 1,
+            linkedMilestoneId: formData.linkedMilestoneId || null,
             // Garantir que não salvamos mais o campo CSV de plano de atividades
             assessment: {
                 ...formData.assessment,
@@ -106,9 +115,47 @@ const CourseTemplateForm = ({ onClose, onSave, editingTemplate }) => {
                 {error && <p className="text-red-600 bg-red-100 p-2 rounded-md mb-4">{error}</p>}
             </div>
             <div className="flex-grow overflow-y-auto space-y-4 pr-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="md:col-span-2">
+                        <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Nome do Modelo</label>
+                        <input type="text" name="name" id="name" value={formData.name} onChange={handleChange} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border" placeholder="Ex: Aliança de Membresia" />
+                    </div>
+                    <div>
+                        <label htmlFor="order" className="block text-sm font-medium text-gray-700 mb-1">
+                            Prioridade no Trilho
+                        </label>
+                        <input
+                            type="number"
+                            min="1"
+                            name="order"
+                            id="order"
+                            value={formData.order}
+                            onChange={handleChange}
+                            className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border"
+                            placeholder="Ex: 1"
+                        />
+                        <p className="text-[11px] text-gray-500 mt-0.5">Ordem nas colunas (1 = 1º).</p>
+                    </div>
+                </div>
                 <div>
-                    <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Nome do Modelo</label>
-                    <input type="text" name="name" id="name" value={formData.name} onChange={handleChange} className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border" placeholder="Ex: Fundamentos da Fé" />
+                    <label htmlFor="linkedMilestoneId" className="block text-sm font-medium text-gray-700 mb-1">
+                        Vincular a um Item do Trilho de Liderança (opcional)
+                    </label>
+                    <select
+                        id="linkedMilestoneId"
+                        name="linkedMilestoneId"
+                        value={formData.linkedMilestoneId || ''}
+                        onChange={handleChange}
+                        className="w-full bg-gray-100 text-gray-900 rounded-md p-2 border focus:ring-2 focus:ring-red-500 focus:outline-none"
+                    >
+                        <option value="">— Nenhum marco vinculado —</option>
+                        {leadershipMilestones.map(m => (
+                            <option key={m.id} value={m.id}>{m.label}</option>
+                        ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                        Ao associar este modelo a um item do trilho (ex: Aliança de Membresia), quem concluir uma turma deste modelo terá o marco preenchido no Trilho de Liderança.
+                    </p>
                 </div>
                 <fieldset className="border p-4 rounded-md">
                     <legend className="px-2 font-semibold">Estrutura de Avaliação (Total: 10 Pontos)</legend>

@@ -1,8 +1,9 @@
-﻿import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Edit, Trash2, Plus, ClipboardList, GraduationCap, Users, CheckSquare, RotateCcw, LayoutTemplate, ChevronDown, ChevronUp, BarChart3, X, Award } from 'lucide-react';
 // NOVO: Importando o store
 import { useAuthStore } from '../store/authStore';
+import { getMilestoneLabel } from '../utils/memberUtils';
 
 // Componente para o Card de Curso (reutilizado nas listas principais)
 const CourseCard = React.memo(({ course, isAdmin, onEditCourse, onDelete, onManageCourse, onFinalizeCourse, onReopenCourse, canManage }) => {
@@ -152,10 +153,9 @@ const CourseCard = React.memo(({ course, isAdmin, onEditCourse, onDelete, onMana
   );
 });
 
-// ALTERADO: O componente não recebe mais `isAdmin`
 const CoursesPage = ({
   courses = [], courseTemplates = [], certificateTemplates = [], onAddCourse, onAddCourseTemplate, onEditCourse, onEditCourseTemplate,
-  onDelete, onManageCourse, onFinalizeCourse, onReopenCourse, allMembers,
+  onDelete, onManageCourse, onFinalizeCourse, onReopenCourse, allMembers, onReorderCourseTemplates,
 }) => {
   // NOVO: Consumindo o store global
   const { isAdmin, currentUserData } = useAuthStore();
@@ -166,6 +166,29 @@ const CoursesPage = ({
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [selectedProfessor, setSelectedProfessor] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+
+  const sortedCourseTemplates = useMemo(() => {
+    return [...courseTemplates].sort((a, b) => {
+      const orderA = typeof a.order === 'number' && !isNaN(a.order) ? a.order : 999;
+      const orderB = typeof b.order === 'number' && !isNaN(b.order) ? b.order : 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+  }, [courseTemplates]);
+
+  const handleMoveTemplate = (templateId, direction) => {
+    if (!onReorderCourseTemplates) return;
+    const currentIndex = sortedCourseTemplates.findIndex(t => t.id === templateId);
+    if (currentIndex === -1) return;
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= sortedCourseTemplates.length) return;
+
+    const newList = [...sortedCourseTemplates];
+    const [moved] = newList.splice(currentIndex, 1);
+    newList.splice(targetIndex, 0, moved);
+
+    onReorderCourseTemplates(newList);
+  };
 
   // NOVO: função para verificar se usuário é substituto ativo da turma
     const isActiveSubstitute = (course) => {
@@ -350,26 +373,68 @@ const CoursesPage = ({
           <div className="space-y-8">
             {/* Modelos de Cursos */}
             <div>
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-semibold text-gray-700">Modelos de Cursos</h3>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-700">Modelos de Cursos</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Defina a ordem de prioridade dos modelos pelas setas ou ao editar o modelo. Esta ordem define as colunas no Trilho de Liderança.
+                  </p>
+                </div>
                 {isAdmin && (<button onClick={() => onAddCourseTemplate()} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2 text-sm"><Plus size={16} /><span>Criar Modelo de Curso</span></button>)}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {courseTemplates.sort((a,b) => a.name.localeCompare(b.name)).map(template => (
-                  <div key={template.id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col justify-between">
-                    <div className="flex items-center justify-between bg-red-800 text-white px-4 py-2">
-                      <h4 className="font-semibold text-base flex items-center"><LayoutTemplate size={18} className="mr-2" />{template.name}</h4>
+                {sortedCourseTemplates.map((template, index) => (
+                  <div key={template.id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col justify-between border border-gray-100 hover:shadow-lg transition-shadow">
+                    <div className="flex items-center justify-between bg-red-800 text-white px-4 py-2.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full font-bold flex-shrink-0" title="Ordem de prioridade no Trilho de Liderança">
+                          #{template.order || index + 1}
+                        </span>
+                        <h4 className="font-semibold text-base flex items-center truncate" title={template.name}>
+                          <LayoutTemplate size={18} className="mr-2 flex-shrink-0" />
+                          <span className="truncate">{template.name}</span>
+                        </h4>
+                      </div>
                       {isAdmin && (
-                        <div className="flex space-x-2">
-                          <button onClick={() => onEditCourseTemplate(template)} className="text-white/80 hover:text-white" title="Editar Modelo"><Edit size={16} /></button>
-                          <button onClick={() => onDelete('courseTemplate', template.id)} className="text-white/80 hover:text-white" title="Excluir Modelo"><Trash2 size={16} /></button>
+                        <div className="flex items-center space-x-0.5 flex-shrink-0 ml-2">
+                          <button
+                            type="button"
+                            onClick={() => handleMoveTemplate(template.id, 'up')}
+                            disabled={index === 0}
+                            className={`p-1 rounded text-white ${index === 0 ? 'opacity-25 cursor-not-allowed' : 'hover:bg-white/20 active:bg-white/30'}`}
+                            title="Mover para cima (maior prioridade no trilho)"
+                          >
+                            <ChevronUp size={18} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveTemplate(template.id, 'down')}
+                            disabled={index === sortedCourseTemplates.length - 1}
+                            className={`p-1 rounded text-white ${index === sortedCourseTemplates.length - 1 ? 'opacity-25 cursor-not-allowed' : 'hover:bg-white/20 active:bg-white/30'}`}
+                            title="Mover para baixo (menor prioridade no trilho)"
+                          >
+                            <ChevronDown size={18} />
+                          </button>
+                          <div className="h-4 w-px bg-white/30 mx-1"></div>
+                          <button onClick={() => onEditCourseTemplate(template)} className="p-1 rounded text-white/80 hover:text-white hover:bg-white/20" title="Editar Modelo"><Edit size={16} /></button>
+                          <button onClick={() => onDelete('courseTemplate', template.id)} className="p-1 rounded text-white/80 hover:text-white hover:bg-white/20" title="Excluir Modelo"><Trash2 size={16} /></button>
                         </div>
                       )}
                     </div>
                     <div className="text-xs text-gray-600 p-4 border-t border-red-200">
-                        <p>Provas: {template.assessment.tests.count} (valendo {template.assessment.tests.value} cada)</p>
-                        <p>Trabalhos: {template.assessment.assignments.count} (valendo {template.assessment.assignments.value} cada)</p>
-                        <p>Atividades: {template.assessment.activities.count} (valendo {template.assessment.activities.value} cada)</p>
+                        <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-100">
+                            <span className="text-gray-500 font-medium">Prioridade no Trilho:</span>
+                            <span className="font-bold text-gray-800 bg-gray-100 px-2 py-0.5 rounded">#{template.order || index + 1}</span>
+                        </div>
+                        {template.linkedMilestoneId && (
+                            <div className="mb-2 pb-2 border-b border-gray-100 flex items-center gap-1.5 text-xs text-blue-700 font-medium">
+                                <span className="w-2 h-2 rounded-full bg-blue-600 inline-block"></span>
+                                <span>Vinculado ao marco: <strong>{getMilestoneLabel(template.linkedMilestoneId)}</strong></span>
+                            </div>
+                        )}
+                        <p>Provas: {template.assessment?.tests?.count || 0} (valendo {template.assessment?.tests?.value || 0} cada)</p>
+                        <p>Trabalhos: {template.assessment?.assignments?.count || 0} (valendo {template.assessment?.assignments?.value || 0} cada)</p>
+                        <p>Atividades: {template.assessment?.activities?.count || 0} (valendo {template.assessment?.activities?.value || 0} cada)</p>
                     </div>
                   </div>
                 ))}
