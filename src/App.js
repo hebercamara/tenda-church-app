@@ -10,6 +10,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, onSnapshot, addDoc, doc, setDoc, getDocs, deleteDoc, updateDoc, query, writeBatch, where, getDoc, orderBy, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from './firebaseConfig';
 import { getTenantId, SUPER_ADMIN_EMAIL } from './utils/tenantUtils';
+import { formatLocalDateToISO, getConnectWeekdayIndex } from './utils/dateUtils';
 
 // Componentes
 import Sidebar from './components/Sidebar';
@@ -453,6 +454,61 @@ function AppContent() {
         setLoadingData(false);
         return () => unsubs.forEach(unsub => unsub());
     }, [user]);
+
+    // Auto-reconciliação para recuperar dados já lançados que sofreram deslocamento de data (+1 dia por fuso UTC após as 21h)
+    useEffect(() => {
+        if (!allConnectReports.length || !allConnects.length) return;
+
+        const reconcileShiftedReports = async () => {
+            for (const report of allConnectReports) {
+                const connect = allConnects.find(c => String(c.id) === String(report.connectId));
+                if (!connect || !connect.weekday) continue;
+
+                const connectWeekday = getConnectWeekdayIndex(connect.weekday);
+                if (connectWeekday === null) continue;
+
+                const reportDateObj = report.reportDate?.toDate ? report.reportDate.toDate() : new Date(report.reportDate);
+                if (isNaN(reportDateObj.getTime())) continue;
+
+                // Neutraliza horário para meio-dia
+                reportDateObj.setHours(12, 0, 0, 0);
+                const reportWeekday = reportDateObj.getDay();
+
+                // Se a data do relatório caiu exatamente no dia seguinte ao dia da reunião do Connect (ex: sexta em vez de quinta)
+                if (reportWeekday === (connectWeekday + 1) % 7) {
+                    const prevDate = new Date(reportDateObj);
+                    prevDate.setDate(prevDate.getDate() - 1);
+                    const correctIso = formatLocalDateToISO(prevDate);
+                    const correctReportId = `${connect.id}_${correctIso}`;
+
+                    const existingCorrect = allConnectReports.find(r => r.id === correctReportId);
+
+                    try {
+                        const correctRef = doc(db, `artifacts/${getTenantId()}/public/data/connect_reports`, correctReportId);
+                        const oldRef = doc(db, `artifacts/${getTenantId()}/public/data/connect_reports`, report.id);
+
+                        if (!existingCorrect) {
+                            const { id, ...dataToSave } = report;
+                            await setDoc(correctRef, {
+                                ...dataToSave,
+                                reportDate: new Date(correctIso + 'T12:00:00Z'),
+                                updatedAt: new Date()
+                            }, { merge: true });
+                        }
+
+                        // Remove o documento com ID deslocado para evitar registros fantasmas
+                        if (report.id !== correctReportId) {
+                            await deleteDoc(oldRef);
+                        }
+                    } catch (migrationErr) {
+                        console.warn("Aviso ao reconciliar relatório deslocado no App:", migrationErr);
+                    }
+                }
+            }
+        };
+
+        reconcileShiftedReports();
+    }, [allConnectReports, allConnects]);
 
     const combinedMembers = useMemo(() => {
         const simpleMapped = allSimpleMembers.map(sm => ({
@@ -1590,7 +1646,7 @@ function AppContent() {
             const dateObj = reportData.reportDate instanceof Date
                 ? reportData.reportDate
                 : (reportData.reportDate?.toDate ? reportData.reportDate.toDate() : new Date(reportData.reportDate));
-            const dateString = !isNaN(dateObj.getTime()) ? dateObj.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+            const dateString = formatLocalDateToISO(dateObj) || formatLocalDateToISO(new Date());
             const reportId = `${reportData.connectId}_${dateString}`;
             const reportRef = doc(db, `artifacts/${getTenantId()}/public/data/connect_reports`, reportId);
 
@@ -1623,7 +1679,7 @@ function AppContent() {
             // Atualização otimista no estado local para refletir imediatamente na UI
             setAllConnectReports(prev => {
                 const list = Array.isArray(prev) ? prev : [];
-                const idx = list.findIndex(r => r.id === reportId || (String(r.connectId) === cleanPayload.connectId && (r.reportDate?.toDate ? r.reportDate.toDate().toISOString().split('T')[0] : new Date(r.reportDate).toISOString().split('T')[0]) === dateString));
+                const idx = list.findIndex(r => r.id === reportId || (String(r.connectId) === cleanPayload.connectId && formatLocalDateToISO(r.reportDate) === dateString));
                 const item = { id: reportId, ...cleanPayload };
                 if (idx >= 0) {
                     const next = [...list];
@@ -1743,7 +1799,7 @@ function AppContent() {
         if (!confirmation) return;
         try {
             const today = new Date();
-            const dateString = today.toISOString().split('T')[0];
+            const dateString = formatLocalDateToISO(today);
             const reportId = `${connectId}_${dateString}`;
             const reportRef = doc(db, `artifacts/${getTenantId()}/public/data/connect_reports`, reportId);
             const reportSnap = await getDoc(reportRef);
@@ -2083,7 +2139,7 @@ function AppContent() {
                     courseTemplatesCount={allCourseTemplates.length}
                 />
             </Modal>
-            {reportingConnect && <ConnectReportModal isOpen={isReportModalOpen} onClose={closeReportModal} connect={reportingConnect} members={allMembers} onSave={handleSaveConnectReport} isAdmin={isAdmin} onViewMember={openMemberDetails} />}
+            {reportingConnect && <ConnectReportModal isOpen={isReportModalOpen} onClose={closeReportModal} connect={reportingConnect} members={allMembers} onSave={handleSaveConnectReport} isAdmin={isAdmin} onViewMember={openMemberDetails} allReports={allConnectReports} />}
             {managingCourse && <ManageCourseModal course={managingCourse} members={allMembers} allMembers={allMembers} allSimpleMembers={allSimpleMembers} allCertificateTemplates={allCertificateTemplates} onSaveSimpleMember={handleSaveSimpleMember} areNamesSimilar={areNamesSimilar} isOpen={isManageCourseModalOpen} onClose={closeManageCourseModal} onSaveStudents={handleSaveCourseStudents} onSaveAttendance={handleSaveAttendance} onSkipClassDay={handleSkipClassDay} onViewMember={openMemberDetails} />}
             <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={handleConfirmDelete} title="Confirmar ExclusÃ£o" message={deleteAction?.message} />
             {generatingReportForConnect && <ConnectFullReportModal isOpen={isConnectFullReportModalOpen} onClose={closeConnectFullReportModal} connect={generatingReportForConnect} allMembers={allMembers} allReports={allConnectReports} />}

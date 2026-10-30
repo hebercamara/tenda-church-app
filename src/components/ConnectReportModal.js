@@ -1,26 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { getTenantId } from '../utils/tenantUtils';
 import Modal from './Modal';
-import { formatDateToBrazilian } from '../utils/dateUtils';
+import { formatDateToBrazilian, formatLocalDateToISO, getConnectWeekdayIndex } from '../utils/dateUtils';
 import { Calendar, CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { getMembershipType, getMembershipTypeBadge } from '../utils/memberUtils';
 
-const getConnectWeekdayIndex = (weekday) => {
-    if (!weekday) return null;
-    const clean = weekday.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-    if (clean.startsWith('dom')) return 0;
-    if (clean.startsWith('seg')) return 1;
-    if (clean.startsWith('ter')) return 2;
-    if (clean.startsWith('qua')) return 3;
-    if (clean.startsWith('qui')) return 4;
-    if (clean.startsWith('sex')) return 5;
-    if (clean.startsWith('sab')) return 6;
-    return null;
-};
-
-const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, isAdmin, onViewMember }) => {
+const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, isAdmin, onViewMember, allReports = [] }) => {
     const [selectedDate, setSelectedDate] = useState('');
     const [attendance, setAttendance] = useState({});
     const [guests, setGuests] = useState('');
@@ -101,11 +88,13 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
     }, [members, connect, selectedDate]);
 
     // Define estritamente e exclusivamente a data da última reunião realizada do Connect
+    // Usa meio-dia local para garantir cálculo timezone-safe, evitando que lançamentos à noite mudem para amanhã
     useEffect(() => {
         if (!connect) return;
 
         const connectWeekday = getConnectWeekdayIndex(connect.weekday);
         const today = new Date();
+        today.setHours(12, 0, 0, 0);
         const todayWeekday = today.getDay();
 
         // Se o dia do Connect é conhecido, calcula o dia da última reunião realizada
@@ -117,13 +106,13 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
 
         const lastMeetingDate = new Date(today);
         lastMeetingDate.setDate(today.getDate() - baseDiff);
-        const lastMeetingIso = lastMeetingDate.toISOString().split('T')[0];
+        const lastMeetingIso = formatLocalDateToISO(lastMeetingDate);
 
         setSelectedDate(lastMeetingIso);
         setSaveError('');
     }, [connect]);
 
-    // Busca o relatório existente quando a data ou connect mudam (sem resetar por re-renders de members!)
+    // Busca o relatório existente quando a data ou connect mudam (com resgate seguro de dados já lançados)
     useEffect(() => {
         if (!selectedDate || !connect?.id) return;
         let isCancelled = false;
@@ -138,11 +127,52 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
 
                 if (isCancelled) return;
 
+                let dataToUse = null;
+
                 if (reportSnap.exists()) {
-                    const data = reportSnap.data();
-                    setAttendance(data.attendance || {});
-                    setGuests(data.guests !== undefined && data.guests !== null ? data.guests.toString() : '');
-                    setOffering(data.offering !== undefined && data.offering !== null ? data.offering.toString() : '');
+                    dataToUse = reportSnap.data();
+                } else {
+                    // Fallback para dados já lançados com fuso horário deslocado (+1 dia após as 21h UTC)
+                    const nextDay = new Date(selectedDate + 'T12:00:00Z');
+                    nextDay.setDate(nextDay.getDate() + 1);
+                    const nextDayIso = formatLocalDateToISO(nextDay);
+                    const shiftedReportId = `${connect.id}_${nextDayIso}`;
+
+                    const shiftedRef = doc(db, `artifacts/${getTenantId()}/public/data/connect_reports`, shiftedReportId);
+                    const shiftedSnap = await getDoc(shiftedRef);
+
+                    if (shiftedSnap.exists()) {
+                        dataToUse = shiftedSnap.data();
+                        // Reconcilia silenciosamente no Firestore para fixar na data correta
+                        try {
+                            const correctedPayload = {
+                                ...dataToUse,
+                                reportDate: new Date(selectedDate + 'T12:00:00Z'),
+                                updatedAt: new Date()
+                            };
+                            await setDoc(reportRef, correctedPayload, { merge: true });
+                            await deleteDoc(shiftedRef);
+                        } catch (reconcileErr) {
+                            console.warn("Aviso ao reconciliar relatório deslocado:", reconcileErr);
+                        }
+                    } else if (allReports && allReports.length > 0) {
+                        // Fallback em memória (allReports)
+                        const inMemoryMatch = allReports.find(r =>
+                            String(r.connectId) === String(connect.id) &&
+                            (r.id === reportId || r.id === shiftedReportId ||
+                             formatLocalDateToISO(r.reportDate) === selectedDate ||
+                             formatLocalDateToISO(r.reportDate) === nextDayIso)
+                        );
+                        if (inMemoryMatch) {
+                            dataToUse = inMemoryMatch;
+                        }
+                    }
+                }
+
+                if (dataToUse) {
+                    setAttendance(dataToUse.attendance || {});
+                    setGuests(dataToUse.guests !== undefined && dataToUse.guests !== null ? dataToUse.guests.toString() : '');
+                    setOffering(dataToUse.offering !== undefined && dataToUse.offering !== null ? dataToUse.offering.toString() : '');
                 } else {
                     const initial = {};
                     connectMembers.forEach(m => { initial[m.id] = 'ausente'; });
@@ -160,7 +190,7 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
         fetchReport();
 
         return () => { isCancelled = true; };
-    }, [selectedDate, connect?.id]);
+    }, [selectedDate, connect?.id, allReports]);
 
     // Mescla novos membros na presença sem sobrescrever as escolhas já feitas
     useEffect(() => {
@@ -226,6 +256,22 @@ const ConnectReportModal = ({ isOpen, onClose, connect, members = [], onSave, is
             };
 
             await onSave(reportData);
+
+            // Limpa documento deslocado residual se existir no Firestore
+            try {
+                const nextDay = new Date(selectedDate + 'T12:00:00Z');
+                nextDay.setDate(nextDay.getDate() + 1);
+                const nextDayIso = formatLocalDateToISO(nextDay);
+                const shiftedReportId = `${connect.id}_${nextDayIso}`;
+                const shiftedReportRef = doc(db, `artifacts/${getTenantId()}/public/data/connect_reports`, shiftedReportId);
+                const shiftedSnap = await getDoc(shiftedReportRef);
+                if (shiftedSnap.exists()) {
+                    await deleteDoc(shiftedReportRef);
+                }
+            } catch (cleanupErr) {
+                console.warn("Aviso ao limpar relatório com data anterior:", cleanupErr);
+            }
+
             setSaveSuccess(true);
             setTimeout(() => {
                 onClose();
